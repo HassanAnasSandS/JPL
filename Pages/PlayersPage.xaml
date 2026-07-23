@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:domain="clr-namespace:JPL.Domain"
+             x:Class="JPL.Pages.PlayersPage"
+             x:Name="ThisPage"
+             x:DataType="vm:PlayersViewModel"
+             Title="Players">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Add" Command="{Binding AddCommand}" />
+    </ContentPage.ToolbarItems>
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="12" RowSpacing="8">
+        <Label Text="Register friends first. Assign them to teams later."
+               TextColor="{AppThemeBinding Light=#555555, Dark=#AAAAAA}"
+               FontSize="13" />
+
+        <RefreshView Grid.Row="1"
+                     IsRefreshing="{Binding IsBusy}"
+                     Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}"
+                            SelectionMode="None">
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="24" Spacing="8">
+                        <Label Text="No players yet" FontAttributes="Bold" HorizontalOptions="Center" />
+                        <Label Text="Tap Add to register a player." HorizontalOptions="Center" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="domain:Player">
+                        <Grid Padding="0,10" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="{Binding FullName}" FontAttributes="Bold" FontSize="16" />
+                                <Label Text="{Binding Nickname}" FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#666666, Dark=#AAAAAA}" />
+                            </VerticalStackLayout>
+                            <Button Grid.Column="1" Text="Edit" Padding="12,6"
+                                    Command="{Binding BindingContext.EditCommand, Source={x:Reference ThisPage}}"
+                                    CommandParameter="{Binding .}" />
+                            <Button Grid.Column="2" Text="Del" Padding="12,6" BackgroundColor="#B00020" TextColor="White"
+                                    Command="{Binding BindingContext.DeleteCommand, Source={x:Reference ThisPage}}"
+                                    CommandParameter="{Binding .}" />
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Label Grid.Row="2" Text="{Binding ErrorMessage}" TextColor="#B00020" />
+    </Grid>
+</ContentPage>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.TeamEditPage"
+             x:Name="ThisPage"
+             x:DataType="vm:TeamEditViewModel"
+             Title="{Binding Title}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="{Binding Hint}" FontSize="13"
+                   TextColor="{AppThemeBinding Light=#555555, Dark=#AAAAAA}" />
+
+            <Entry Placeholder="Team name *" Text="{Binding Name}" />
+            <Entry Placeholder="Short name" Text="{Binding ShortName}" />
+
+            <Label Text="Players in this team" FontAttributes="Bold" />
+            <CollectionView ItemsSource="{Binding RosterCandidates}"
+                            HeightRequest="220"
+                            SelectionMode="None">
+                <CollectionView.EmptyView>
+                    <Label Text="No registered players. Go to Players and register first." />
+                </CollectionView.EmptyView>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SelectablePlayer">
+                        <Grid ColumnDefinitions="*,Auto" Padding="0,6">
+                            <Label Text="{Binding FullName}" VerticalOptions="Center" />
+                            <Button Grid.Column="1"
+                                    Padding="12,4"
+                                    Command="{Binding BindingContext.TogglePlayerCommand, Source={x:Reference ThisPage}}"
+                                    CommandParameter="{Binding .}">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
+                                        <Setter Property="Text" Value="Added" />
+                                        <Setter Property="BackgroundColor" Value="#2E7D32" />
+                                        <Setter Property="TextColor" Value="White" />
+                                    </DataTrigger>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
+                                        <Setter Property="Text" Value="Add" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <Label Text="Captain (from team players only)" FontAttributes="Bold" />
+            <Picker Title="Select captain"
+                    ItemsSource="{Binding CaptainOptions}"
+                    ItemDisplayBinding="{Binding FullName}"
+                    SelectedItem="{Binding SelectedCaptain}" />
+
+            <Button Text="Save team" Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="#B00020" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

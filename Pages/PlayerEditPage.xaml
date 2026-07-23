@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.PlayerEditPage"
+             x:DataType="vm:PlayerEditViewModel"
+             Title="{Binding Title}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="Player registration only — no team assignment here."
+                   FontSize="13"
+                   TextColor="{AppThemeBinding Light=#555555, Dark=#AAAAAA}" />
+
+            <Entry Placeholder="Full name *" Text="{Binding FullName}" />
+            <Entry Placeholder="Nickname" Text="{Binding Nickname}" />
+            <Entry Placeholder="Phone" Text="{Binding Phone}" Keyboard="Telephone" />
+            <Entry Placeholder="Batting style (e.g. Right-hand)" Text="{Binding BattingStyle}" />
+            <Entry Placeholder="Bowling style (e.g. Right-arm medium)" Text="{Binding BowlingStyle}" />
+            <Editor Placeholder="Notes" Text="{Binding Notes}" AutoSize="TextChanges" HeightRequest="80" />
+
+            <Button Text="Save" Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="#B00020" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
