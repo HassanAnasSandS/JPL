@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.RankingsPage"
+             x:Name="ThisPage"
+             x:DataType="vm:RankingsViewModel"
+             Title="Rankings"
+             HideSoftInputOnTapped="True">
+
+    <Grid Padding="14" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10">
+        <Label Text="Rankings"
+               FontSize="22"
+               FontAttributes="Bold"
+               TextColor="{StaticResource Primary}" />
+
+        <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout Spacing="8">
+                <Button Text="Batting"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="batting"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBatting}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Bowling"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="bowling"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBowling}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="All-Rounder"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="allrounder"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsAllRounder}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Fielder"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="fielder"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsFielder}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Captain"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="captain"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsCaptain}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <Border Grid.Row="2"
+                Style="{StaticResource CardBorder}"
+                Padding="10">
+            <VerticalStackLayout Spacing="8">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <SearchBar Placeholder="Filter by player name"
+                               Text="{Binding NameFilter}"
+                               CancelButtonColor="{StaticResource Primary}" />
+                    <Button Grid.Column="1"
+                            Text="Clear"
+                            Style="{StaticResource GhostButton}"
+                            Padding="12,8"
+                            IsVisible="{Binding HasActiveFilters}"
+                            Command="{Binding ClearFiltersCommand}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" ColumnSpacing="8">
+                    <Label Text="From"
+                           VerticalOptions="Center"
+                           Style="{StaticResource MutedLabel}" />
+                    <DatePicker Grid.Column="1"
+                                Date="{Binding FromDate}"
+                                Format="dd MMM yyyy" />
+                    <Label Grid.Column="2"
+                           Text="To"
+                           VerticalOptions="Center"
+                           Style="{StaticResource MutedLabel}" />
+                    <DatePicker Grid.Column="3"
+                                Date="{Binding ToDate}"
+                                Format="dd MMM yyyy" />
+                    <Button Grid.Column="4"
+                            Text="Apply"
+                            Style="{StaticResource GoldButton}"
+                            Padding="14,8"
+                            Command="{Binding ApplyDateRangeCommand}" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <VerticalStackLayout Grid.Row="3" Spacing="2">
+            <Label Text="{Binding CategoryTitle}"
+                   FontAttributes="Bold"
+                   FontSize="16"
+                   TextColor="{StaticResource TextPrimary}" />
+            <Label Text="{Binding CategoryHint}"
+                   Style="{StaticResource MutedLabel}"
+                   FontSize="12" />
+            <Label Text="{Binding DateRangeText}"
+                   FontAttributes="Bold"
+                   TextColor="{StaticResource Secondary}"
+                   FontSize="11" />
+            <Label Text="{Binding ErrorMessage}"
+                   IsVisible="{Binding HasError}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
+        </VerticalStackLayout>
+
+        <RefreshView Grid.Row="4"
+                     VerticalOptions="Fill"
+                     IsRefreshing="{Binding IsBusy, Mode=OneWay}"
+                     Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding VisibleRows}"
+                            SelectionMode="None"
+                            VerticalOptions="Fill">
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32" Spacing="8" VerticalOptions="Center">
+                        <Label Text="No rankings yet"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               TextColor="{StaticResource TextPrimary}" />
+                        <Label Text="Complete matches and pull to refresh"
+                               Style="{StaticResource MutedLabel}"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="10" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="svc:RankingRow">
+                        <Border Style="{StaticResource CardBorder}" Padding="14">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer
+                                    Command="{Binding BindingContext.OpenPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                    CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+                            <Grid ColumnDefinitions="48,*,Auto" ColumnSpacing="12">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        StrokeShape="RoundRectangle 10"
+                                        WidthRequest="44"
+                                        HeightRequest="44"
+                                        VerticalOptions="Center"
+                                        HorizontalOptions="Center">
+                                    <Label Text="{Binding RankText}"
+                                           FontAttributes="Bold"
+                                           FontSize="14"
+                                           TextColor="{StaticResource Secondary}"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center" />
+                                </Border>
+
+                                <Label Grid.Column="1"
+                                       Text="{Binding PlayerName}"
+                                       FontAttributes="Bold"
+                                       FontSize="16"
+                                       LineBreakMode="TailTruncation"
+                                       VerticalOptions="Center"
+                                       TextColor="#1565C0" />
+
+                                <Label Grid.Column="2"
+                                       Text="{Binding PrimaryLine}"
+                                       FontAttributes="Bold"
+                                       FontSize="14"
+                                       VerticalOptions="Center"
+                                       HorizontalTextAlignment="End"
+                                       TextColor="{StaticResource Primary}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
+</ContentPage>

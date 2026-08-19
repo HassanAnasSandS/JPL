@@ -11,5 +11,5 @@ public sealed class TeamPlayer
 
     public Player Player { get; set; } = null!;
 
-    public DateTimeOffset JoinedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTime JoinedAtUtc { get; set; } = DateTime.Now;
 }

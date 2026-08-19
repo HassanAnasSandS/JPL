@@ -6,24 +6,21 @@ public sealed class Player
 
     public string FullName { get; set; } = string.Empty;
 
-    public string? Nickname { get; set; }
-
-    public string? Phone { get; set; }
-
-    public string? BattingStyle { get; set; }
-
-    public string? BowlingStyle { get; set; }
-
-    public string? Notes { get; set; }
+    /// <summary>Inactive players are hidden from team create/update squad pickers.</summary>
+    public bool IsActive { get; set; } = true;
 
     public bool IsDeleted { get; set; }
+
+    public string StatusText => IsActive ? "Active" : "Inactive";
+
+    public string ToggleActiveLabel => IsActive ? "Deactivate" : "Activate";
 
     /// <summary>Monotonic local version for optimistic sync (no row locks).</summary>
     public long Version { get; set; } = 1;
 
-    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
 
-    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
 
     public ICollection<TeamPlayer> TeamPlayers { get; set; } = new List<TeamPlayer>();
 }

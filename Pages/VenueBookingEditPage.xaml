@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.VenueBookingEditPage"
+             x:Name="ThisPage"
+             x:DataType="vm:VenueBookingEditViewModel"
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="14" VerticalOptions="Start">
+            <Label Text="{Binding OwnerLine}"
+                   FontSize="12"
+                   TextColor="{StaticResource Primary}" />
+
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Venue *" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select venue"
+                            ItemsSource="{Binding VenueOptions}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SelectedItem="{Binding SelectedVenue}"
+                            IsEnabled="{Binding CanEdit}" />
+
+                    <Label Text="Dated *" Style="{StaticResource SectionLabel}" />
+                    <DatePicker Date="{Binding BookingDate}"
+                                IsEnabled="{Binding CanEdit}" />
+
+                    <Label Text="Booked By *" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select player"
+                            ItemsSource="{Binding BookedByOptions}"
+                            ItemDisplayBinding="{Binding DisplayName}"
+                            SelectedItem="{Binding SelectedBookedBy}"
+                            IsEnabled="{Binding CanEdit}" />
+
+                    <Label Text="Booking cost *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="0"
+                           Text="{Binding BookingCostText}"
+                           Keyboard="Numeric"
+                           FontSize="16"
+                           IsEnabled="{Binding CanEdit}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- VIEW: only added participants + status -->
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding ShowViewParticipants}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Participant players" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Added players only"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding AddedParticipants}"
+                                         Spacing="4">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No participants added"
+                                   Style="{StaticResource MutedLabel}"
+                                   Margin="8" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:VenueParticipantEditor">
+                                <Grid ColumnDefinitions="*,Auto"
+                                      Padding="0,6"
+                                      ColumnSpacing="8">
+                                    <Label Text="{Binding DisplayName}"
+                                           VerticalOptions="Center"
+                                           Style="{StaticResource BodyLabel}" />
+                                    <Border Grid.Column="1"
+                                            StrokeThickness="0"
+                                            Padding="10,6"
+                                            BackgroundColor="#E8EEF5">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsPaid}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <Label Text="{Binding StatusToggleLabel}"
+                                               FontSize="12"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Primary}"
+                                               VerticalOptions="Center">
+                                            <Label.Triggers>
+                                                <DataTrigger TargetType="Label" Binding="{Binding IsPaid}" Value="True">
+                                                    <Setter Property="TextColor" Value="White" />
+                                                </DataTrigger>
+                                            </Label.Triggers>
+                                        </Label>
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- EDIT: full roster to add / mark paid -->
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding ShowEditParticipants}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Participant players" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Add players and mark Pending / Paid"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ParticipantCandidates}"
+                                         Spacing="4">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No players available"
+                                   Style="{StaticResource MutedLabel}"
+                                   Margin="8" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:VenueParticipantEditor">
+                                <Grid ColumnDefinitions="*,Auto,Auto"
+                                      Padding="0,6"
+                                      ColumnSpacing="8">
+                                    <Label Text="{Binding DisplayName}"
+                                           VerticalOptions="Center"
+                                           Style="{StaticResource BodyLabel}" />
+                                    <Button Grid.Column="1"
+                                            Padding="10,6"
+                                            FontSize="12"
+                                            MinimumHeightRequest="36"
+                                            Clicked="OnToggleParticipantClicked"
+                                            CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Text" Value="Added" />
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+                                                <Setter Property="TextColor" Value="White" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
+                                                <Setter Property="Text" Value="Add" />
+                                                <Setter Property="Style" Value="{StaticResource GhostButton}" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                    <Button Grid.Column="2"
+                                            Text="{Binding StatusToggleLabel}"
+                                            Padding="10,6"
+                                            FontSize="12"
+                                            MinimumHeightRequest="36"
+                                            IsVisible="{Binding IsSelected}"
+                                            Clicked="OnToggleStatusClicked"
+                                            CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsPaid}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+                                                <Setter Property="TextColor" Value="White" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsPaid}" Value="False">
+                                                <Setter Property="BackgroundColor" Value="#E8EEF5" />
+                                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Save"
+                    Style="{StaticResource GoldButton}"
+                    IsVisible="{Binding CanEdit}"
+                    Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

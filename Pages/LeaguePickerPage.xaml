@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.LeaguePickerPage"
+             x:Name="ThisPage"
+             x:DataType="vm:LeaguePickerViewModel"
+             Title="Choose league"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="#0D1B2A">
+
+    <Grid>
+    <Grid Padding="20,32" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="14">
+        <Grid>
+            <Image Source="cric360_logo.png"
+                   HeightRequest="110"
+                   Aspect="AspectFit"
+                   HorizontalOptions="Center"
+                   SemanticProperties.Description="Cric360 logo" />
+            <Button Text="+ Add"
+                    FontAttributes="Bold"
+                    FontSize="14"
+                    Padding="16,10"
+                    BackgroundColor="#B6FF3B"
+                    TextColor="#0D1B2A"
+                    CornerRadius="12"
+                    VerticalOptions="Start"
+                    HorizontalOptions="End"
+                    IsVisible="{Binding CanManageLeagues}"
+                    Command="{Binding AddCommand}" />
+        </Grid>
+
+        <VerticalStackLayout Grid.Row="1" Spacing="4">
+            <Label Text="CRIC360"
+                   TextColor="#B6FF3B"
+                   FontAttributes="Bold"
+                   FontSize="22"
+                   HorizontalTextAlignment="Center"
+                   CharacterSpacing="2" />
+            <Label Text="Choose a league to continue"
+                   TextColor="#B8C4D4"
+                   FontSize="14"
+                   HorizontalTextAlignment="Center" />
+        </VerticalStackLayout>
+
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsBusy}"
+                     Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LeaguePickRow">
+                        <Border StrokeThickness="0"
+                                BackgroundColor="#152033"
+                                Padding="12"
+                                Margin="0,0,0,10"
+                                StrokeShape="RoundRectangle 16">
+                            <VerticalStackLayout Spacing="10">
+                                <Grid ColumnDefinitions="72,*" ColumnSpacing="14">
+                                    <Grid.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding BindingContext.SelectCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    </Grid.GestureRecognizers>
+                                    <Image Source="{Binding Image}"
+                                           HeightRequest="64"
+                                           WidthRequest="64"
+                                           Aspect="AspectFill" />
+                                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                        <Label Text="{Binding Name}"
+                                               TextColor="White"
+                                               FontAttributes="Bold"
+                                               FontSize="18" />
+                                        <Label Text="Tap to open"
+                                               TextColor="#8899AA"
+                                               FontSize="12" />
+                                    </VerticalStackLayout>
+                                </Grid>
+
+                                <HorizontalStackLayout Spacing="8"
+                                                       IsVisible="{Binding BindingContext.CanManageLeagues, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
+                                    <Button Text="View"
+                                            Padding="14,8"
+                                            FontSize="12"
+                                            BackgroundColor="#243447"
+                                            TextColor="#B6FF3B"
+                                            Command="{Binding BindingContext.SelectCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Edit"
+                                            Padding="14,8"
+                                            FontSize="12"
+                                            BackgroundColor="#D4AF37"
+                                            TextColor="#0D1B2A"
+                                            Command="{Binding BindingContext.EditCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Delete"
+                                            Padding="14,8"
+                                            FontSize="12"
+                                            BackgroundColor="#B00020"
+                                            TextColor="White"
+                                            Command="{Binding BindingContext.DeleteCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </HorizontalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Label Grid.Row="3"
+               Text="{Binding ErrorMessage}"
+               TextColor="#FF6B6B"
+               FontSize="13"
+               HorizontalTextAlignment="Center" />
+
+        <VerticalStackLayout Grid.Row="4" Spacing="10">
+            <Button Text="Register Your Own League"
+                    FontAttributes="Bold"
+                    FontSize="16"
+                    HeightRequest="48"
+                    BackgroundColor="#D4AF37"
+                    TextColor="#0D1B2A"
+                    CornerRadius="12"
+                    IsVisible="{Binding ShowRegisterLeague}"
+                    Command="{Binding OpenRegisterPopupCommand}" />
+            <Button Text="Logout"
+                    FontAttributes="Bold"
+                    FontSize="16"
+                    HeightRequest="48"
+                    BackgroundColor="#B00020"
+                    TextColor="White"
+                    CornerRadius="12"
+                    Command="{Binding LogoutCommand}" />
+        </VerticalStackLayout>
+    </Grid>
+
+    <!-- Register-league contact (everyone except HassanAnas SuperAdmin) -->
+    <Grid IsVisible="{Binding ShowRegisterPopup}" ZIndex="40">
+        <BoxView Color="#E60D1B2A">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseRegisterPopupCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Border StrokeThickness="0"
+                BackgroundColor="#152033"
+                Padding="22"
+                Margin="24"
+                VerticalOptions="Center"
+                HorizontalOptions="Fill"
+                StrokeShape="RoundRectangle 18">
+            <VerticalStackLayout Spacing="12">
+                <Label Text="Register your league"
+                       FontSize="20"
+                       FontAttributes="Bold"
+                       TextColor="#D4AF37" />
+                <Label Text="Contact the Cric360 team to register your own league."
+                       FontSize="14"
+                       TextColor="#E8EEF5" />
+
+                <Label Text="WhatsApp"
+                       FontSize="12"
+                       FontAttributes="Bold"
+                       TextColor="#8899AA" />
+                <Label Text="+92 322 2857 730"
+                       FontSize="18"
+                       FontAttributes="Bold"
+                       TextColor="#B6FF3B" />
+
+                <Label Text="Please share"
+                       FontSize="12"
+                       FontAttributes="Bold"
+                       TextColor="#8899AA" />
+                <Label Text="• League name&#10;• League logo"
+                       FontSize="14"
+                       TextColor="#E8EEF5" />
+
+                <Border StrokeThickness="0"
+                        BackgroundColor="#243447"
+                        Padding="12"
+                        StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Note"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="#D4AF37" />
+                        <Label Text="Registration is free for the first 6 months. After that, a monthly or yearly subscription is required."
+                               FontSize="13"
+                               TextColor="#B8C4D4" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Button Text="WhatsApp Cric360"
+                        FontAttributes="Bold"
+                        FontSize="15"
+                        HeightRequest="46"
+                        BackgroundColor="#25D366"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding WhatsAppRegisterCommand}" />
+                <Button Text="Close"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="Transparent"
+                        TextColor="#B8C4D4"
+                        BorderColor="#5A6A7A"
+                        BorderWidth="1"
+                        CornerRadius="12"
+                        Command="{Binding CloseRegisterPopupCommand}" />
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+    </Grid>
+</ContentPage>

@@ -12,9 +12,16 @@ public partial class TeamEditPage : ContentPage
         BindingContext = _vm = vm;
     }
 
-    protected override async void OnAppearing()
+    protected override void OnAppearing()
     {
         base.OnAppearing();
-        await _vm.InitializeAsync();
+        PageSafe.Run(() => _vm.InitializeAsync());
+    }
+
+    private void OnTogglePlayerClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button { CommandParameter: SelectablePlayer player })
+            return;
+        _vm.TogglePlayerCommand.Execute(player);
     }
 }

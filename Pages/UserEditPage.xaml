@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.UserEditPage"
+             x:DataType="vm:UserEditViewModel"
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="14" VerticalOptions="Start">
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Username *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Username (unique)"
+                           Text="{Binding Username}"
+                           FontSize="16"
+                           MaxLength="80" />
+
+                    <Label Text="{Binding PasswordHint}" Style="{StaticResource SectionLabel}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <Entry Placeholder="Password"
+                               Text="{Binding Password}"
+                               IsPassword="{Binding IsPasswordHidden}"
+                               FontSize="16" />
+                        <Button Grid.Column="1"
+                                Text="{Binding PasswordToggleIcon}"
+                                Command="{Binding TogglePasswordVisibilityCommand}"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource TextSecondary}"
+                                FontSize="18"
+                                WidthRequest="44"
+                                HeightRequest="44"
+                                Padding="0"
+                                BorderWidth="0" />
+                    </Grid>
+
+                    <Label Text="Role *" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select role"
+                            ItemsSource="{Binding RoleOptions}"
+                            SelectedItem="{Binding SelectedRole}" />
+
+                    <Label Text="League *" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select league"
+                            ItemsSource="{Binding LeagueOptions}"
+                            ItemDisplayBinding="{Binding Name, x:DataType=vm:UserLeagueOption}"
+                            SelectedItem="{Binding SelectedLeague}" />
+
+                    <HorizontalStackLayout Spacing="10">
+                        <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" />
+                        <Label Text="Active (can sign in). Deactive users are blocked from login."
+                               VerticalOptions="Center"
+                               Style="{StaticResource BodyLabel}" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Save"
+                    Style="{StaticResource GoldButton}"
+                    Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

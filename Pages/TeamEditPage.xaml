@@ -5,56 +5,104 @@
              x:Class="JPL.Pages.TeamEditPage"
              x:Name="ThisPage"
              x:DataType="vm:TeamEditViewModel"
-             Title="{Binding Title}">
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
 
-    <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="12">
-            <Label Text="{Binding Hint}" FontSize="13"
-                   TextColor="{AppThemeBinding Light=#555555, Dark=#AAAAAA}" />
+    <!-- Single outer ScrollView (no nested CollectionView) so the whole form scrolls. -->
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="12" VerticalOptions="Start">
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Team name *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Team name (required, unique)" Text="{Binding Name}" FontSize="16" MaxLength="120"
+                           IsEnabled="{Binding CanEdit}" />
+                    <HorizontalStackLayout Spacing="10">
+                        <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" IsEnabled="{Binding CanEdit}" />
+                        <Label Text="Active (shown in new matches)"
+                               VerticalOptions="Center"
+                               Style="{StaticResource BodyLabel}" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Border>
 
-            <Entry Placeholder="Team name *" Text="{Binding Name}" />
-            <Entry Placeholder="Short name" Text="{Binding ShortName}" />
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Squad *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Only active players are listed — select at least one"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12"
+                           IsVisible="{Binding CanEdit}" />
+                    <Label Text="Current squad"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12"
+                           IsVisible="{Binding IsViewMode}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding RosterCandidates}"
+                                         Spacing="4">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No players on this squad"
+                                   Style="{StaticResource MutedLabel}"
+                                   Margin="8" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SelectablePlayer">
+                                <Grid ColumnDefinitions="*,Auto" Padding="0,6" ColumnSpacing="8">
+                                    <Label Text="{Binding DisplayName}"
+                                           VerticalOptions="Center"
+                                           Style="{StaticResource BodyLabel}">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
+                                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                                <Setter Property="FontAttributes" Value="Bold" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="12,8"
+                                            IsVisible="{Binding BindingContext.CanEdit, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            Clicked="OnTogglePlayerClicked"
+                                            CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Text" Value="Added" />
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+                                                <Setter Property="TextColor" Value="White" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
+                                                <Setter Property="Text" Value="Add" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
 
-            <Label Text="Players in this team" FontAttributes="Bold" />
-            <CollectionView ItemsSource="{Binding RosterCandidates}"
-                            HeightRequest="220"
-                            SelectionMode="None">
-                <CollectionView.EmptyView>
-                    <Label Text="No registered players. Go to Players and register first." />
-                </CollectionView.EmptyView>
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:SelectablePlayer">
-                        <Grid ColumnDefinitions="*,Auto" Padding="0,6">
-                            <Label Text="{Binding FullName}" VerticalOptions="Center" />
-                            <Button Grid.Column="1"
-                                    Padding="12,4"
-                                    Command="{Binding BindingContext.TogglePlayerCommand, Source={x:Reference ThisPage}}"
-                                    CommandParameter="{Binding .}">
-                                <Button.Triggers>
-                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
-                                        <Setter Property="Text" Value="Added" />
-                                        <Setter Property="BackgroundColor" Value="#2E7D32" />
-                                        <Setter Property="TextColor" Value="White" />
-                                    </DataTrigger>
-                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
-                                        <Setter Property="Text" Value="Add" />
-                                    </DataTrigger>
-                                </Button.Triggers>
-                            </Button>
-                        </Grid>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Captain *" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select captain (required)"
+                            ItemsSource="{Binding CaptainOptions}"
+                            ItemDisplayBinding="{Binding DisplayName}"
+                            SelectedItem="{Binding SelectedCaptain}"
+                            IsEnabled="{Binding CanEdit}" />
+                </VerticalStackLayout>
+            </Border>
 
-            <Label Text="Captain (from team players only)" FontAttributes="Bold" />
-            <Picker Title="Select captain"
-                    ItemsSource="{Binding CaptainOptions}"
-                    ItemDisplayBinding="{Binding FullName}"
-                    SelectedItem="{Binding SelectedCaptain}" />
-
-            <Button Text="Save team" Command="{Binding SaveCommand}" />
-            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
-            <Label Text="{Binding ErrorMessage}" TextColor="#B00020" />
+            <Button Text="Save"
+                    Style="{StaticResource GoldButton}"
+                    IsVisible="{Binding CanEdit}"
+                    Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.TournamentEditPage"
+             x:Name="ThisPage"
+             x:DataType="vm:TournamentEditViewModel"
+             Title="{Binding PageTitle}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="14" Spacing="12">
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Setup" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Tournament name"
+                           Text="{Binding Name}"
+                           MaxLength="160" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="Groups" FontSize="12" Style="{StaticResource MutedLabel}" />
+                            <Picker ItemsSource="{Binding GroupOptions}"
+                                    SelectedItem="{Binding GroupCount}"
+                                    Title="Groups" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label Text="Qualify / group" FontSize="12" Style="{StaticResource MutedLabel}" />
+                            <Picker ItemsSource="{Binding QualifyOptions}"
+                                    SelectedItem="{Binding QualifyPerGroup}"
+                                    Title="Qualify" />
+                        </VerticalStackLayout>
+                    </Grid>
+                    <Label Text="{Binding FormatHint}"
+                           FontSize="12"
+                           TextColor="{StaticResource Primary}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Match defaults *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Applied to every fixture match (locked when starting)."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+
+                    <Label Text="Venue *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Select venue"
+                            ItemsSource="{Binding VenueOptions}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SelectedItem="{Binding SelectedVenue}" />
+
+                    <Label Text="Format *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Match format"
+                            ItemsSource="{Binding FormatOptions}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedFormat}" />
+
+                    <Label Text="Overs per side *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Entry Placeholder="e.g. 6, 8, 10"
+                           Text="{Binding OversLimit}"
+                           Keyboard="Numeric" />
+
+                    <HorizontalStackLayout Spacing="12">
+                        <Switch IsToggled="{Binding LastBatsmanCanBatAsSingleWicket}"
+                                VerticalOptions="Center" />
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="Last batsman can bat as single wicket"
+                                   FontAttributes="Bold"
+                                   Style="{StaticResource BodyLabel}" />
+                            <Label Text="Last remaining batsman continues alone."
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                        </VerticalStackLayout>
+                    </HorizontalStackLayout>
+
+                    <Label Text="Bowler maximum overs" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Entry Placeholder="0 = no limit"
+                           Text="{Binding BowlerMaxOvers}"
+                           Keyboard="Numeric" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Teams" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Select teams. With 2 groups, tap Group to switch G1 / G2."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamPicks}" Spacing="6">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TournamentTeamPick">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource SurfaceMuted}"
+                                        Padding="10,8"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding TeamName}"
+                                               VerticalOptions="Center"
+                                               FontAttributes="Bold"
+                                               FontSize="14" />
+                                        <Button Grid.Column="2"
+                                                Text="{Binding GroupLabel}"
+                                                Padding="10,4"
+                                                FontSize="11"
+                                                BackgroundColor="#E8EEF5"
+                                                TextColor="{StaticResource Primary}"
+                                                IsVisible="{Binding BindingContext.ShowGroup2, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                Command="{Binding BindingContext.ToggleGroupCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                CommandParameter="{Binding .}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+            <Button Text="Save as draft"
+                    Style="{StaticResource GoldButton}"
+                    HeightRequest="48"
+                    Command="{Binding SaveCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

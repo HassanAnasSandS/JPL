@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using JPL.Data;
 using JPL.Domain;
 
 namespace JPL.Services;
@@ -7,224 +5,176 @@ namespace JPL.Services;
 public interface ITeamService
 {
     Task<IReadOnlyList<TeamListItem>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>Active teams only — for match create dropdowns.</summary>
+    Task<IReadOnlyList<TeamListItem>> GetActiveAsync(CancellationToken ct = default);
     Task<TeamDetail?> GetAsync(Guid id, CancellationToken ct = default);
     Task<Team> CreateAsync(TeamDraft draft, CancellationToken ct = default);
     Task<Team> UpdateAsync(Guid id, TeamDraft draft, CancellationToken ct = default);
+    Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default);
     Task SoftDeleteAsync(Guid id, CancellationToken ct = default);
 }
 
 public sealed record TeamDraft(
     string Name,
-    string? ShortName,
     Guid? CaptainPlayerId,
-    IReadOnlyList<Guid> PlayerIds);
+    IReadOnlyList<Guid> PlayerIds,
+    bool IsActive = true);
 
 public sealed record TeamListItem(
     Guid Id,
     string Name,
-    string? ShortName,
     string? CaptainName,
-    int PlayerCount);
+    int PlayerCount,
+    bool IsActive)
+{
+    public string StatusText => IsActive ? "Active" : "Inactive";
+    public string ToggleActiveLabel => IsActive ? "Deactivate" : "Activate";
+    public string CaptainLine => string.IsNullOrWhiteSpace(CaptainName)
+        ? "No captain"
+        : $"Captain: {CaptainName} (C)";
+}
 
 public sealed record TeamDetail(
     Guid Id,
     string Name,
-    string? ShortName,
     Guid? CaptainPlayerId,
-    IReadOnlyList<Player> Players);
+    IReadOnlyList<Player> Players,
+    bool IsActive);
 
+/// <summary>Teams always come from the live API. SQLite is not used for master data.</summary>
 public sealed class TeamService : ITeamService
 {
-    private readonly IDbContextFactory<JplDbContext> _dbFactory;
-    private readonly IOutboxWriter _outbox;
-    private readonly ISyncTrigger _syncTrigger;
+    private readonly IApiClient _api;
+    private readonly IAuthService _auth;
 
-    public TeamService(
-        IDbContextFactory<JplDbContext> dbFactory,
-        IOutboxWriter outbox,
-        ISyncTrigger syncTrigger)
+    public TeamService(IApiClient api, IAuthService auth)
     {
-        _dbFactory = dbFactory;
-        _outbox = outbox;
-        _syncTrigger = syncTrigger;
+        _api = api;
+        _auth = auth;
     }
 
     public async Task<IReadOnlyList<TeamListItem>> GetAllAsync(CancellationToken ct = default)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        => await QueryListAsync(activeOnly: false, ct).ConfigureAwait(false);
 
-        return await db.Teams
-            .AsNoTracking()
-            .OrderBy(t => t.Name)
+    public async Task<IReadOnlyList<TeamListItem>> GetActiveAsync(CancellationToken ct = default)
+        => await QueryListAsync(activeOnly: true, ct).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<TeamListItem>> QueryListAsync(bool activeOnly, CancellationToken ct)
+    {
+        var teams = await _api.GetTeamsAsync(ct).ConfigureAwait(false);
+        var players = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+        var names = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id, p => p.FullName);
+
+        IEnumerable<ApiTeamDto> q = teams.Where(t => !t.IsDeleted);
+        if (activeOnly)
+            q = q.Where(t => t.IsActive);
+
+        return q
+            .OrderByDescending(t => t.IsActive)
+            .ThenBy(t => t.Name)
             .Select(t => new TeamListItem(
                 t.Id,
                 t.Name,
-                t.ShortName,
-                t.Captain != null ? t.Captain.FullName : null,
-                t.TeamPlayers.Count))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+                t.CaptainPlayerId is Guid cid ? names.GetValueOrDefault(cid) : null,
+                t.PlayerIds?.Count ?? 0,
+                t.IsActive))
+            .ToList();
     }
 
     public async Task<TeamDetail?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-
-        var team = await db.Teams
-            .AsNoTracking()
-            .Include(t => t.TeamPlayers)
-            .ThenInclude(tp => tp.Player)
-            .FirstOrDefaultAsync(t => t.Id == id, ct)
-            .ConfigureAwait(false);
-
-        if (team is null)
+        var team = await _api.GetTeamAsync(id, ct).ConfigureAwait(false);
+        if (team is null || team.IsDeleted)
             return null;
 
-        var players = team.TeamPlayers
-            .Select(tp => tp.Player)
+        var players = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+        var byId = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id);
+        var squad = (team.PlayerIds ?? Array.Empty<Guid>())
+            .Where(pid => byId.ContainsKey(pid))
+            .Select(pid => new Player
+            {
+                Id = pid,
+                FullName = byId[pid].FullName,
+                IsActive = byId[pid].IsActive,
+                Version = byId[pid].Version,
+                UpdatedAtUtc = byId[pid].UpdatedAtUtc,
+                IsDeleted = byId[pid].IsDeleted
+            })
             .OrderBy(p => p.FullName)
             .ToList();
 
-        return new TeamDetail(team.Id, team.Name, team.ShortName, team.CaptainPlayerId, players);
+        return new TeamDetail(team.Id, team.Name, team.CaptainPlayerId, squad, team.IsActive);
     }
 
     public async Task<Team> CreateAsync(TeamDraft draft, CancellationToken ct = default)
     {
+        _auth.EnsureCanWrite();
         var name = RequireName(draft.Name);
         var playerIds = DistinctIds(draft.PlayerIds);
         ValidateCaptain(draft.CaptainPlayerId, playerIds);
 
-        var now = DateTimeOffset.UtcNow;
-        var team = new Team
+        var remote = await _api.CreateTeamAsync(new
         {
-            Name = name,
-            ShortName = NullIfWhite(draft.ShortName),
-            CaptainPlayerId = draft.CaptainPlayerId,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now,
-            Version = 1
-        };
+            id = Guid.NewGuid(),
+            name,
+            captainPlayerId = draft.CaptainPlayerId,
+            playerIds,
+            isActive = draft.IsActive
+        }, ct).ConfigureAwait(false);
 
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await EnsurePlayersExistAsync(db, playerIds, ct).ConfigureAwait(false);
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-
-        db.Teams.Add(team);
-        foreach (var playerId in playerIds)
-        {
-            db.TeamPlayers.Add(new TeamPlayer
-            {
-                TeamId = team.Id,
-                PlayerId = playerId,
-                JoinedAtUtc = now
-            });
-        }
-
-        _outbox.Enqueue(db, nameof(Team), team.Id, "Upsert", BuildTeamPayload(team, playerIds));
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await tx.CommitAsync(ct).ConfigureAwait(false);
-
-        _syncTrigger.RequestSync();
-        return team;
+        return ToEntity(remote);
     }
 
     public async Task<Team> UpdateAsync(Guid id, TeamDraft draft, CancellationToken ct = default)
     {
+        _auth.EnsureCanWrite();
         var name = RequireName(draft.Name);
         var playerIds = DistinctIds(draft.PlayerIds);
         ValidateCaptain(draft.CaptainPlayerId, playerIds);
 
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await EnsurePlayersExistAsync(db, playerIds, ct).ConfigureAwait(false);
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-
-        var team = await db.Teams
-            .Include(t => t.TeamPlayers)
-            .FirstOrDefaultAsync(t => t.Id == id, ct)
-            .ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Team not found.");
-
-        team.Name = name;
-        team.ShortName = NullIfWhite(draft.ShortName);
-        team.CaptainPlayerId = draft.CaptainPlayerId;
-        team.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        team.Version++;
-
-        var existing = team.TeamPlayers.Select(tp => tp.PlayerId).ToHashSet();
-        var desired = playerIds.ToHashSet();
-
-        foreach (var remove in team.TeamPlayers.Where(tp => !desired.Contains(tp.PlayerId)).ToList())
-            db.TeamPlayers.Remove(remove);
-
-        var now = DateTimeOffset.UtcNow;
-        foreach (var addId in desired.Where(pid => !existing.Contains(pid)))
+        var remote = await _api.UpdateTeamAsync(id, new
         {
-            db.TeamPlayers.Add(new TeamPlayer
-            {
-                TeamId = team.Id,
-                PlayerId = addId,
-                JoinedAtUtc = now
-            });
-        }
+            id,
+            name,
+            captainPlayerId = draft.CaptainPlayerId,
+            playerIds,
+            isActive = draft.IsActive
+        }, ct).ConfigureAwait(false);
 
-        _outbox.Enqueue(db, nameof(Team), team.Id, "Upsert", BuildTeamPayload(team, playerIds));
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return ToEntity(remote);
+    }
 
-        _syncTrigger.RequestSync();
-        return team;
+    public async Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default)
+    {
+        _auth.EnsureCanWrite();
+        var detail = await GetAsync(id, ct).ConfigureAwait(false)
+                     ?? throw new InvalidOperationException("Team not found.");
+        var playerIds = detail.Players.Select(p => p.Id).ToList();
+        await UpdateAsync(id, new TeamDraft(detail.Name, detail.CaptainPlayerId, playerIds, isActive), ct)
+            .ConfigureAwait(false);
     }
 
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-
-        var team = await db.Teams.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.Id == id, ct).ConfigureAwait(false);
-        if (team is null || team.IsDeleted)
-            return;
-
-        team.IsDeleted = true;
-        team.CaptainPlayerId = null;
-        team.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        team.Version++;
-
-        _outbox.Enqueue(db, nameof(Team), team.Id, "Delete", new { team.Id, team.Version });
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await tx.CommitAsync(ct).ConfigureAwait(false);
-
-        _syncTrigger.RequestSync();
+        _auth.EnsureCanWrite();
+        await _api.DeleteTeamAsync(id, ct).ConfigureAwait(false);
     }
 
-    private static object BuildTeamPayload(Team team, IReadOnlyList<Guid> playerIds) => new
+    private static Team ToEntity(ApiTeamDto remote) => new()
     {
-        team.Id,
-        team.Name,
-        team.ShortName,
-        team.CaptainPlayerId,
-        PlayerIds = playerIds,
-        team.Version,
-        team.UpdatedAtUtc,
-        team.IsDeleted
+        Id = remote.Id,
+        Name = remote.Name,
+        CaptainPlayerId = remote.CaptainPlayerId,
+        IsActive = remote.IsActive,
+        Version = remote.Version,
+        UpdatedAtUtc = remote.UpdatedAtUtc,
+        IsDeleted = remote.IsDeleted
     };
-
-    private static async Task EnsurePlayersExistAsync(JplDbContext db, IReadOnlyList<Guid> playerIds, CancellationToken ct)
-    {
-        if (playerIds.Count == 0)
-            return;
-
-        var count = await db.Players.CountAsync(p => playerIds.Contains(p.Id), ct).ConfigureAwait(false);
-        if (count != playerIds.Count)
-            throw new InvalidOperationException("One or more players were not found.");
-    }
 
     private static void ValidateCaptain(Guid? captainId, IReadOnlyList<Guid> playerIds)
     {
         if (captainId is null)
             return;
-
         if (!playerIds.Contains(captainId.Value))
             throw new InvalidOperationException("Captain must be one of the team players. Add the player to the team first.");
     }
@@ -239,7 +189,4 @@ public sealed class TeamService : ITeamService
             throw new ArgumentException("Team name is required.");
         return trimmed;
     }
-
-    private static string? NullIfWhite(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

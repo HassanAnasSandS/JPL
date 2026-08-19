@@ -33,7 +33,7 @@ public sealed class SyncOutboxItem
 
     public string? LastError { get; set; }
 
-    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
 
-    public DateTimeOffset? LastAttemptAtUtc { get; set; }
+    public DateTime? LastAttemptAtUtc { get; set; }
 }

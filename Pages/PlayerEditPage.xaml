@@ -4,24 +4,37 @@
              xmlns:vm="clr-namespace:JPL.ViewModels"
              x:Class="JPL.Pages.PlayerEditPage"
              x:DataType="vm:PlayerEditViewModel"
-             Title="{Binding Title}">
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
 
-    <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="12">
-            <Label Text="Player registration only — no team assignment here."
-                   FontSize="13"
-                   TextColor="{AppThemeBinding Light=#555555, Dark=#AAAAAA}" />
-
-            <Entry Placeholder="Full name *" Text="{Binding FullName}" />
-            <Entry Placeholder="Nickname" Text="{Binding Nickname}" />
-            <Entry Placeholder="Phone" Text="{Binding Phone}" Keyboard="Telephone" />
-            <Entry Placeholder="Batting style (e.g. Right-hand)" Text="{Binding BattingStyle}" />
-            <Entry Placeholder="Bowling style (e.g. Right-arm medium)" Text="{Binding BowlingStyle}" />
-            <Editor Placeholder="Notes" Text="{Binding Notes}" AutoSize="TextChanges" HeightRequest="80" />
-
-            <Button Text="Save" Command="{Binding SaveCommand}" />
-            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
-            <Label Text="{Binding ErrorMessage}" TextColor="#B00020" />
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="14" VerticalOptions="Start">
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Player name *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Full name (required, unique)"
+                           Text="{Binding FullName}"
+                           FontSize="16"
+                           MaxLength="120" />
+                    <HorizontalStackLayout Spacing="10">
+                        <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" />
+                        <Label Text="Active (shown in team squad pickers)"
+                               VerticalOptions="Center"
+                               Style="{StaticResource BodyLabel}" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+            <Button Text="Save"
+                    Style="{StaticResource GoldButton}"
+                    Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.NetsScoringPage"
+             x:DataType="vm:NetsScoringViewModel"
+             Title="Nets scoring"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="12,12,12,16" Spacing="12" VerticalOptions="Start">
+
+            <Border StrokeThickness="0"
+                    BackgroundColor="{StaticResource Primary}"
+                    Padding="16,14"
+                    StrokeShape="RoundRectangle 16">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="{Binding SessionName}"
+                           FontSize="14"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center"
+                           TextColor="#B8C4D4" />
+                    <Label Text="{Binding ScoreText}"
+                           FontSize="32"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center"
+                           TextColor="{StaticResource Secondary}" />
+                    <Label Text="1 batter · 1 bowler · unlimited overs. Same player can bat or bowl again."
+                           FontSize="11"
+                           HorizontalOptions="Center"
+                           HorizontalTextAlignment="Center"
+                           TextColor="#B8C4D4" />
+                    <Label Text="Saved on this phone. Complete + Sync to include in Nets statistics."
+                           FontSize="10"
+                           HorizontalOptions="Center"
+                           HorizontalTextAlignment="Center"
+                           TextColor="#8FA3B8" />
+                    <Border StrokeThickness="0"
+                            BackgroundColor="#243447"
+                            Padding="12,8"
+                            StrokeShape="RoundRectangle 10"
+                            HorizontalOptions="Center">
+                        <Label Text="{Binding DuelText}"
+                               FontSize="15"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{StaticResource Secondary}"
+                               LineBreakMode="TailTruncation" />
+                    </Border>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="12" IsVisible="{Binding CanWrite}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="RUNS" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Secondary}" />
+                    <Grid ColumnDefinitions="*,*,*,*"
+                          RowDefinitions="Auto,Auto"
+                          ColumnSpacing="8"
+                          RowSpacing="8">
+                        <Button Text="0" Style="{StaticResource ScorePadButton}"
+                                Command="{Binding ScoreCommand}" CommandParameter="0" />
+                        <Button Grid.Column="1" Text="1" Style="{StaticResource ScorePadButton}"
+                                Command="{Binding ScoreCommand}" CommandParameter="1" />
+                        <Button Grid.Column="2" Text="2" Style="{StaticResource ScorePadButton}"
+                                Command="{Binding ScoreCommand}" CommandParameter="2" />
+                        <Button Grid.Column="3" Text="3" Style="{StaticResource ScorePadButton}"
+                                Command="{Binding ScoreCommand}" CommandParameter="3" />
+                        <Button Grid.Row="1" Text="4" Style="{StaticResource ScorePadButton}"
+                                BackgroundColor="#1B5E20"
+                                Command="{Binding ScoreCommand}" CommandParameter="4" />
+                        <Button Grid.Row="1" Grid.Column="1" Text="5" Style="{StaticResource ScorePadButton}"
+                                Command="{Binding ScoreCommand}" CommandParameter="5" />
+                        <Button Grid.Row="1" Grid.Column="2" Text="6" Style="{StaticResource ScorePadButton}"
+                                BackgroundColor="#6A1B9A"
+                                Command="{Binding ScoreCommand}" CommandParameter="6" />
+                        <Button Grid.Row="1" Grid.Column="3" Text="Undo"
+                                Style="{StaticResource DangerButton}"
+                                FontSize="15"
+                                MinimumHeightRequest="64"
+                                CornerRadius="14"
+                                Command="{Binding UndoCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="12" IsVisible="{Binding CanWrite}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="EXTRAS &amp; WICKETS"
+                           FontSize="11"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Secondary}" />
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Extra" FontSize="11"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                        <Picker Title="Extra"
+                                ItemsSource="{Binding ExtraOptions}"
+                                ItemDisplayBinding="{Binding Label}"
+                                SelectedItem="{Binding SelectedExtraOption}" />
+                    </VerticalStackLayout>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
+                                Padding="8,4"
+                                StrokeShape="RoundRectangle 10"
+                                VerticalOptions="Center">
+                            <HorizontalStackLayout Spacing="4">
+                                <CheckBox IsChecked="{Binding IsWicket}" VerticalOptions="Center" />
+                                <Label Text="Wicket" VerticalOptions="Center" FontAttributes="Bold" FontSize="13" />
+                            </HorizontalStackLayout>
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="2" IsEnabled="{Binding IsWicket}">
+                            <Label Text="Dismissal" FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Picker Title="Wicket type"
+                                    ItemsSource="{Binding WicketOptions}"
+                                    ItemDisplayBinding="{Binding Label}"
+                                    SelectedItem="{Binding SelectedWicketOption}"
+                                    IsEnabled="{Binding IsWicket}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                    <VerticalStackLayout Spacing="2" IsVisible="{Binding NeedsFielder}">
+                        <Label Text="Fielder" FontSize="11"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                        <Picker Title="Fielder (catch / run-out / stumped)"
+                                ItemsSource="{Binding Players}"
+                                ItemDisplayBinding="{Binding DisplayName}"
+                                SelectedItem="{Binding Fielder}" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="12">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="ON FIELD" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Secondary}" />
+                    <Grid ColumnDefinitions="76,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <Label Text="Batter"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center"
+                               TextColor="{StaticResource Secondary}" />
+                        <Picker Grid.Column="1"
+                                Title="Batter"
+                                ItemsSource="{Binding Players}"
+                                ItemDisplayBinding="{Binding DisplayName}"
+                                SelectedItem="{Binding Batter}" />
+                        <Label Grid.Row="1"
+                               Text="Bowler"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center"
+                               TextColor="{StaticResource Primary}" />
+                        <Picker Grid.Row="1" Grid.Column="1"
+                                Title="Bowler"
+                                ItemsSource="{Binding Players}"
+                                ItemDisplayBinding="{Binding DisplayName}"
+                                SelectedItem="{Binding Bowler}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="Change batter"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding ChangeBatterCommand}"
+                                IsVisible="{Binding CanWrite}" />
+                        <Button Grid.Column="1"
+                                Text="Change bowler"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding ChangeBowlerCommand}"
+                                IsVisible="{Binding CanWrite}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark=#2A3A4E}"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource CardBackground}, Dark={StaticResource CardBackgroundDark}}"
+                    StrokeShape="RoundRectangle 14"
+                    Padding="0">
+                <VerticalStackLayout Spacing="0">
+                    <Grid ColumnDefinitions="*,Auto" Padding="14,12" BackgroundColor="{StaticResource Primary}">
+                        <Label Text="{Binding ScorecardHeaderText}"
+                               FontAttributes="Bold"
+                               FontSize="14"
+                               TextColor="White"
+                               LineBreakMode="TailTruncation" />
+                        <Label Grid.Column="1"
+                               Text="{Binding ScorecardTotalText}"
+                               FontAttributes="Bold"
+                               FontSize="20"
+                               VerticalOptions="Center"
+                               TextColor="{StaticResource Secondary}" />
+                    </Grid>
+
+                    <VerticalStackLayout Spacing="0" Padding="10,10,10,6">
+                        <Label Text="BATTING" FontSize="11" FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}" Margin="2,0,0,6" />
+                        <Grid ColumnDefinitions="*,32,28,26,26,36,32" Padding="6,4"
+                              BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                            <Label Text="Batter" FontSize="10" FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="1" Text="R" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="2" Text="B" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="3" Text="4s" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="4" Text="6s" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="5" Text="SR" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="6" Text="Out" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                        </Grid>
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding BattingCard}" Spacing="0">
+                            <BindableLayout.EmptyView>
+                                <Label Text="No batting yet" Style="{StaticResource MutedLabel}" Margin="6,8" />
+                            </BindableLayout.EmptyView>
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:BattingCardRow">
+                                    <Grid ColumnDefinitions="*,32,28,26,26,36,32" Padding="6,8" RowDefinitions="Auto,Auto">
+                                        <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Row="1" Text="{Binding StatusText}" FontSize="10"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                        <Label Grid.Column="1" Grid.RowSpan="2" Text="{Binding Runs}" FontSize="14"
+                                               FontAttributes="Bold" HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{StaticResource Primary}" />
+                                        <Label Grid.Column="2" Grid.RowSpan="2" Text="{Binding Balls}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="3" Grid.RowSpan="2" Text="{Binding Fours}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="4" Grid.RowSpan="2" Text="{Binding Sixes}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="5" Grid.RowSpan="2" Text="{Binding StrikeRateText}" FontSize="12"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                        <Label Grid.Column="6" Grid.RowSpan="2" Text="{Binding Outs}" FontSize="13"
+                                               FontAttributes="Bold" HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{StaticResource Primary}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                        <Grid ColumnDefinitions="*,Auto" Padding="6,8,6,2">
+                            <Label Text="{Binding ExtrasText}" FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" Padding="6,4,6,8"
+                              BackgroundColor="{AppThemeBinding Light=#EEF2F6, Dark=#1B2838}">
+                            <Label Text="TOTAL" FontSize="13" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Grid.Column="1" Text="{Binding ScorecardTotalText}" FontSize="15"
+                                   FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="0" Padding="10,4,10,12">
+                        <Label Text="BOWLING" FontSize="11" FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}" Margin="2,4,0,6" />
+                        <Grid ColumnDefinitions="*,40,28,36,28,44" Padding="6,4"
+                              BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                            <Label Text="Bowler" FontSize="10" FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="1" Text="O" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="2" Text="M" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="3" Text="R" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="4" Text="W" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                            <Label Grid.Column="5" Text="Econ" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                        </Grid>
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding BowlingCard}" Spacing="0">
+                            <BindableLayout.EmptyView>
+                                <Label Text="No bowling yet" Style="{StaticResource MutedLabel}" Margin="6,8" />
+                            </BindableLayout.EmptyView>
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:BowlingCardRow">
+                                    <Grid ColumnDefinitions="*,40,28,36,28,44" Padding="6,8">
+                                        <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="1" Text="{Binding OversText}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="2" Text="{Binding Maidens}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="3" Text="{Binding RunsConceded}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="4" Text="{Binding Wickets}" FontSize="13"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{StaticResource Primary}" />
+                                        <Label Grid.Column="5" Text="{Binding EconomyText}" FontSize="12"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Complete session + Sync"
+                    Style="{StaticResource GoldButton}"
+                    Command="{Binding CompleteCommand}"
+                    IsVisible="{Binding CanWrite}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

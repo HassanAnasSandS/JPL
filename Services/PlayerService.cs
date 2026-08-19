@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using JPL.Data;
 using JPL.Domain;
 
 namespace JPL.Services;
@@ -7,142 +5,113 @@ namespace JPL.Services;
 public interface IPlayerService
 {
     Task<IReadOnlyList<Player>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>Active players only — for team create/update squad pickers.</summary>
+    Task<IReadOnlyList<Player>> GetActiveAsync(CancellationToken ct = default);
     Task<Player?> GetAsync(Guid id, CancellationToken ct = default);
     Task<Player> CreateAsync(PlayerDraft draft, CancellationToken ct = default);
     Task<Player> UpdateAsync(Guid id, PlayerDraft draft, CancellationToken ct = default);
+    Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default);
     Task SoftDeleteAsync(Guid id, CancellationToken ct = default);
 }
 
-public sealed record PlayerDraft(
-    string FullName,
-    string? Nickname,
-    string? Phone,
-    string? BattingStyle,
-    string? BowlingStyle,
-    string? Notes);
+public sealed record PlayerDraft(string FullName, bool IsActive = true);
 
+/// <summary>Players always come from the live API. SQLite is not used for master data.</summary>
 public sealed class PlayerService : IPlayerService
 {
-    private readonly IDbContextFactory<JplDbContext> _dbFactory;
-    private readonly IOutboxWriter _outbox;
-    private readonly ISyncTrigger _syncTrigger;
+    private readonly IApiClient _api;
+    private readonly IAuthService _auth;
 
-    public PlayerService(
-        IDbContextFactory<JplDbContext> dbFactory,
-        IOutboxWriter outbox,
-        ISyncTrigger syncTrigger)
+    public PlayerService(IApiClient api, IAuthService auth)
     {
-        _dbFactory = dbFactory;
-        _outbox = outbox;
-        _syncTrigger = syncTrigger;
+        _api = api;
+        _auth = auth;
     }
 
     public async Task<IReadOnlyList<Player>> GetAllAsync(CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return await db.Players
-            .AsNoTracking()
+        var remote = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+        return remote
+            .Where(p => !p.IsDeleted)
+            .OrderByDescending(p => p.IsActive)
+            .ThenBy(p => p.FullName)
+            .Select(ToEntity)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<Player>> GetActiveAsync(CancellationToken ct = default)
+    {
+        var remote = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+        return remote
+            .Where(p => !p.IsDeleted && p.IsActive)
             .OrderBy(p => p.FullName)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+            .Select(ToEntity)
+            .ToList();
     }
 
     public async Task<Player?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return await db.Players.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct).ConfigureAwait(false);
+        var remote = await _api.GetPlayerAsync(id, ct).ConfigureAwait(false);
+        return remote is null || remote.IsDeleted ? null : ToEntity(remote);
     }
 
     public async Task<Player> CreateAsync(PlayerDraft draft, CancellationToken ct = default)
     {
+        _auth.EnsureCanWrite();
         var name = RequireName(draft.FullName);
-        var now = DateTimeOffset.UtcNow;
+        await EnsureUniqueNameAsync(name, excludeId: null, ct).ConfigureAwait(false);
 
-        var player = new Player
-        {
-            FullName = name,
-            Nickname = NullIfWhite(draft.Nickname),
-            Phone = NullIfWhite(draft.Phone),
-            BattingStyle = NullIfWhite(draft.BattingStyle),
-            BowlingStyle = NullIfWhite(draft.BowlingStyle),
-            Notes = NullIfWhite(draft.Notes),
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now,
-            Version = 1
-        };
-
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-
-        db.Players.Add(player);
-        _outbox.Enqueue(db, nameof(Player), player.Id, "Upsert", player);
-
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await tx.CommitAsync(ct).ConfigureAwait(false);
-
-        _syncTrigger.RequestSync();
-        return player;
+        var remote = await _api.CreatePlayerAsync(
+                new { id = Guid.NewGuid(), fullName = name, isActive = draft.IsActive }, ct)
+            .ConfigureAwait(false);
+        return ToEntity(remote);
     }
 
     public async Task<Player> UpdateAsync(Guid id, PlayerDraft draft, CancellationToken ct = default)
     {
+        _auth.EnsureCanWrite();
         var name = RequireName(draft.FullName);
+        await EnsureUniqueNameAsync(name, excludeId: id, ct).ConfigureAwait(false);
 
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var remote = await _api.UpdatePlayerAsync(id, new { id, fullName = name, isActive = draft.IsActive }, ct)
+            .ConfigureAwait(false);
+        return ToEntity(remote);
+    }
 
-        var player = await db.Players.FirstOrDefaultAsync(p => p.Id == id, ct).ConfigureAwait(false)
+    public async Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default)
+    {
+        _auth.EnsureCanWrite();
+        var player = await GetAsync(id, ct).ConfigureAwait(false)
                      ?? throw new InvalidOperationException("Player not found.");
-
-        player.FullName = name;
-        player.Nickname = NullIfWhite(draft.Nickname);
-        player.Phone = NullIfWhite(draft.Phone);
-        player.BattingStyle = NullIfWhite(draft.BattingStyle);
-        player.BowlingStyle = NullIfWhite(draft.BowlingStyle);
-        player.Notes = NullIfWhite(draft.Notes);
-        player.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        player.Version++;
-
-        _outbox.Enqueue(db, nameof(Player), player.Id, "Upsert", player);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await tx.CommitAsync(ct).ConfigureAwait(false);
-
-        _syncTrigger.RequestSync();
-        return player;
+        await UpdateAsync(id, new PlayerDraft(player.FullName, isActive), ct).ConfigureAwait(false);
     }
 
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        _auth.EnsureCanWrite();
+        await _api.DeletePlayerAsync(id, ct).ConfigureAwait(false);
+    }
 
-        // Ignore query filter so we can soft-delete.
-        var player = await db.Players.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == id, ct).ConfigureAwait(false);
-        if (player is null || player.IsDeleted)
-            return;
+    private static Player ToEntity(ApiPlayerDto remote) => new()
+    {
+        Id = remote.Id,
+        FullName = remote.FullName,
+        IsActive = remote.IsActive,
+        Version = remote.Version,
+        UpdatedAtUtc = remote.UpdatedAtUtc,
+        IsDeleted = remote.IsDeleted
+    };
 
-        player.IsDeleted = true;
-        player.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        player.Version++;
-
-        var memberships = await db.TeamPlayers.Where(tp => tp.PlayerId == id).ToListAsync(ct).ConfigureAwait(false);
-        db.TeamPlayers.RemoveRange(memberships);
-
-        // Clear captaincy on teams where this player is captain.
-        var captained = await db.Teams.Where(t => t.CaptainPlayerId == id).ToListAsync(ct).ConfigureAwait(false);
-        foreach (var team in captained)
-        {
-            team.CaptainPlayerId = null;
-            team.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            team.Version++;
-            _outbox.Enqueue(db, nameof(Team), team.Id, "Upsert", team);
-        }
-
-        _outbox.Enqueue(db, nameof(Player), player.Id, "Delete", new { player.Id, player.Version });
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await tx.CommitAsync(ct).ConfigureAwait(false);
-
-        _syncTrigger.RequestSync();
+    private async Task EnsureUniqueNameAsync(string name, Guid? excludeId, CancellationToken ct)
+    {
+        var key = name.ToLowerInvariant();
+        var remote = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+        var taken = remote.Any(p =>
+            !p.IsDeleted
+            && (excludeId is null || p.Id != excludeId)
+            && string.Equals(p.FullName, key, StringComparison.OrdinalIgnoreCase));
+        if (taken)
+            throw new InvalidOperationException($"Player name \"{name}\" already exists.");
     }
 
     private static string RequireName(string? name)
@@ -150,9 +119,8 @@ public sealed class PlayerService : IPlayerService
         var trimmed = name?.Trim() ?? string.Empty;
         if (trimmed.Length == 0)
             throw new ArgumentException("Player name is required.");
+        if (trimmed.Length > 120)
+            throw new ArgumentException("Player name must be 120 characters or fewer.");
         return trimmed;
     }
-
-    private static string? NullIfWhite(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

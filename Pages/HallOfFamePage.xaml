@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.HallOfFamePage"
+             x:DataType="vm:HallOfFameViewModel"
+             Title="Hall of Fame"
+             HideSoftInputOnTapped="True">
+
+    <Grid Padding="14" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
+        <Label Text="Hall of Fame"
+               FontSize="22"
+               FontAttributes="Bold"
+               TextColor="{StaticResource Primary}" />
+
+        <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout Spacing="8">
+                <Button Text="Player of Match"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="potm"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsPotm}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Captain Trophies"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="captain"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsCaptain}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Tournament Champion"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="tourchamp"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsTourChamp}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <VerticalStackLayout Grid.Row="2" Spacing="2">
+            <Label Text="{Binding CategoryTitle}"
+                   FontSize="16"
+                   FontAttributes="Bold"
+                   TextColor="{StaticResource Primary}" />
+            <Label Text="{Binding CategoryHint}"
+                   Style="{StaticResource MutedLabel}"
+                   FontSize="12" />
+        </VerticalStackLayout>
+
+        <RefreshView Grid.Row="3"
+                     VerticalOptions="Fill"
+                     IsRefreshing="{Binding IsBusy, Mode=OneWay}"
+                     Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}"
+                            SelectionMode="None"
+                            VerticalOptions="Fill">
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32" Spacing="8" VerticalOptions="Center">
+                        <Label Text="No trophies yet"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               TextColor="{StaticResource TextPrimary}" />
+                        <Label Text="Complete matches and award Player of the Match"
+                               Style="{StaticResource MutedLabel}"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="10" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="svc:TrophyRow">
+                        <Border Style="{StaticResource CardBorder}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Padding="4">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        Padding="10,6"
+                                        StrokeShape="RoundRectangle 10"
+                                        VerticalOptions="Center">
+                                    <Label Text="{Binding RankText}"
+                                           FontAttributes="Bold"
+                                           FontSize="13"
+                                           TextColor="{StaticResource Secondary}" />
+                                </Border>
+                                <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                    <Label Text="{Binding PlayerName}"
+                                           FontAttributes="Bold"
+                                           FontSize="16"
+                                           Style="{StaticResource BodyLabel}" />
+                                    <Label Text="{Binding Detail}"
+                                           Style="{StaticResource MutedLabel}"
+                                           FontSize="11" />
+                                </VerticalStackLayout>
+                                <Label Grid.Column="2"
+                                       Text="{Binding TrophyText}"
+                                       FontAttributes="Bold"
+                                       FontSize="13"
+                                       VerticalOptions="Center"
+                                       TextColor="{StaticResource Secondary}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Label Grid.Row="4"
+               Text="{Binding ErrorMessage}"
+               TextColor="{StaticResource Danger}"
+               FontSize="12" />
+    </Grid>
+</ContentPage>

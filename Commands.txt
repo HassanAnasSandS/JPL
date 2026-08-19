@@ -1,0 +1,2 @@
+Android App Release 
+dotnet build "C:\Users\Hassan Mohammad Anas\source\repos\JPL\JPL.csproj" -f net9.0-android -c Release

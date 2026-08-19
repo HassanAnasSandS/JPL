@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.MatchesPage"
+             x:DataType="vm:MatchesViewModel"
+             Title="Matches"
+             HideSoftInputOnTapped="True">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto">
+            <Label Text="Fixtures"
+                   FontSize="22"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center"
+                   TextColor="{StaticResource Primary}" />
+            <Button Grid.Column="1"
+                    Text="{Binding AddButtonText}"
+                    Style="{StaticResource GoldButton}"
+                    Padding="16,10"
+                    IsVisible="{Binding CanWrite}"
+                    Clicked="OnAddClicked" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Style="{StaticResource CardBorder}"
+                Padding="12">
+            <VerticalStackLayout Spacing="8">
+                <SearchBar Placeholder="Filter by team / title"
+                           Text="{Binding TeamFilter}"
+                           CancelButtonColor="{StaticResource Primary}" />
+                <SearchBar Placeholder="Filter by captain"
+                           Text="{Binding CaptainFilter}"
+                           CancelButtonColor="{StaticResource Primary}" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                        <CheckBox IsChecked="{Binding FilterByDate}" VerticalOptions="Center" />
+                        <Label Text="By date"
+                               VerticalOptions="Center"
+                               Style="{StaticResource BodyLabel}" />
+                    </HorizontalStackLayout>
+                    <DatePicker Grid.Column="1"
+                                Date="{Binding FilterDate}"
+                                IsEnabled="{Binding FilterByDate}"
+                                VerticalOptions="Center" />
+                    <Button Grid.Column="2"
+                            Text="Clear"
+                            Style="{StaticResource GhostButton}"
+                            Padding="12,8"
+                            IsVisible="{Binding HasActiveFilters}"
+                            Command="{Binding ClearFiltersCommand}" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <Border Grid.Row="2"
+                IsVisible="{Binding HasActiveMatch}"
+                StrokeThickness="0"
+                BackgroundColor="#FFE8EC"
+                Padding="12,10"
+                StrokeShape="RoundRectangle 10">
+            <Label Text="{Binding ActiveMatchHint}"
+                   FontSize="12"
+                   TextColor="{StaticResource Danger}" />
+        </Border>
+
+        <RefreshView Grid.Row="3"
+                     VerticalOptions="Fill"
+                     IsRefreshing="{Binding IsBusy, Mode=OneWay}"
+                     Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}"
+                            SelectionMode="None"
+                            VerticalOptions="Fill">
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32" Spacing="8" VerticalOptions="Center">
+                        <Label Text="No matches found"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               TextColor="{StaticResource TextPrimary}" />
+                        <Label Text="Try clearing filters, or add a match"
+                               Style="{StaticResource MutedLabel}"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="svc:MatchListItem">
+                        <Border Style="{StaticResource CardBorder}" Padding="16">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                                  ColumnDefinitions="*,Auto"
+                                  RowSpacing="10"
+                                  ColumnSpacing="10">
+
+                                <Label Text="{Binding Title}"
+                                       FontAttributes="Bold"
+                                       FontSize="17"
+                                       LineBreakMode="TailTruncation"
+                                       Style="{StaticResource BodyLabel}" />
+                                <Border Grid.Column="1"
+                                        Padding="10,4"
+                                        StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        StrokeShape="RoundRectangle 12"
+                                        VerticalOptions="Center">
+                                    <Label Text="{Binding StatusText}"
+                                           FontSize="11"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource Secondary}" />
+                                </Border>
+
+                                <Border Grid.Row="1"
+                                        Grid.ColumnSpan="2"
+                                        StrokeThickness="0"
+                                        BackgroundColor="{StaticResource SurfaceMuted}"
+                                        Padding="12"
+                                        StrokeShape="RoundRectangle 12">
+                                    <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                        <VerticalStackLayout Spacing="2" HorizontalOptions="Start">
+                                            <Label Text="{Binding TeamAName}"
+                                                   FontSize="12"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation"
+                                                   TextColor="{StaticResource TextPrimary}" />
+                                            <Label Text="{Binding TeamAScore}"
+                                                   FontSize="26"
+                                                   FontAttributes="Bold"
+                                                   TextColor="{StaticResource Primary}" />
+                                            <Label Text="WINNER"
+                                                   FontSize="10"
+                                                   FontAttributes="Bold"
+                                                   TextColor="{StaticResource Success}"
+                                                   IsVisible="{Binding TeamAWon}" />
+                                        </VerticalStackLayout>
+
+                                        <Label Grid.Column="1"
+                                               Text="VS"
+                                               FontSize="12"
+                                               FontAttributes="Bold"
+                                               VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+
+                                        <VerticalStackLayout Grid.Column="2"
+                                                             Spacing="2"
+                                                             HorizontalOptions="End">
+                                            <Label Text="{Binding TeamBName}"
+                                                   FontSize="12"
+                                                   FontAttributes="Bold"
+                                                   HorizontalTextAlignment="End"
+                                                   LineBreakMode="TailTruncation"
+                                                   TextColor="{StaticResource TextPrimary}" />
+                                            <Label Text="{Binding TeamBScore}"
+                                                   FontSize="26"
+                                                   FontAttributes="Bold"
+                                                   HorizontalTextAlignment="End"
+                                                   TextColor="{StaticResource Primary}" />
+                                            <Label Text="WINNER"
+                                                   FontSize="10"
+                                                   FontAttributes="Bold"
+                                                   HorizontalTextAlignment="End"
+                                                   TextColor="{StaticResource Success}"
+                                                   IsVisible="{Binding TeamBWon}" />
+                                        </VerticalStackLayout>
+                                    </Grid>
+                                </Border>
+
+                                <VerticalStackLayout Grid.Row="2"
+                                                     Grid.ColumnSpan="2"
+                                                     Spacing="2">
+                                    <Label Text="{Binding ResultText}"
+                                           FontSize="13"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource Success}" />
+                                    <Label Text="{Binding PlayerOfTheMatchLine}"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource Secondary}"
+                                           IsVisible="{Binding HasPlayerOfTheMatch}" />
+                                    <Label Text="{Binding MetaLine}"
+                                           Style="{StaticResource MutedLabel}" />
+                                </VerticalStackLayout>
+
+                                <Grid Grid.Row="3"
+                                      Grid.ColumnSpan="2"
+                                      ColumnDefinitions="*,Auto,Auto"
+                                      ColumnSpacing="8">
+                                    <Button Text="{Binding ActionLabel}"
+                                            Style="{StaticResource GoldButton}"
+                                            HorizontalOptions="Fill"
+                                            Clicked="OnScoreClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Grid.Column="1"
+                                            Text="Sync"
+                                            Style="{StaticResource GoldButton}"
+                                            Padding="14,8"
+                                            IsVisible="{Binding NeedsSync}"
+                                            Clicked="OnSyncClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Grid.Column="2"
+                                            Text="Del"
+                                            Style="{StaticResource DangerButton}"
+                                            Padding="14,8"
+                                            IsVisible="{Binding CanDelete}"
+                                            Clicked="OnDeleteClicked"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Label Grid.Row="4"
+               Text="{Binding ErrorMessage}"
+               TextColor="{StaticResource Danger}"
+               FontSize="12" />
+    </Grid>
+</ContentPage>

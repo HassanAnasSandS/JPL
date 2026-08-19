@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.NetSessionEditPage"
+             x:Name="ThisPage"
+             x:DataType="vm:NetSessionEditViewModel"
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="12" VerticalOptions="Start">
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Session name *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="e.g. Saturday nets"
+                           Text="{Binding Name}"
+                           FontSize="16"
+                           MaxLength="160"
+                           IsEnabled="{Binding CanEdit}" />
+                    <Label Text="Date" Style="{StaticResource SectionLabel}" />
+                    <DatePicker Date="{Binding SessionDate}" IsEnabled="{Binding CanEdit}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="Players *" Style="{StaticResource SectionLabel}" />
+                        <Label Grid.Column="1"
+                               Text="{Binding SelectedCountText}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12"
+                               VerticalOptions="Center" />
+                    </Grid>
+                    <Label Text="Select at least two players. Anyone listed can bat, bowl, or field."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding RosterCandidates}" Spacing="4">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No active players in this league"
+                                   Style="{StaticResource MutedLabel}"
+                                   Margin="8" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SelectablePlayer">
+                                <Grid ColumnDefinitions="*,Auto" Padding="0,6" ColumnSpacing="8">
+                                    <Label Text="{Binding DisplayName}"
+                                           VerticalOptions="Center"
+                                           Style="{StaticResource BodyLabel}" />
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="12,8"
+                                            IsVisible="{Binding BindingContext.CanEdit, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            Clicked="OnTogglePlayerClicked"
+                                            CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Text" Value="Added" />
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+                                                <Setter Property="TextColor" Value="White" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
+                                                <Setter Property="Text" Value="Add" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Start Session"
+                    Style="{StaticResource GoldButton}"
+                    IsVisible="{Binding CanEdit}"
+                    Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

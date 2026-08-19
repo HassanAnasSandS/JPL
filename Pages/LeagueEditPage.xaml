@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.LeagueEditPage"
+             x:DataType="vm:LeagueEditViewModel"
+             Title="{Binding PageTitle}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="League name *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="e.g. JPL"
+                           Text="{Binding Name}"
+                           MaxLength="160"
+                           FontSize="16" />
+
+                    <Label Text="Image" Style="{StaticResource SectionLabel}" />
+                    <Image Source="{Binding ImagePreview}"
+                           HeightRequest="140"
+                           Aspect="AspectFit"
+                           HorizontalOptions="Center" />
+                    <Button Text="Choose image"
+                            Style="{StaticResource OutlineButton}"
+                            Command="{Binding PickImageCommand}" />
+                </VerticalStackLayout>
+            </Border>
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+            <Button Text="Save"
+                    Style="{StaticResource GoldButton}"
+                    HeightRequest="48"
+                    Command="{Binding SaveCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

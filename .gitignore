@@ -6,6 +6,14 @@
 # dotenv files
 .env
 
+# JPL API local sqlite
+**/jpl-api.db
+**/jpl-api.db-*
+**/cric360-master.db
+**/cric360-master.db-*
+**/leagues/*.db
+**/leagues/*.db-*
+
 # User-specific files
 *.rsuser
 *.suo

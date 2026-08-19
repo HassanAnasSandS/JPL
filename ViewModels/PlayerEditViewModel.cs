@@ -8,26 +8,12 @@ namespace JPL.ViewModels;
 public partial class PlayerEditViewModel : ObservableObject
 {
     private readonly IPlayerService _players;
+    private readonly IAuthService _auth;
 
     public string? PlayerId { get; set; }
 
     [ObservableProperty]
     private string fullName = string.Empty;
-
-    [ObservableProperty]
-    private string? nickname;
-
-    [ObservableProperty]
-    private string? phone;
-
-    [ObservableProperty]
-    private string? battingStyle;
-
-    [ObservableProperty]
-    private string? bowlingStyle;
-
-    [ObservableProperty]
-    private string? notes;
 
     [ObservableProperty]
     private string title = "Register player";
@@ -38,15 +24,31 @@ public partial class PlayerEditViewModel : ObservableObject
     [ObservableProperty]
     private string? errorMessage;
 
+    [ObservableProperty]
+    private bool canWrite;
+
+    [ObservableProperty]
+    private bool isActive = true;
+
     private Guid? _existingId;
 
-    public PlayerEditViewModel(IPlayerService players)
+    public PlayerEditViewModel(IPlayerService players, IAuthService auth)
     {
         _players = players;
+        _auth = auth;
+        CanWrite = _auth.CanWrite;
     }
 
     public async Task InitializeAsync()
     {
+        CanWrite = _auth.CanWrite;
+        if (!CanWrite)
+        {
+            ErrorMessage = "Read-only user cannot edit players.";
+            await Shell.Current.GoToAsync("..").ConfigureAwait(true);
+            return;
+        }
+
         if (!Guid.TryParse(PlayerId, out var id))
             return;
 
@@ -60,17 +62,13 @@ public partial class PlayerEditViewModel : ObservableObject
         }
 
         FullName = player.FullName;
-        Nickname = player.Nickname;
-        Phone = player.Phone;
-        BattingStyle = player.BattingStyle;
-        BowlingStyle = player.BowlingStyle;
-        Notes = player.Notes;
+        IsActive = player.IsActive;
     }
 
     [RelayCommand]
     private async Task SaveAsync()
     {
-        if (IsBusy)
+        if (IsBusy || !CanWrite)
             return;
 
         try
@@ -78,7 +76,13 @@ public partial class PlayerEditViewModel : ObservableObject
             IsBusy = true;
             ErrorMessage = null;
 
-            var draft = new PlayerDraft(FullName, Nickname, Phone, BattingStyle, BowlingStyle, Notes);
+            var name = FullName?.Trim() ?? string.Empty;
+            if (name.Length == 0)
+                throw new ArgumentException("Player name is required.");
+            if (name.Length > 120)
+                throw new ArgumentException("Player name must be 120 characters or fewer.");
+
+            var draft = new PlayerDraft(name, IsActive);
             if (_existingId is Guid id)
                 await _players.UpdateAsync(id, draft).ConfigureAwait(true);
             else

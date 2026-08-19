@@ -6,20 +6,21 @@ public sealed class Team
 
     public string Name { get; set; } = string.Empty;
 
-    public string? ShortName { get; set; }
-
     /// <summary>Captain must be a player already linked via TeamPlayers.</summary>
     public Guid? CaptainPlayerId { get; set; }
 
     public Player? Captain { get; set; }
 
+    /// <summary>Inactive teams are hidden from new-match team pickers.</summary>
+    public bool IsActive { get; set; } = true;
+
     public bool IsDeleted { get; set; }
 
     public long Version { get; set; } = 1;
 
-    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
 
-    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
 
     public ICollection<TeamPlayer> TeamPlayers { get; set; } = new List<TeamPlayer>();
 }

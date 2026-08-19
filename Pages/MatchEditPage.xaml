@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.MatchEditPage"
+             x:DataType="vm:MatchEditViewModel"
+             Title="New match"
+             HideSoftInputOnTapped="True">
+
+    <Grid>
+        <ScrollView VerticalOptions="Fill"
+                    VerticalScrollBarVisibility="Default"
+                    HorizontalScrollBarVisibility="Never"
+                    IsEnabled="{Binding IsMatchFormEnabled}"
+                    InputTransparent="{Binding IsTossOverlayVisible}">
+            <VerticalStackLayout Padding="16" Spacing="12" VerticalOptions="Start"
+                                 IsEnabled="{Binding IsMatchFormEnabled}">
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Match details" Style="{StaticResource SectionLabel}" />
+                        <Entry Placeholder="Match title * (required, unique)"
+                               Text="{Binding Title}"
+                               MaxLength="160"
+                               IsEnabled="{Binding CanEditMatchSettings}" />
+                        <Label Text="Venue *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                        <Picker Title="Select venue"
+                                ItemsSource="{Binding VenueOptions}"
+                                ItemDisplayBinding="{Binding Name}"
+                                SelectedItem="{Binding SelectedVenue}"
+                                IsEnabled="{Binding CanEditMatchSettings}" />
+
+                        <Label Text="Format *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                        <Picker Title="Match format"
+                                ItemsSource="{Binding FormatOptions}"
+                                ItemDisplayBinding="{Binding Label}"
+                                SelectedItem="{Binding SelectedFormat}"
+                                IsEnabled="{Binding CanEditMatchSettings}" />
+                        <Label Text="{Binding FormatHint}" Style="{StaticResource MutedLabel}" />
+
+                        <Label Text="Overs per side *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                        <Entry Placeholder="e.g. 6, 8, 10"
+                               Text="{Binding OversLimit}"
+                               Keyboard="Numeric"
+                               IsEnabled="{Binding CanEditMatchSettings}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Match settings" Style="{StaticResource SectionLabel}" />
+                        <Label Text="Tournament defaults — read only"
+                               IsVisible="{Binding LockMatchSettings}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
+                        <HorizontalStackLayout Spacing="12">
+                            <Switch IsToggled="{Binding LastBatsmanCanBatAsSingleWicket}"
+                                    VerticalOptions="Center"
+                                    IsEnabled="{Binding CanEditMatchSettings}" />
+                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Label Text="Last batsman can bat as single wicket"
+                                       FontAttributes="Bold"
+                                       Style="{StaticResource BodyLabel}" />
+                                <Label Text="If on, the last remaining batsman continues alone (no strike change at over end)."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+
+                        <Label Text="Bowler maximum overs"
+                               FontAttributes="Bold"
+                               Style="{StaticResource BodyLabel}" />
+                        <Entry Placeholder="0 = no limit"
+                               Text="{Binding BowlerMaxOvers}"
+                               Keyboard="Numeric"
+                               IsEnabled="{Binding CanEditMatchSettings}" />
+                        <Label Text="Bowler is hidden from the list after completing this many overs (like an out batsman)."
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Teams *" Style="{StaticResource SectionLabel}" />
+                        <Label Text="Team 1 *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                        <Picker Title="Team 1"
+                                ItemsSource="{Binding Teams}"
+                                ItemDisplayBinding="{Binding Name}"
+                                SelectedItem="{Binding TeamA}"
+                                IsEnabled="{Binding CanChangeTeams}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Button Text="Heads"
+                                    Style="{StaticResource GoldButton}"
+                                    Padding="12,8"
+                                    FontSize="13"
+                                    Command="{Binding SetTeamAHeadsCommand}"
+                                    Opacity="{Binding TeamAHeadsOpacity}" />
+                            <Button Grid.Column="1"
+                                    Text="Tails"
+                                    Style="{StaticResource GoldButton}"
+                                    Padding="12,8"
+                                    FontSize="13"
+                                    Command="{Binding SetTeamATailsCommand}"
+                                    Opacity="{Binding TeamATailsOpacity}" />
+                        </Grid>
+
+                        <Label Text="Team 2 *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                        <Picker Title="Team 2"
+                                ItemsSource="{Binding Teams}"
+                                ItemDisplayBinding="{Binding Name}"
+                                SelectedItem="{Binding TeamB}"
+                                IsEnabled="{Binding CanChangeTeams}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Button Text="Heads"
+                                    Style="{StaticResource GoldButton}"
+                                    Padding="12,8"
+                                    FontSize="13"
+                                    Command="{Binding SetTeamBHeadsCommand}"
+                                    Opacity="{Binding TeamBHeadsOpacity}" />
+                            <Button Grid.Column="1"
+                                    Text="Tails"
+                                    Style="{StaticResource GoldButton}"
+                                    Padding="12,8"
+                                    FontSize="13"
+                                    Command="{Binding SetTeamBTailsCommand}"
+                                    Opacity="{Binding TeamBTailsOpacity}" />
+                        </Grid>
+                        <Label Text="Each team must have a different call. Coin flip decides the winner."
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
+
+                        <Button Text="Toss coin *"
+                                Style="{StaticResource GoldButton}"
+                                Command="{Binding TossCommand}"
+                                IsEnabled="{Binding CanToss}" />
+
+                        <Border IsVisible="{Binding HasTossWinner}"
+                                StrokeThickness="0"
+                                BackgroundColor="{StaticResource Primary}"
+                                Padding="14"
+                                StrokeShape="RoundRectangle 12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="TOSS WINNER"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}" />
+                                <Label Text="{Binding TossResultText}"
+                                       FontAttributes="Bold"
+                                       FontSize="16"
+                                       TextColor="White" />
+                                <Label Text="{Binding TossDecisionHint}"
+                                       FontSize="12"
+                                       TextColor="#B8C4D4" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <VerticalStackLayout Spacing="8" IsVisible="{Binding CanPickBatFirst}">
+                            <Label Text="Batting first *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                            <Picker Title="Select batting team"
+                                    ItemsSource="{Binding BatFirstOptions}"
+                                    ItemDisplayBinding="{Binding Name}"
+                                    SelectedItem="{Binding BattingFirst}" />
+                            <Label Text="{Binding BattingFirst.Name, StringFormat='Batting first: {0}'}"
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding HasBatFirstPick}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Button Text="Start match"
+                        Style="{StaticResource GoldButton}"
+                        Command="{Binding SaveCommand}"
+                        IsEnabled="{Binding CanStartMatch}" />
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="{StaticResource Danger}"
+                       FontSize="12" />
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Coin toss overlay — full-screen blocker so background cannot receive taps -->
+        <Grid IsVisible="{Binding IsTossOverlayVisible}"
+              InputTransparent="False"
+              Padding="0"
+              ZIndex="20">
+            <BoxView Color="#E60B1220"
+                     InputTransparent="False"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill" />
+            <Border StrokeThickness="0"
+                    BackgroundColor="#0D1B2A"
+                    StrokeShape="RoundRectangle 24"
+                    Padding="24"
+                    Margin="24"
+                    VerticalOptions="Center"
+                    MaximumWidthRequest="420"
+                    HorizontalOptions="Center"
+                    InputTransparent="False">
+                <VerticalStackLayout Spacing="18" HorizontalOptions="Center">
+                    <Label Text="THE TOSS"
+                           FontSize="12"
+                           FontAttributes="Bold"
+                           CharacterSpacing="2"
+                           HorizontalTextAlignment="Center"
+                           TextColor="{StaticResource Secondary}" />
+
+                    <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="2" HorizontalOptions="Start">
+                            <Label Text="HEADS"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   TextColor="#8A9BB0" />
+                            <Label Text="{Binding HeadsTeamName}"
+                                   FontSize="13"
+                                   FontAttributes="Bold"
+                                   TextColor="White"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                        <Label Grid.Column="1"
+                               Text="VS"
+                               FontSize="11"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center"
+                               TextColor="{StaticResource Secondary}" />
+                        <VerticalStackLayout Grid.Column="2" Spacing="2" HorizontalOptions="End">
+                            <Label Text="TAILS"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="End"
+                                   TextColor="#8A9BB0" />
+                            <Label Text="{Binding TailsTeamName}"
+                                   FontSize="13"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="End"
+                                   TextColor="White"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <!-- Coin -->
+                    <Grid WidthRequest="160"
+                          HeightRequest="160"
+                          HorizontalOptions="Center"
+                          Margin="0,8">
+                        <!-- Shadow disc -->
+                        <Ellipse WidthRequest="150"
+                                 HeightRequest="24"
+                                 Fill="#33000000"
+                                 VerticalOptions="End"
+                                 Margin="0,0,0,4"
+                                 x:Name="CoinShadow" />
+
+                        <Border x:Name="CoinDisc"
+                                WidthRequest="140"
+                                HeightRequest="140"
+                                StrokeThickness="4"
+                                Stroke="#F5E6A3"
+                                BackgroundColor="#D4AF37"
+                                StrokeShape="RoundRectangle 70"
+                                HorizontalOptions="Center"
+                                VerticalOptions="Center">
+                            <Grid>
+                                <Ellipse Stroke="#B8962E"
+                                         StrokeThickness="2"
+                                         Margin="10"
+                                         InputTransparent="True" />
+                                <VerticalStackLayout VerticalOptions="Center"
+                                                     HorizontalOptions="Center"
+                                                     Spacing="2">
+                                    <Label x:Name="CoinLetter"
+                                           Text="{Binding CoinFaceLabel}"
+                                           FontSize="52"
+                                           FontAttributes="Bold"
+                                           HorizontalTextAlignment="Center"
+                                           TextColor="#0D1B2A" />
+                                    <Label x:Name="CoinSideTitle"
+                                           Text="{Binding CoinFaceTitle}"
+                                           FontSize="11"
+                                           FontAttributes="Bold"
+                                           HorizontalTextAlignment="Center"
+                                           CharacterSpacing="1.5"
+                                           TextColor="#3A2A00" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <Label Text="{Binding TossOverlayStatus}"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           HorizontalTextAlignment="Center"
+                           TextColor="White" />
+
+                    <VerticalStackLayout IsVisible="{Binding ShowTossWinnerBanner}"
+                                         Spacing="12"
+                                         HorizontalOptions="Fill">
+                        <Label Text="{Binding TossDecisionHint}"
+                               FontSize="13"
+                               HorizontalTextAlignment="Center"
+                               TextColor="#8A9BB0" />
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <Button Text="Bat"
+                                    Style="{StaticResource GoldButton}"
+                                    Command="{Binding ElectBatCommand}"
+                                    Opacity="{Binding BatButtonOpacity}" />
+                            <Button Grid.Column="1"
+                                    Text="Bowl"
+                                    Style="{StaticResource GoldButton}"
+                                    Command="{Binding ElectBowlCommand}"
+                                    Opacity="{Binding BowlButtonOpacity}" />
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <Button Text="Continue"
+                            Style="{StaticResource GoldButton}"
+                            Command="{Binding CloseTossOverlayCommand}"
+                            IsVisible="{Binding CanCloseTossOverlay}" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentPage>

@@ -1,56 +1,409 @@
 <?xml version="1.0" encoding="utf-8" ?>
+
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+
              xmlns:vm="clr-namespace:JPL.ViewModels"
+
              xmlns:svc="clr-namespace:JPL.Services"
+
              x:Class="JPL.Pages.TeamsPage"
              x:Name="ThisPage"
              x:DataType="vm:TeamsViewModel"
-             Title="Teams">
 
-    <ContentPage.ToolbarItems>
-        <ToolbarItem Text="Add" Command="{Binding AddCommand}" />
-    </ContentPage.ToolbarItems>
+             Title="Teams"
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="12" RowSpacing="8">
-        <Label Text="Add players to a team here. Pick captain from those players."
-               TextColor="{AppThemeBinding Light=#555555, Dark=#AAAAAA}"
-               FontSize="13" />
+             HideSoftInputOnTapped="True">
 
-        <RefreshView Grid.Row="1"
-                     IsRefreshing="{Binding IsBusy}"
+
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
+
+        <Grid ColumnDefinitions="*,Auto">
+
+            <Label Text="Clubs"
+
+                   FontSize="22"
+
+                   FontAttributes="Bold"
+
+                   VerticalOptions="Center"
+
+                   TextColor="{StaticResource Primary}" />
+
+            <Button Grid.Column="1"
+
+                    Text="+ Add"
+
+                    Style="{StaticResource GoldButton}"
+
+                    Padding="16,10"
+
+                    IsVisible="{Binding CanWrite}"
+
+                    Clicked="OnAddClicked" />
+
+        </Grid>
+
+
+
+        <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+
+            <HorizontalStackLayout Spacing="8">
+
+                <Button Text="{Binding AllFilterLabel}"
+
+                        Command="{Binding SelectStatusCommand}"
+
+                        CommandParameter="all"
+
+                        Padding="14,8"
+
+                        FontSize="13"
+
+                        CornerRadius="18"
+
+                        MinimumHeightRequest="40"
+
+                        BackgroundColor="#E8EEF5"
+
+                        TextColor="{StaticResource Primary}">
+
+                    <Button.Triggers>
+
+                        <DataTrigger TargetType="Button" Binding="{Binding IsAllFilter}" Value="True">
+
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+
+                        </DataTrigger>
+
+                    </Button.Triggers>
+
+                </Button>
+
+                <Button Text="{Binding ActiveFilterLabel}"
+
+                        Command="{Binding SelectStatusCommand}"
+
+                        CommandParameter="active"
+
+                        Padding="14,8"
+
+                        FontSize="13"
+
+                        CornerRadius="18"
+
+                        MinimumHeightRequest="40"
+
+                        BackgroundColor="#E8EEF5"
+
+                        TextColor="{StaticResource Primary}">
+
+                    <Button.Triggers>
+
+                        <DataTrigger TargetType="Button" Binding="{Binding IsActiveFilter}" Value="True">
+
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+
+                        </DataTrigger>
+
+                    </Button.Triggers>
+
+                </Button>
+
+                <Button Text="{Binding InactiveFilterLabel}"
+
+                        Command="{Binding SelectStatusCommand}"
+
+                        CommandParameter="deactive"
+
+                        Padding="14,8"
+
+                        FontSize="13"
+
+                        CornerRadius="18"
+
+                        MinimumHeightRequest="40"
+
+                        BackgroundColor="#E8EEF5"
+
+                        TextColor="{StaticResource Primary}">
+
+                    <Button.Triggers>
+
+                        <DataTrigger TargetType="Button" Binding="{Binding IsInactiveFilter}" Value="True">
+
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+
+                        </DataTrigger>
+
+                    </Button.Triggers>
+
+                </Button>
+
+            </HorizontalStackLayout>
+
+        </ScrollView>
+
+
+
+        <Border Grid.Row="2"
+
+                Style="{StaticResource CardBorder}"
+
+                Padding="12">
+
+            <VerticalStackLayout Spacing="8">
+
+                <SearchBar Placeholder="Filter by team name"
+
+                           Text="{Binding NameFilter}"
+
+                           CancelButtonColor="{StaticResource Primary}" />
+
+                <SearchBar Placeholder="Filter by captain"
+
+                           Text="{Binding CaptainFilter}"
+
+                           CancelButtonColor="{StaticResource Primary}" />
+
+                <Button Text="Clear filters"
+
+                        Style="{StaticResource GhostButton}"
+
+                        Padding="12,8"
+
+                        HorizontalOptions="End"
+
+                        IsVisible="{Binding HasActiveFilters}"
+
+                        Command="{Binding ClearFiltersCommand}" />
+
+            </VerticalStackLayout>
+
+        </Border>
+
+
+
+        <RefreshView Grid.Row="3"
+
+                     VerticalOptions="Fill"
+
+                     IsRefreshing="{Binding IsBusy, Mode=OneWay}"
+
                      Command="{Binding LoadCommand}">
-            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None">
+
+            <CollectionView ItemsSource="{Binding Items}"
+
+                            SelectionMode="None"
+
+                            VerticalOptions="Fill">
+
                 <CollectionView.EmptyView>
-                    <VerticalStackLayout Padding="24" Spacing="8">
-                        <Label Text="No teams yet" FontAttributes="Bold" HorizontalOptions="Center" />
-                        <Label Text="Create a team and add registered players." HorizontalOptions="Center" />
+
+                    <VerticalStackLayout Padding="32" Spacing="8" VerticalOptions="Center">
+
+                        <Label Text="No teams found"
+
+                               FontSize="16"
+
+                               FontAttributes="Bold"
+
+                               HorizontalOptions="Center"
+
+                               TextColor="{StaticResource TextPrimary}" />
+
+                        <Label Text="Try clearing filters, or add a team"
+
+                               Style="{StaticResource MutedLabel}"
+
+                               HorizontalOptions="Center"
+
+                               HorizontalTextAlignment="Center" />
+
                     </VerticalStackLayout>
+
                 </CollectionView.EmptyView>
+
+                <CollectionView.ItemsLayout>
+
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="10" />
+
+                </CollectionView.ItemsLayout>
+
                 <CollectionView.ItemTemplate>
+
                     <DataTemplate x:DataType="svc:TeamListItem">
-                        <Grid Padding="0,10" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="16" />
-                                <Label Text="{Binding CaptainName, StringFormat='Captain: {0}', TargetNullValue='Captain: —'}"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#666666, Dark=#AAAAAA}" />
-                                <Label Text="{Binding PlayerCount, StringFormat='{0} players'}"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#666666, Dark=#AAAAAA}" />
-                            </VerticalStackLayout>
-                            <Button Grid.Column="1" Text="Edit" Padding="12,6"
-                                    Command="{Binding BindingContext.EditCommand, Source={x:Reference ThisPage}}"
-                                    CommandParameter="{Binding .}" />
-                            <Button Grid.Column="2" Text="Del" Padding="12,6" BackgroundColor="#B00020" TextColor="White"
-                                    Command="{Binding BindingContext.DeleteCommand, Source={x:Reference ThisPage}}"
-                                    CommandParameter="{Binding .}" />
-                        </Grid>
+
+                        <Border Style="{StaticResource CardBorder}">
+
+                            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+
+                                    <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+
+                                        <Label Text="{Binding Name}"
+
+                                               FontAttributes="Bold"
+
+                                               FontSize="17"
+
+                                               Style="{StaticResource BodyLabel}" />
+
+                                        <Label Text="{Binding CaptainLine}"
+
+                                               FontAttributes="Bold"
+
+                                               TextColor="{StaticResource Secondary}" />
+
+                                        <Label Text="{Binding StatusText}"
+
+                                               FontSize="12"
+
+                                               FontAttributes="Bold"
+
+                                               TextColor="{StaticResource Success}">
+
+                                            <Label.Triggers>
+
+                                                <DataTrigger TargetType="Label" Binding="{Binding IsActive}" Value="False">
+
+                                                    <Setter Property="TextColor" Value="{StaticResource Danger}" />
+
+                                                </DataTrigger>
+
+                                            </Label.Triggers>
+
+                                        </Label>
+
+                                    </VerticalStackLayout>
+
+                                    <Border Grid.Column="1"
+
+                                            Padding="10,4"
+
+                                            StrokeThickness="0"
+
+                                            BackgroundColor="{StaticResource SurfaceMuted}"
+
+                                            StrokeShape="RoundRectangle 12"
+
+                                            VerticalOptions="Center">
+
+                                        <Label Text="{Binding PlayerCount, StringFormat='{0} players'}"
+
+                                               FontSize="11"
+
+                                               FontAttributes="Bold"
+
+                                               TextColor="{StaticResource Primary}" />
+
+                                    </Border>
+
+                                </Grid>
+
+
+
+                                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+
+                                    <Button Text="{Binding ToggleActiveLabel}"
+
+                                            Style="{StaticResource GhostButton}"
+
+                                            HorizontalOptions="Fill"
+
+                                            IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+
+                                            Clicked="OnToggleActiveClicked"
+
+                                            CommandParameter="{Binding .}" />
+
+                                    <Button Grid.Column="1"
+
+                                            Text="View"
+
+                                            Style="{StaticResource OutlineButton}"
+
+                                            Padding="14,8"
+
+                                            MinimumHeightRequest="40"
+
+                                            FontSize="13"
+
+                                            Clicked="OnViewClicked"
+
+                                            CommandParameter="{Binding .}" />
+
+                                    <Button Grid.Column="2"
+
+                                            Text="Edit"
+
+                                            Style="{StaticResource OutlineButton}"
+
+                                            Padding="14,8"
+
+                                            MinimumHeightRequest="40"
+
+                                            FontSize="13"
+
+                                            IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+
+                                            Clicked="OnEditClicked"
+
+                                            CommandParameter="{Binding .}" />
+
+                                    <Button Grid.Column="3"
+
+                                            Text="Del"
+
+                                            Style="{StaticResource DangerButton}"
+
+                                            Padding="12,8"
+
+                                            MinimumHeightRequest="40"
+
+                                            FontSize="13"
+
+                                            IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+
+                                            Clicked="OnDeleteClicked"
+
+                                            CommandParameter="{Binding .}" />
+
+                                </Grid>
+
+                            </Grid>
+
+                        </Border>
+
                     </DataTemplate>
+
                 </CollectionView.ItemTemplate>
+
             </CollectionView>
+
         </RefreshView>
 
-        <Label Grid.Row="2" Text="{Binding ErrorMessage}" TextColor="#B00020" />
+
+
+        <Label Grid.Row="4"
+
+               Text="{Binding ErrorMessage}"
+
+               TextColor="{StaticResource Danger}"
+
+               FontSize="12" />
+
     </Grid>
+
 </ContentPage>
+
+

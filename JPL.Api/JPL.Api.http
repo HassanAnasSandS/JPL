@@ -1,0 +1,20 @@
+@namespace JPL.Api.http
+
+@JPL.Api_HostAddress = http://localhost:5025
+
+GET {{JPL.Api_HostAddress}}/api/health
+
+###
+POST {{JPL.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+###
+GET {{JPL.Api_HostAddress}}/api/players
+
+###
+GET {{JPL.Api_HostAddress}}/api/teams

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.NetSessionScorecardPage"
+             x:DataType="vm:NetSessionScorecardViewModel"
+             Title="Nets scorecard"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+
+    <Grid RowDefinitions="*,Auto" Padding="12" RowSpacing="6" VerticalOptions="Fill">
+        <RefreshView VerticalOptions="Fill"
+                     IsRefreshing="{Binding IsBusy, Mode=OneWay}"
+                     Command="{Binding RefreshCommand}">
+            <ScrollView VerticalOptions="Fill"
+                        VerticalScrollBarVisibility="Default"
+                        HorizontalScrollBarVisibility="Never">
+                <VerticalStackLayout Spacing="12" VerticalOptions="Start" Padding="0,0,0,8">
+                    <Border Style="{StaticResource CardBorder}"
+                            IsVisible="{Binding ShowPlaceholder}"
+                            Padding="20">
+                        <Label Text="Pull down to load the scorecard."
+                               HorizontalTextAlignment="Center"
+                               Style="{StaticResource MutedLabel}" />
+                    </Border>
+
+                    <VerticalStackLayout Spacing="12" IsVisible="{Binding HasScorecard}">
+                        <VerticalStackLayout Spacing="2">
+                            <Label Text="{Binding Title}"
+                                   FontSize="22"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding MetaLine}" Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
+
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{StaticResource Primary}"
+                                Padding="16,14"
+                                StrokeShape="RoundRectangle 16">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="SESSION" FontSize="11" FontAttributes="Bold" TextColor="#B8C4D4" />
+                                    <Label Text="{Binding OversText}" FontSize="13" TextColor="White" />
+                                </VerticalStackLayout>
+                                <Label Grid.Column="1"
+                                       Text="{Binding TotalText}"
+                                       FontSize="28"
+                                       FontAttributes="Bold"
+                                       VerticalOptions="Center"
+                                       TextColor="{StaticResource Secondary}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark=#2A3A4E}"
+                                StrokeThickness="1"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackground}, Dark={StaticResource CardBackgroundDark}}"
+                                StrokeShape="RoundRectangle 14"
+                                Padding="0">
+                            <VerticalStackLayout Spacing="0">
+                                <Label Text="BATTING"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}"
+                                       Margin="14,12,14,4" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Batting}" Spacing="0" Padding="10,0,10,6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:BattingCardRow">
+                                            <Grid ColumnDefinitions="*,40,36" Padding="6,8" RowDefinitions="Auto,Auto">
+                                                <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold"
+                                                       LineBreakMode="TailTruncation" />
+                                                <Label Grid.Row="1" Text="{Binding StatusText}" FontSize="10"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                <Label Grid.Column="1" Grid.RowSpan="2" Text="{Binding Runs}" FontSize="16"
+                                                       FontAttributes="Bold" HorizontalTextAlignment="End" VerticalOptions="Center"
+                                                       TextColor="{StaticResource Primary}" />
+                                                <Label Grid.Column="2" Grid.RowSpan="2"
+                                                       Text="{Binding Balls, StringFormat='({0})'}" FontSize="12"
+                                                       HorizontalTextAlignment="End" VerticalOptions="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                                <Grid ColumnDefinitions="*,Auto" Padding="16,8,16,12">
+                                    <Label Text="{Binding ExtrasText}" FontSize="12"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    <Label Grid.Column="1" Text="{Binding TotalText}" FontSize="14" FontAttributes="Bold"
+                                           TextColor="{StaticResource Primary}" />
+                                </Grid>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark=#2A3A4E}"
+                                StrokeThickness="1"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackground}, Dark={StaticResource CardBackgroundDark}}"
+                                StrokeShape="RoundRectangle 14"
+                                Padding="0">
+                            <VerticalStackLayout Spacing="0">
+                                <Label Text="BOWLING"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}"
+                                       Margin="14,12,14,4" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Bowling}" Spacing="0" Padding="10,0,10,12">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:BowlingCardRow">
+                                            <Grid ColumnDefinitions="*,Auto" Padding="6,8">
+                                                <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold"
+                                                       LineBreakMode="TailTruncation" VerticalOptions="Center" />
+                                                <Label Grid.Column="1" Text="{Binding LineText}" FontSize="12"
+                                                       HorizontalTextAlignment="End" VerticalOptions="Center"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </ScrollView>
+        </RefreshView>
+        <Label Grid.Row="1" Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+    </Grid>
+</ContentPage>
