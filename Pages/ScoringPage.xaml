@@ -150,13 +150,20 @@
                             Padding="12,8"
                             StrokeShape="RoundRectangle 10"
                             HorizontalOptions="Center">
-                        <Label Text="{Binding DuelText}"
-                               FontSize="15"
-                               FontAttributes="Bold"
-                               HorizontalOptions="Center"
-                               HorizontalTextAlignment="Center"
-                               TextColor="{StaticResource Secondary}"
-                               LineBreakMode="TailTruncation" />
+                        <VerticalStackLayout Spacing="2">
+                            <Label Text="STRIKER VS BOWLER"
+                                   FontSize="9"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"
+                                   TextColor="#B8C4D4" />
+                            <Label Text="{Binding DuelText}"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"
+                                   TextColor="{StaticResource Secondary}"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
                     </Border>
                 </VerticalStackLayout>
             </Border>

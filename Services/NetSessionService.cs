@@ -433,33 +433,7 @@ public sealed class NetSessionService : INetSessionService
         if (strikerId is Guid sid && sid != Guid.Empty && !battingOrder.Contains(sid))
             battingOrder.Add(sid);
 
-        var batting = new List<BattingCardRow>();
-        foreach (var pid in battingOrder)
-        {
-            var faced = deliveries.Where(d => d.BatterId == pid).ToList();
-            var dismissals = deliveries.Where(d => d.IsWicket && d.DismissedPlayerId == pid).ToList();
-            var lastFaced = faced.LastOrDefault();
-            var currentlyIn = strikerId == pid;
-            var lastSpellOut = lastFaced is not null
-                               && lastFaced.IsWicket
-                               && lastFaced.DismissedPlayerId == pid
-                               && !currentlyIn;
-            var lastOut = dismissals.LastOrDefault();
-
-            batting.Add(new BattingCardRow
-            {
-                PlayerId = pid,
-                Name = NameOf(pid),
-                Runs = faced.Sum(d => d.RunsOffBat),
-                Balls = faced.Count(d => d.IsLegalDelivery),
-                Fours = faced.Count(d => d.RunsOffBat == 4),
-                Sixes = faced.Count(d => d.RunsOffBat == 6),
-                IsOut = lastSpellOut,
-                Outs = dismissals.Count,
-                IsOnStrike = currentlyIn,
-                Dismissal = lastOut is null ? string.Empty : FormatDismissal(lastOut, NameOf)
-            });
-        }
+        var batting = BuildNetsBattingRows(deliveries, battingOrder, strikerId, NameOf);
 
         var bowlingOrder = new List<Guid>();
         foreach (var d in deliveries)
@@ -620,6 +594,72 @@ public sealed class NetSessionService : INetSessionService
             NeedsSync = needsSync && s.Status == NetSessionStatus.Completed
         };
     }
+
+    private static List<BattingCardRow> BuildNetsBattingRows(
+        IReadOnlyList<NetDelivery> deliveries,
+        IReadOnlyList<Guid> battingOrder,
+        Guid? strikerId,
+        Func<Guid, string> nameOf)
+    {
+        var rows = new List<BattingCardRow>();
+        foreach (var pid in battingOrder)
+        {
+            var spells = SplitBatterSpells(deliveries, pid);
+            var lastClosedOut = spells.Count > 0 && SpellEndedOut(spells[^1], pid);
+            if (spells.Count == 0 || (strikerId == pid && lastClosedOut))
+                spells.Add(new List<NetDelivery>());
+
+            for (var i = 0; i < spells.Count; i++)
+            {
+                var faced = spells[i];
+                var isOut = SpellEndedOut(faced, pid);
+                var outBall = isOut ? faced[^1] : null;
+                var currentlyIn = strikerId == pid && i == spells.Count - 1 && !isOut;
+                rows.Add(new BattingCardRow
+                {
+                    PlayerId = pid,
+                    Name = nameOf(pid),
+                    Runs = faced.Sum(d => d.RunsOffBat),
+                    Balls = faced.Count(d => d.IsLegalDelivery),
+                    Fours = faced.Count(d => d.RunsOffBat == 4),
+                    Sixes = faced.Count(d => d.RunsOffBat == 6),
+                    IsOut = isOut,
+                    Outs = isOut ? 1 : 0,
+                    IsOnStrike = currentlyIn,
+                    Dismissal = outBall is null ? string.Empty : FormatDismissal(outBall, nameOf)
+                });
+            }
+        }
+
+        return rows;
+    }
+
+    private static List<List<NetDelivery>> SplitBatterSpells(IReadOnlyList<NetDelivery> deliveries, Guid pid)
+    {
+        var spells = new List<List<NetDelivery>>();
+        List<NetDelivery>? current = null;
+        foreach (var d in deliveries)
+        {
+            if (d.BatterId != pid)
+                continue;
+            current ??= new List<NetDelivery>();
+            current.Add(d);
+            if (d.IsWicket && d.DismissedPlayerId == pid)
+            {
+                spells.Add(current);
+                current = null;
+            }
+        }
+
+        if (current is { Count: > 0 })
+            spells.Add(current);
+        return spells;
+    }
+
+    private static bool SpellEndedOut(IReadOnlyList<NetDelivery> spell, Guid pid)
+        => spell.Count > 0
+           && spell[^1].IsWicket
+           && spell[^1].DismissedPlayerId == pid;
 
     private void EnqueueCompletedSnapshot(JplDbContext db, NetSession session, IReadOnlyList<NetDelivery> deliveries)
     {

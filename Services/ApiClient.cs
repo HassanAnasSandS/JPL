@@ -64,7 +64,8 @@ public sealed record ApiMatchSummaryDto(
     string ResultText,
     Guid? WinnerTeamId,
     Guid? PlayerOfTheMatchPlayerId = null,
-    string? PlayerOfTheMatchName = null);
+    string? PlayerOfTheMatchName = null,
+    byte OversMode = 0);
 
 public sealed record ApiNetSessionSummaryDto(
     Guid Id,
@@ -82,6 +83,7 @@ public sealed class HallOfFameBundle
     public List<TrophyRow> PlayerOfTheMatch { get; set; } = new();
     public List<TrophyRow> CaptainTrophies { get; set; } = new();
     public List<TrophyRow> TournamentChampionTrophies { get; set; } = new();
+    public List<TrophyRow> SeriesChampionTrophies { get; set; } = new();
 }
 
 public sealed class TrophyRow
@@ -186,6 +188,7 @@ public sealed class ApiTournamentDetailDto
     public byte Format { get; set; }
     public string FormatText { get; set; } = string.Empty;
     public int OversLimit { get; set; }
+    public byte OversMode { get; set; }
     public bool LastBatsmanCanBatAsSingleWicket { get; set; }
     public int BowlerMaxOvers { get; set; }
     public byte Status { get; set; }
@@ -233,6 +236,86 @@ public sealed class ApiTournamentFixtureDto
 public sealed class ApiTournamentStandingDto
 {
     public int GroupNumber { get; set; }
+    public Guid TeamId { get; set; }
+    public string TeamName { get; set; } = string.Empty;
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int Points { get; set; }
+    public double NetRunRate { get; set; }
+    public int Rank { get; set; }
+}
+
+public sealed class ApiSeriesListDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public int MatchCount { get; set; }
+    public byte Status { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public int FixtureCount { get; set; }
+    public int TeamAWins { get; set; }
+    public int TeamBWins { get; set; }
+    public Guid? WinnerTeamId { get; set; }
+    public string? WinnerTeamName { get; set; }
+    public bool IsTied { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+}
+
+public sealed class ApiSeriesDetailDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public int MatchCount { get; set; }
+    public Guid VenueId { get; set; }
+    public string VenueName { get; set; } = string.Empty;
+    public byte Format { get; set; }
+    public string FormatText { get; set; } = string.Empty;
+    public int OversLimit { get; set; }
+    public byte OversMode { get; set; }
+    public bool LastBatsmanCanBatAsSingleWicket { get; set; }
+    public int BowlerMaxOvers { get; set; }
+    public byte Status { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public Guid? WinnerTeamId { get; set; }
+    public string? WinnerTeamName { get; set; }
+    public bool IsTied { get; set; }
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public List<ApiSeriesFixtureDto> Fixtures { get; set; } = new();
+    public List<ApiSeriesStandingDto> Standings { get; set; } = new();
+}
+
+public sealed class ApiSeriesFixtureDto
+{
+    public Guid Id { get; set; }
+    public int Sequence { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public Guid? MatchId { get; set; }
+    public byte? MatchStatus { get; set; }
+    public string MatchStatusText { get; set; } = string.Empty;
+    public string ResultText { get; set; } = string.Empty;
+    public bool CanStart { get; set; }
+    public bool CanResume { get; set; }
+    public bool CanOpenScorecard { get; set; }
+}
+
+public sealed class ApiSeriesStandingDto
+{
     public Guid TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public int Played { get; set; }
@@ -318,6 +401,14 @@ public interface IApiClient
     Task<ApiTournamentDetailDto> GenerateTournamentAsync(Guid id, CancellationToken ct = default);
     Task<ApiTournamentDetailDto> LinkTournamentMatchAsync(Guid id, Guid fixtureId, Guid matchId, CancellationToken ct = default);
     Task DeleteTournamentAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ApiSeriesListDto>> GetSeriesListAsync(CancellationToken ct = default);
+    Task<ApiSeriesDetailDto?> GetSeriesAsync(Guid id, CancellationToken ct = default);
+    Task<ApiSeriesDetailDto> CreateSeriesAsync(object body, CancellationToken ct = default);
+    Task<ApiSeriesDetailDto> UpdateSeriesAsync(Guid id, object body, CancellationToken ct = default);
+    Task<ApiSeriesDetailDto> GenerateSeriesAsync(Guid id, CancellationToken ct = default);
+    Task<ApiSeriesDetailDto> LinkSeriesMatchAsync(Guid id, Guid fixtureId, Guid matchId, CancellationToken ct = default);
+    Task DeleteSeriesAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiLeagueDto>> GetLeaguesAsync(CancellationToken ct = default);
     Task<ApiLeagueDto?> GetLeagueAsync(Guid id, CancellationToken ct = default);
@@ -768,6 +859,59 @@ public sealed class ApiClient : IApiClient
         => RunAsync(async http =>
         {
             using var response = await http.DeleteAsync($"api/tournaments/{id:D}", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<IReadOnlyList<ApiSeriesListDto>> GetSeriesListAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/series", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<ApiSeriesListDto>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<ApiSeriesListDto>)(list ?? new List<ApiSeriesListDto>());
+        }, ct);
+
+    public Task<ApiSeriesDetailDto?> GetSeriesAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/series/{id:D}", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiSeriesDetailDto>(JsonOptions, ct)
+                .ConfigureAwait(false);
+        }, ct);
+
+    public Task<ApiSeriesDetailDto> CreateSeriesAsync(object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiSeriesDetailDto>(HttpMethod.Post, "api/series", body, ct);
+
+    public Task<ApiSeriesDetailDto> UpdateSeriesAsync(Guid id, object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiSeriesDetailDto>(HttpMethod.Put, $"api/series/{id:D}", body, ct);
+
+    public Task<ApiSeriesDetailDto> GenerateSeriesAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.PostAsync($"api/series/{id:D}/generate", null, ct)
+                .ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiSeriesDetailDto>(JsonOptions, ct)
+                       .ConfigureAwait(false)
+                   ?? throw new InvalidOperationException("Empty API response.");
+        }, ct);
+
+    public Task<ApiSeriesDetailDto> LinkSeriesMatchAsync(
+        Guid id, Guid fixtureId, Guid matchId, CancellationToken ct = default)
+        => SendJsonAsync<ApiSeriesDetailDto>(
+            HttpMethod.Post,
+            $"api/series/{id:D}/fixtures/{fixtureId:D}/link-match",
+            new { matchId },
+            ct);
+
+    public Task DeleteSeriesAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.DeleteAsync($"api/series/{id:D}", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
 

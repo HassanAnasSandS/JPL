@@ -33,7 +33,8 @@ public sealed record MatchListItem(
         ? $"Player of the Match: {PlayerOfTheMatchName}"
         : string.Empty;
     public string FormatText => Format == MatchFormat.DoubleInnings ? "Double innings" : "Single inning";
-    public string FormatOversText => $"{FormatText} · {OversLimit} ov/side";
+    public OversMode OversMode { get; init; } = OversMode.PerInnings;
+    public string FormatOversText => $"{FormatText} · {OversRules.ShortLabel(OversMode, OversLimit)}";
     public string TeamAScore => $"{TeamARuns}/{TeamAWickets}";
     public string TeamBScore => $"{TeamBRuns}/{TeamBWickets}";
     public string DateLabel => MatchDateUtc.ToString("dd MMM yyyy");
@@ -44,11 +45,17 @@ public sealed record MatchListItem(
         {
             var parts = new List<string>();
             if (!string.IsNullOrWhiteSpace(TeamACaptainName))
-                parts.Add(TeamACaptainName!);
+                parts.Add(WithCaptainMark(TeamACaptainName!));
             if (!string.IsNullOrWhiteSpace(TeamBCaptainName))
-                parts.Add(TeamBCaptainName!);
+                parts.Add(WithCaptainMark(TeamBCaptainName!));
             return parts.Count == 0 ? string.Empty : string.Join(" / ", parts);
         }
+    }
+
+    private static string WithCaptainMark(string name)
+    {
+        var t = name.Trim();
+        return t.EndsWith("(C)", StringComparison.OrdinalIgnoreCase) ? t : $"{t} (C)";
     }
     public string MetaLine
     {
@@ -98,7 +105,10 @@ public sealed record MatchDraft(
     bool LastBatsmanCanBatAsSingleWicket = false,
     int BowlerMaxOvers = 0,
     Guid? TournamentId = null,
-    Guid? TournamentFixtureId = null);
+    Guid? TournamentFixtureId = null,
+    Guid? SeriesId = null,
+    Guid? SeriesFixtureId = null,
+    OversMode OversMode = OversMode.MatchTotal);
 
 public sealed record DeliveryInput(
     Guid BatterId,
@@ -129,6 +139,7 @@ public sealed record LiveScoreSnapshot(
     int Overs,
     int BallsInCurrentOver,
     int OversLimit,
+    OversMode OversMode,
     MatchFormat Format,
     bool InningsOversComplete,
     Guid? StrikerId,
@@ -154,6 +165,7 @@ public sealed record ScoringContext(
     string BowlingTeamName,
     MatchFormat Format,
     int OversLimit,
+    OversMode OversMode,
     int MaxInnings,
     string TeamAName,
     string TeamBName,
@@ -366,7 +378,7 @@ public sealed class MatchService : IMatchService
         // Standalone match-complete / lifecycle / per-match Sync push.
 
         var local = await LoadLocalListAsync(
-                m => m.TournamentId == null
+                m => m.TournamentId == null && m.SeriesId == null
                      && m.Status is MatchStatus.Setup or MatchStatus.InProgress or MatchStatus.Completed,
                 ct)
             .ConfigureAwait(false);
@@ -532,7 +544,7 @@ public sealed class MatchService : IMatchService
                 roster?.TeamACaptainName,
                 roster?.TeamBCaptainName,
                 m.PlayerOfTheMatchPlayerId,
-                potmName);
+                potmName) { OversMode = m.OversMode };
         }).ToList();
     }
 
@@ -577,7 +589,7 @@ public sealed class MatchService : IMatchService
             m.ResultText,
             m.WinnerTeamId,
             PlayerOfTheMatchPlayerId: m.PlayerOfTheMatchPlayerId,
-            PlayerOfTheMatchName: m.PlayerOfTheMatchName);
+            PlayerOfTheMatchName: m.PlayerOfTheMatchName) { OversMode = (OversMode)m.OversMode };
 
     private static (int Runs, int Wickets) TeamTotals(
         IReadOnlyList<Innings> inns,
@@ -668,14 +680,7 @@ public sealed class MatchService : IMatchService
         _auth.EnsureCanWrite();
         if (draft.TeamAId == draft.TeamBId)
             throw new InvalidOperationException("Select two different teams.");
-        if (draft.OversLimit <= 0)
-            throw new InvalidOperationException("Overs per side must be greater than 0.");
-        if (draft.OversLimit > 100)
-            throw new InvalidOperationException("Overs per side must be 100 or fewer.");
-        if (draft.BowlerMaxOvers < 0)
-            throw new InvalidOperationException("Bowler maximum overs cannot be negative.");
-        if (draft.BowlerMaxOvers > draft.OversLimit)
-            throw new InvalidOperationException("Bowler maximum overs cannot exceed overs per side.");
+        OversRules.Validate(draft.OversMode, draft.OversLimit, draft.BowlerMaxOvers);
 
         var title = RequireTitle(draft.Title);
         var venue = string.IsNullOrWhiteSpace(draft.Venue) ? null : draft.Venue.Trim();
@@ -732,7 +737,8 @@ public sealed class MatchService : IMatchService
             TeamBId = draft.TeamBId,
             TeamACaptainId = draft.TeamACaptainId ?? teamA.CaptainPlayerId,
             TeamBCaptainId = draft.TeamBCaptainId ?? teamB.CaptainPlayerId,
-            OversLimit = draft.OversLimit,
+            OversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
+            OversMode = draft.OversMode,
             Format = draft.Format,
             Venue = venue,
             TossWinnerTeamId = draft.TossWinnerTeamId,
@@ -741,6 +747,8 @@ public sealed class MatchService : IMatchService
             BowlerMaxOvers = Math.Max(0, draft.BowlerMaxOvers),
             TournamentId = draft.TournamentId,
             TournamentFixtureId = draft.TournamentFixtureId,
+            SeriesId = draft.SeriesId,
+            SeriesFixtureId = draft.SeriesFixtureId,
             Status = MatchStatus.Setup,
             SquadRosterJson = MatchRosterPayload.Serialize(roster)
         };
@@ -820,6 +828,14 @@ public sealed class MatchService : IMatchService
         if (isFollowOn && (match.Format != MatchFormat.DoubleInnings || number != 3))
             throw new InvalidOperationException("Follow-on can only start the 3rd innings in a double-innings match.");
 
+        if (match.OversMode == OversMode.MatchTotal)
+        {
+            var matchLegal = await db.Deliveries.CountAsync(d => d.MatchId == matchId && d.IsLegalDelivery, ct)
+                .ConfigureAwait(false);
+            if (OversRules.MatchPoolExhausted(match.OversMode, match.OversLimit, matchLegal))
+                throw new InvalidOperationException("Match overs are complete — no balls remaining.");
+        }
+
         var innings = new Innings
         {
             MatchId = matchId,
@@ -866,7 +882,8 @@ public sealed class MatchService : IMatchService
 
         var completed = match.Innings.OrderBy(i => i.InningsNumber).ToList();
         var max = MaxInningsFor(match.Format);
-        var plan = PlanNextInnings(match, completed);
+        var matchLegal = completed.SelectMany(i => i.Deliveries).Count(d => d.IsLegalDelivery);
+        var plan = PlanNextInnings(match, completed, matchLegal);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
@@ -887,7 +904,7 @@ public sealed class MatchService : IMatchService
         {
             _squadCache.Clear(matchId);
             // Tournament matches stay local until tournament Sync; standalone matches push now.
-            if (match.TournamentId is null)
+            if (match.TournamentId is null && match.SeriesId is null)
                 _syncTrigger.RequestSyncNow();
         }
 
@@ -924,9 +941,21 @@ public sealed class MatchService : IMatchService
         await EnsureSoleLeagueMatchAsync(db, matchId, inProgressOnly: true, ct).ConfigureAwait(false);
 
         var legalSoFar = innings.Deliveries.Count(d => d.IsLegalDelivery);
-        var maxLegal = match.OversLimit * 6;
-        if (legalSoFar >= maxLegal)
-            throw new InvalidOperationException($"Overs complete ({match.OversLimit}) — end this innings.");
+        var matchLegal = legalSoFar;
+        if (match.OversMode == OversMode.MatchTotal)
+        {
+            var otherLegal = await db.Deliveries
+                .CountAsync(d => d.MatchId == matchId && d.InningsId != innings.Id && d.IsLegalDelivery, ct)
+                .ConfigureAwait(false);
+            matchLegal = otherLegal + legalSoFar;
+        }
+
+        if (OversRules.InningsOversComplete(match.OversMode, match.OversLimit, legalSoFar, matchLegal))
+        {
+            throw new InvalidOperationException(match.OversMode == OversMode.MatchTotal
+                ? $"Match overs complete ({match.OversLimit}) — end this innings."
+                : $"Overs complete ({match.OversLimit}) — end this innings.");
+        }
 
         var sequence = innings.Deliveries.Count == 0 ? 1 : innings.Deliveries.Max(d => d.Sequence) + 1;
         var overNumber = legalSoFar / 6;
@@ -1030,20 +1059,22 @@ public sealed class MatchService : IMatchService
         var runs = deliveries.Sum(d => d.RunsOffBat + d.ExtraRuns);
         var wickets = deliveries.Count(d => d.IsWicket);
         var legal = deliveries.Count(d => d.IsLegalDelivery);
+        var matchLegal = allInnings.Sum(i => i.Deliveries.Count(d => d.IsLegalDelivery));
         var overs = legal / 6;
         var balls = legal % 6;
         var last = deliveries.LastOrDefault();
-        var oversDone = legal >= match.OversLimit * 6;
-        var ballsRemaining = Math.Max(0, match.OversLimit * 6 - legal);
+        var remaining = OversRules.BallsRemaining(match.OversMode, match.OversLimit, legal, matchLegal);
+        var oversDone = remaining == 0;
+        var ballsRemaining = remaining ?? 0;
 
-        var situation = BuildSituation(match, innings, runs, ballsRemaining, allInnings);
+        var situation = BuildSituation(match, innings, runs, remaining, allInnings);
         var currentRunRate = legal == 0 ? 0 : Math.Round(runs * 6.0 / legal, 2);
-        var projectedScore = legal == 0
+        var projectedScore = remaining is null || legal == 0
             ? 0
-            : (int)Math.Round(runs * (match.OversLimit * 6.0) / legal);
+            : (int)Math.Round(runs * (legal + ballsRemaining) / (double)legal);
         double? requiredRunRate = null;
-        if (situation.IsChase && situation.RunsRequired is int need && need > 0 && ballsRemaining > 0)
-            requiredRunRate = Math.Round(need * 6.0 / ballsRemaining, 2);
+        if (remaining is int left && situation.IsChase && situation.RunsRequired is int need && need > 0 && left > 0)
+            requiredRunRate = Math.Round(need * 6.0 / left, 2);
         else if (situation.IsChase && situation.RunsRequired == 0)
             requiredRunRate = 0;
 
@@ -1056,12 +1087,13 @@ public sealed class MatchService : IMatchService
             overs,
             balls,
             match.OversLimit,
+            match.OversMode,
             match.Format,
             oversDone,
             last?.BatterId,
             last?.NonStrikerId,
             last?.BowlerId,
-            $"{runs}/{wickets} ({overs}.{balls}/{match.OversLimit})",
+            $"{runs}/{wickets} ({OversRules.ScoreOversText(match.OversMode, match.OversLimit, overs, balls, remaining)})",
             situation.Text,
             situation.Target,
             situation.RunsRequired,
@@ -1095,7 +1127,7 @@ public sealed class MatchService : IMatchService
 
         var max = MaxInningsFor(match.Format);
         var formatName = match.Format == MatchFormat.DoubleInnings ? "Double innings" : "Single inning";
-        var hint = $"{formatName} · Inn {innings.InningsNumber}/{max} · {match.OversLimit} ov/side"
+        var hint = $"{formatName} · Inn {innings.InningsNumber}/{max} · {OversRules.ShortLabel(match.OversMode, match.OversLimit)}"
                    + (innings.IsFollowOn ? " · Follow-on" : string.Empty);
 
         var battingName = innings.BattingTeamId == squad.TeamAId ? squad.TeamAName
@@ -1143,6 +1175,7 @@ public sealed class MatchService : IMatchService
             bowlingName,
             match.Format,
             match.OversLimit,
+            match.OversMode,
             max,
             squad.TeamAName,
             squad.TeamBName,
@@ -1152,7 +1185,7 @@ public sealed class MatchService : IMatchService
             availableBatters,
             availableBowlers,
             squad.Fielders,
-            match.TournamentId is not null);
+            match.TournamentId is not null || match.SeriesId is not null);
     }
 
     public async Task<InningsScorecard?> GetLiveScorecardAsync(
@@ -1329,7 +1362,7 @@ public sealed class MatchService : IMatchService
             roster?.TeamBPlayers.Count ?? 0);
 
         var formatText = match.Format == MatchFormat.DoubleInnings ? "Double innings" : "Single inning";
-        var meta = $"{formatText} · {match.OversLimit} ov/side · {match.MatchDateUtc:dd MMM yyyy}";
+        var meta = $"{formatText} · {OversRules.ShortLabel(match.OversMode, match.OversLimit)} · {match.MatchDateUtc:dd MMM yyyy}";
         if (!string.IsNullOrWhiteSpace(match.Venue))
             meta += $" · {match.Venue}";
 
@@ -1581,7 +1614,7 @@ public sealed class MatchService : IMatchService
         await tx.CommitAsync(ct).ConfigureAwait(false);
 
         _squadCache.Clear(matchId);
-        if (match.TournamentId is null)
+        if (match.TournamentId is null && match.SeriesId is null)
             _syncTrigger.RequestSyncNow();
     }
 
@@ -1707,7 +1740,7 @@ public sealed class MatchService : IMatchService
         EnqueueCompletedMatchSnapshot(db, match);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
-        if (match.TournamentId is null)
+        if (match.TournamentId is null && match.SeriesId is null)
             _syncTrigger.RequestSyncNow();
     }
 
@@ -1748,8 +1781,14 @@ public sealed class MatchService : IMatchService
         }
     }
 
-    private static EndInningsResult PlanNextInnings(Match match, IReadOnlyList<Innings> completedOrdered)
+    private static EndInningsResult PlanNextInnings(
+        Match match,
+        IReadOnlyList<Innings> completedOrdered,
+        int matchLegal)
     {
+        if (OversRules.MatchPoolExhausted(match.OversMode, match.OversLimit, matchLegal))
+            return new EndInningsResult(true, false, false, 0, null, null, string.Empty);
+
         var max = MaxInningsFor(match.Format);
         var done = completedOrdered.Count;
         if (done >= max)
@@ -1797,17 +1836,28 @@ public sealed class MatchService : IMatchService
         Match match,
         Innings current,
         int currentRuns,
-        int ballsRemaining,
+        int? ballsRemaining,
         IReadOnlyList<Innings> allInnings)
     {
-        var ballsLabel = BallsLabel(ballsRemaining);
+        var ballsLabel = ballsRemaining is int left ? BallsLabel(left) : "no over limit";
         var rrr = (int need) =>
-            ballsRemaining <= 0 ? 0 : Math.Round(need * 6.0 / ballsRemaining, 2);
+            ballsRemaining is not int rem || rem <= 0 ? 0 : Math.Round(need * 6.0 / rem, 2);
+
+        string ChaseLine(int target, int need)
+        {
+            if (need == 0)
+                return $"Target {target} · Achieved";
+            if (ballsRemaining is null)
+                return $"Target {target} · Need {need} runs";
+            return $"Target {target} · Need {need} runs from {ballsRemaining} balls ({ballsLabel}) · RRR {rrr(need)}";
+        }
 
         if (current.InningsNumber == 1)
         {
             return new SituationInfo(
-                $"1st innings · set a total · {ballsLabel} left",
+                ballsRemaining is null
+                    ? "1st innings · set a total"
+                    : $"1st innings · set a total · {ballsLabel} left",
                 null,
                 null,
                 false);
@@ -1828,14 +1878,7 @@ public sealed class MatchService : IMatchService
             var firstScore = first is null ? 0 : InningsRuns(first);
             var target = firstScore + 1;
             var need = Math.Max(0, target - currentRuns);
-            if (need == 0)
-                return new SituationInfo($"Target {target} · Achieved", target, 0, true);
-
-            return new SituationInfo(
-                $"Target {target} · Need {need} runs from {ballsRemaining} balls ({ballsLabel}) · RRR {rrr(need)}",
-                target,
-                need,
-                true);
+            return new SituationInfo(ChaseLine(target, need), target, need, true);
         }
 
         // Double innings — 2nd: trail/lead vs 1st innings (trial).
@@ -1849,8 +1892,9 @@ public sealed class MatchService : IMatchService
                 : diff == 0
                     ? "Scores level"
                     : $"Lead by {diff}";
+            var leftBit = ballsRemaining is null ? string.Empty : $" · {ballsLabel} left";
             return new SituationInfo(
-                $"{leadTrail} (vs 1st inn {firstScore}) · {ballsLabel} left",
+                $"{leadTrail} (vs 1st inn {firstScore}){leftBit}",
                 null,
                 null,
                 false);
@@ -1868,8 +1912,9 @@ public sealed class MatchService : IMatchService
                     ? "Scores level"
                     : $"Lead by {diff}";
             var follow = current.IsFollowOn ? " · Follow-on" : string.Empty;
+            var leftBit = ballsRemaining is null ? string.Empty : $" · {ballsLabel} left";
             return new SituationInfo(
-                $"{leadTrail} overall{follow} · {ballsLabel} left",
+                $"{leadTrail} overall{follow}{leftBit}",
                 null,
                 null,
                 false);
@@ -1884,17 +1929,10 @@ public sealed class MatchService : IMatchService
             if (inningsTarget < 1)
                 inningsTarget = 1;
             var need = Math.Max(0, inningsTarget - currentRuns);
-            if (need == 0)
-                return new SituationInfo($"Target {inningsTarget} · Achieved", inningsTarget, 0, true);
-
-            return new SituationInfo(
-                $"Target {inningsTarget} · Need {need} runs from {ballsRemaining} balls ({ballsLabel}) · RRR {rrr(need)}",
-                inningsTarget,
-                need,
-                true);
+            return new SituationInfo(ChaseLine(inningsTarget, need), inningsTarget, need, true);
         }
 
-        return new SituationInfo($"{ballsLabel} left", null, null, false);
+        return new SituationInfo(ballsRemaining is null ? "In progress" : $"{ballsLabel} left", null, null, false);
     }
 
     private static string BallsLabel(int ballsRemaining)
@@ -1916,6 +1954,7 @@ public sealed class MatchService : IMatchService
         m.TeamACaptainId,
         m.TeamBCaptainId,
         m.OversLimit,
+        m.OversMode,
         m.Format,
         m.MatchDateUtc,
         m.Venue,
@@ -1927,6 +1966,8 @@ public sealed class MatchService : IMatchService
         m.PlayerOfTheMatchPlayerId,
         m.TournamentId,
         m.TournamentFixtureId,
+        m.SeriesId,
+        m.SeriesFixtureId,
         m.Version,
         m.UpdatedAtUtc,
         m.IsDeleted,

@@ -74,6 +74,7 @@ public sealed class SyncReceipt
 
 public enum MatchStatus : byte { Setup = 0, InProgress = 1, Completed = 2, Abandoned = 3 }
 public enum MatchFormat : byte { SingleInning = 0, DoubleInnings = 1 }
+public enum OversMode : byte { PerInnings = 0, MatchTotal = 1, Unlimited = 2 }
 public enum ExtraType : byte { None = 0, Wide = 1, NoBall = 2, Bye = 3, LegBye = 4 }
 public enum WicketType : byte
 {
@@ -89,6 +90,7 @@ public sealed class Match
     public Guid? TeamACaptainId { get; set; }
     public Guid? TeamBCaptainId { get; set; }
     public int OversLimit { get; set; } = 20;
+    public OversMode OversMode { get; set; } = OversMode.PerInnings;
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
     public DateTime MatchDateUtc { get; set; } = DateTime.Now;
     public string? Venue { get; set; }
@@ -100,6 +102,8 @@ public sealed class Match
     public Guid? PlayerOfTheMatchPlayerId { get; set; }
     public Guid? TournamentId { get; set; }
     public Guid? TournamentFixtureId { get; set; }
+    public Guid? SeriesId { get; set; }
+    public Guid? SeriesFixtureId { get; set; }
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
@@ -252,6 +256,7 @@ public sealed class Tournament
     public Guid VenueId { get; set; }
     public byte Format { get; set; } // MatchFormat
     public int OversLimit { get; set; } = 8;
+    public OversMode OversMode { get; set; } = OversMode.PerInnings;
     public bool LastBatsmanCanBatAsSingleWicket { get; set; }
     public int BowlerMaxOvers { get; set; }
     public TournamentStatus Status { get; set; } = TournamentStatus.Draft;
@@ -285,6 +290,49 @@ public sealed class TournamentFixture
     public Guid? TeamBId { get; set; }
     public string? TeamASlot { get; set; }
     public string? TeamBSlot { get; set; }
+    public Guid? MatchId { get; set; }
+}
+
+public enum SeriesStatus : byte
+{
+    Draft = 0,
+    Scheduled = 1,
+    InProgress = 2,
+    Completed = 3
+}
+
+public sealed class Series
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public int MatchCount { get; set; } = 3;
+    public Guid VenueId { get; set; }
+    public byte Format { get; set; }
+    public int OversLimit { get; set; } = 8;
+    public OversMode OversMode { get; set; } = OversMode.PerInnings;
+    public bool LastBatsmanCanBatAsSingleWicket { get; set; }
+    public int BowlerMaxOvers { get; set; }
+    public SeriesStatus Status { get; set; } = SeriesStatus.Draft;
+    public Guid? WinnerTeamId { get; set; }
+    public bool IsTied { get; set; }
+    public long Version { get; set; } = 1;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
+    public bool IsDeleted { get; set; }
+    public ICollection<SeriesFixture> Fixtures { get; set; } = new List<SeriesFixture>();
+}
+
+public sealed class SeriesFixture
+{
+    public Guid Id { get; set; }
+    public Guid SeriesId { get; set; }
+    public Series Series { get; set; } = null!;
+    public int Sequence { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
     public Guid? MatchId { get; set; }
 }
 

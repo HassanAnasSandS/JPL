@@ -411,6 +411,9 @@ public static class TournamentEngine
             .ToList();
     }
 
+    public static (Guid? Winner, bool Tied) MatchResult(Match match, List<Innings> inns)
+        => ResolveWinner(match, inns);
+
     private static (Guid? Winner, bool Tied) ResolveWinner(Match match, List<Innings> inns)
     {
         var (aRuns, _) = TeamTotals(inns, match.TeamAId);

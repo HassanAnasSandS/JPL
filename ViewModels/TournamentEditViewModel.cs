@@ -41,6 +41,8 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     [ObservableProperty] private VenueListItem? selectedVenue;
     [ObservableProperty] private SelectOption<MatchFormat>? selectedFormat;
     [ObservableProperty] private int oversLimit = 8;
+    [ObservableProperty] private bool noOversLimit;
+    [ObservableProperty] private bool oversAreMatchTotal = true;
     [ObservableProperty] private bool lastBatsmanCanBatAsSingleWicket;
     [ObservableProperty] private int bowlerMaxOvers;
     [ObservableProperty] private bool isBusy;
@@ -49,6 +51,13 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     [ObservableProperty] private bool showGroup2;
 
     public bool CanWrite => _auth.CanWrite;
+    public bool ShowOversFields => !NoOversLimit;
+    public string OversFieldLabel => OversAreMatchTotal ? "Match overs *" : "Overs per innings *";
+    public OversMode CurrentOversMode => NoOversLimit
+        ? OversMode.Unlimited
+        : OversAreMatchTotal
+            ? OversMode.MatchTotal
+            : OversMode.PerInnings;
 
     public TournamentEditViewModel(
         ITournamentService tournaments,
@@ -73,6 +82,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
         });
         SelectedFormat = FormatOptions[0];
         UpdateHint();
+        UpdateOversHint();
     }
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
@@ -106,6 +116,45 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
             (2, 2) => "2 groups · top 2 from each play Semi-finals → Final.",
             _ => "Round robin within each group, then knockouts."
         };
+        UpdateOversHint();
+    }
+
+    partial void OnOversLimitChanged(int value) => UpdateOversHint();
+    partial void OnSelectedFormatChanged(SelectOption<MatchFormat>? value) => UpdateOversHint();
+    partial void OnNoOversLimitChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowOversFields));
+        OnPropertyChanged(nameof(OversFieldLabel));
+        UpdateOversHint();
+    }
+    partial void OnOversAreMatchTotalChanged(bool value)
+    {
+        OnPropertyChanged(nameof(OversFieldLabel));
+        UpdateOversHint();
+    }
+
+    [ObservableProperty] private string oversHint = string.Empty;
+
+    private void UpdateOversHint()
+    {
+        var format = SelectedFormat?.Value ?? MatchFormat.SingleInning;
+        if (NoOversLimit)
+        {
+            OversHint = "Innings end only on all out or declare. Overs never stop a turn.";
+            return;
+        }
+
+        OversHint = OversAreMatchTotal
+            ? $"All innings share {OversLimit} overs for each match. All out or declare still ends a turn."
+            : format == MatchFormat.DoubleInnings
+                ? $"Each turn gets {OversLimit} overs."
+                : $"Each side gets {OversLimit} overs.";
+    }
+
+    private void ApplyOversMode(OversMode mode)
+    {
+        NoOversLimit = mode == OversMode.Unlimited;
+        OversAreMatchTotal = mode != OversMode.PerInnings;
     }
 
     public async Task InitializeAsync()
@@ -162,6 +211,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 SelectedFormat = FormatOptions.FirstOrDefault(f => (byte)f.Value == detail.Format)
                                  ?? FormatOptions[0];
                 OversLimit = detail.OversLimit > 0 ? detail.OversLimit : 8;
+                ApplyOversMode(detail.OversMode);
                 LastBatsmanCanBatAsSingleWicket = detail.LastBatsmanCanBatAsSingleWicket;
                 BowlerMaxOvers = detail.BowlerMaxOvers;
 
@@ -205,12 +255,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 throw new ArgumentException("Venue is required.");
             if (SelectedFormat is null)
                 throw new ArgumentException("Match format is required.");
-            if (OversLimit <= 0 || OversLimit > 100)
-                throw new ArgumentException("Overs per side must be between 1 and 100.");
-            if (BowlerMaxOvers < 0)
-                throw new ArgumentException("Bowler maximum overs cannot be negative.");
-            if (BowlerMaxOvers > OversLimit)
-                throw new ArgumentException("Bowler maximum overs cannot exceed overs per side.");
+            OversRules.Validate(CurrentOversMode, OversLimit, BowlerMaxOvers);
 
             var selected = TeamPicks.Where(t => t.IsSelected)
                 .Select(t => (t.TeamId, t.GroupNumber))
@@ -224,6 +269,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 OversLimit,
                 LastBatsmanCanBatAsSingleWicket,
                 BowlerMaxOvers,
+                CurrentOversMode,
                 selected);
             if (_id is Guid id)
                 await _tournaments.UpdateAsync(id, draft).ConfigureAwait(true);

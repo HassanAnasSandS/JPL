@@ -27,6 +27,7 @@ public sealed class TournamentDetail
     public byte Format { get; init; }
     public string FormatText { get; init; } = string.Empty;
     public int OversLimit { get; init; }
+    public OversMode OversMode { get; init; }
     public bool LastBatsmanCanBatAsSingleWicket { get; init; }
     public int BowlerMaxOvers { get; init; }
     public byte Status { get; set; }
@@ -90,6 +91,7 @@ public sealed record TournamentDraft(
     int OversLimit,
     bool LastBatsmanCanBatAsSingleWicket,
     int BowlerMaxOvers,
+    OversMode OversMode,
     IReadOnlyList<(Guid TeamId, int GroupNumber)> Teams);
 
 public interface ITournamentService
@@ -264,12 +266,7 @@ public sealed class TournamentService : ITournamentService
             throw new ArgumentException("Venue is required.");
         if (draft.Format is not (0 or 1))
             throw new ArgumentException("Select Single inning or Double innings.");
-        if (draft.OversLimit <= 0 || draft.OversLimit > 100)
-            throw new ArgumentException("Overs per side must be between 1 and 100.");
-        if (draft.BowlerMaxOvers < 0)
-            throw new ArgumentException("Bowler maximum overs cannot be negative.");
-        if (draft.BowlerMaxOvers > draft.OversLimit)
-            throw new ArgumentException("Bowler maximum overs cannot exceed overs per side.");
+        OversRules.Validate(draft.OversMode, draft.OversLimit, draft.BowlerMaxOvers);
         if (draft.Teams.Count == 0)
             throw new ArgumentException("Add at least one team.");
         for (var g = 1; g <= draft.GroupCount; g++)
@@ -287,7 +284,8 @@ public sealed class TournamentService : ITournamentService
         qualifyPerGroup = draft.QualifyPerGroup,
         venueId = draft.VenueId,
         format = draft.Format,
-        oversLimit = draft.OversLimit,
+        oversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
+        oversMode = (byte)draft.OversMode,
         lastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket,
         bowlerMaxOvers = draft.BowlerMaxOvers,
         teams = draft.Teams.Select(t => new { teamId = t.TeamId, groupNumber = t.GroupNumber }).ToList()
@@ -306,6 +304,7 @@ public sealed class TournamentService : ITournamentService
             ? (dto.Format == 1 ? "Double innings" : "Single inning")
             : dto.FormatText,
         OversLimit = dto.OversLimit,
+        OversMode = (OversMode)dto.OversMode,
         LastBatsmanCanBatAsSingleWicket = dto.LastBatsmanCanBatAsSingleWicket,
         BowlerMaxOvers = dto.BowlerMaxOvers,
         Status = dto.Status,

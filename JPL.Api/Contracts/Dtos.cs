@@ -97,7 +97,8 @@ public sealed record MatchSummaryDto(
     string ResultText,
     Guid? WinnerTeamId,
     Guid? PlayerOfTheMatchPlayerId = null,
-    string? PlayerOfTheMatchName = null);
+    string? PlayerOfTheMatchName = null,
+    byte OversMode = 0);
 
 /// <summary>Completed nets session card — list is read-only from server; create/score only via outbox sync.</summary>
 public sealed record NetSessionSummaryDto(
@@ -173,6 +174,7 @@ public sealed class HallOfFameDto
     public List<TrophyRowDto> PlayerOfTheMatch { get; set; } = new();
     public List<TrophyRowDto> CaptainTrophies { get; set; } = new();
     public List<TrophyRowDto> TournamentChampionTrophies { get; set; } = new();
+    public List<TrophyRowDto> SeriesChampionTrophies { get; set; } = new();
 }
 
 public sealed class TrophyRowDto
@@ -325,6 +327,7 @@ public sealed class TournamentUpsertRequest
     public Guid VenueId { get; set; }
     public byte Format { get; set; }
     public int OversLimit { get; set; } = 8;
+    public byte OversMode { get; set; }
     public bool LastBatsmanCanBatAsSingleWicket { get; set; }
     public int BowlerMaxOvers { get; set; }
     public List<TournamentTeamRequest> Teams { get; set; } = new();
@@ -362,6 +365,7 @@ public sealed class TournamentDetailDto
     public byte Format { get; set; }
     public string FormatText { get; set; } = string.Empty;
     public int OversLimit { get; set; }
+    public byte OversMode { get; set; }
     public bool LastBatsmanCanBatAsSingleWicket { get; set; }
     public int BowlerMaxOvers { get; set; }
     public byte Status { get; set; }
@@ -421,6 +425,106 @@ public sealed class TournamentStandingDto
 }
 
 public sealed class TournamentLinkMatchRequest
+{
+    public Guid MatchId { get; set; }
+}
+
+public sealed class SeriesUpsertRequest
+{
+    public Guid? Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public int MatchCount { get; set; } = 3;
+    public Guid VenueId { get; set; }
+    public byte Format { get; set; }
+    public int OversLimit { get; set; } = 8;
+    public byte OversMode { get; set; }
+    public bool LastBatsmanCanBatAsSingleWicket { get; set; }
+    public int BowlerMaxOvers { get; set; }
+}
+
+public sealed class SeriesListDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public int MatchCount { get; set; }
+    public byte Status { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public int FixtureCount { get; set; }
+    public int TeamAWins { get; set; }
+    public int TeamBWins { get; set; }
+    public Guid? WinnerTeamId { get; set; }
+    public string? WinnerTeamName { get; set; }
+    public bool IsTied { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+}
+
+public sealed class SeriesDetailDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public int MatchCount { get; set; }
+    public Guid VenueId { get; set; }
+    public string VenueName { get; set; } = string.Empty;
+    public byte Format { get; set; }
+    public string FormatText { get; set; } = string.Empty;
+    public int OversLimit { get; set; }
+    public byte OversMode { get; set; }
+    public bool LastBatsmanCanBatAsSingleWicket { get; set; }
+    public int BowlerMaxOvers { get; set; }
+    public byte Status { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public Guid? WinnerTeamId { get; set; }
+    public string? WinnerTeamName { get; set; }
+    public bool IsTied { get; set; }
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public List<SeriesFixtureDto> Fixtures { get; set; } = new();
+    public List<SeriesStandingDto> Standings { get; set; } = new();
+}
+
+public sealed class SeriesFixtureDto
+{
+    public Guid Id { get; set; }
+    public int Sequence { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public Guid TeamAId { get; set; }
+    public Guid TeamBId { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public Guid? MatchId { get; set; }
+    public byte? MatchStatus { get; set; }
+    public string MatchStatusText { get; set; } = string.Empty;
+    public string ResultText { get; set; } = string.Empty;
+    public bool CanStart { get; set; }
+    public bool CanResume { get; set; }
+    public bool CanOpenScorecard { get; set; }
+}
+
+public sealed class SeriesStandingDto
+{
+    public Guid TeamId { get; set; }
+    public string TeamName { get; set; } = string.Empty;
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int Points { get; set; }
+    public double NetRunRate { get; set; }
+    public int Rank { get; set; }
+}
+
+public sealed class SeriesLinkMatchRequest
 {
     public Guid MatchId { get; set; }
 }

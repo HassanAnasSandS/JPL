@@ -33,14 +33,22 @@ public partial class AppShell : Shell
 
         Items.Clear();
 
-        Items.Add(CreateFlyout("Players", "players", "playershome", () => services.GetRequiredService<PlayersPage>()));
-        Items.Add(CreateFlyout("Teams", "teams", "teamshome", () => services.GetRequiredService<TeamsPage>()));
+        var canManageMasterData = _auth.CanWrite;
+        if (canManageMasterData)
+        {
+            Items.Add(CreateFlyout("Players", "players", "playershome", () => services.GetRequiredService<PlayersPage>()));
+            Items.Add(CreateFlyout("Teams", "teams", "teamshome", () => services.GetRequiredService<TeamsPage>()));
+        }
         Items.Add(CreateFlyout("Matches", "matches", "matcheshome", () => services.GetRequiredService<MatchesPage>()));
         Items.Add(CreateFlyout("Nets Practice", "nets", "netshome", () => services.GetRequiredService<NetSessionsPage>()));
         Items.Add(CreateFlyout("Tournaments", "tournaments", "tournamentshome", () => services.GetRequiredService<TournamentsPage>()));
+        Items.Add(CreateFlyout("Series", "series", "serieshome", () => services.GetRequiredService<SeriesPage>()));
         Items.Add(CreateFlyout("Auctions", "auctions", "auctionshome", () => services.GetRequiredService<AuctionsPage>()));
-        Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
-        Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
+        if (canManageMasterData)
+        {
+            Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
+            Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
+        }
         Items.Add(CreateFlyout("Statistics", "stats", "statshome", () => services.GetRequiredService<StatsPage>()));
         Items.Add(CreateFlyout("Rankings", "rankings", "rankingshome", () => services.GetRequiredService<RankingsPage>()));
         Items.Add(CreateFlyout("Hall of Fame", "halloffame", "halloffamehome", () => services.GetRequiredService<HallOfFamePage>()));
@@ -177,6 +185,8 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(VenueEditPage), new DiRouteFactory<VenueEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentEditPage), new DiRouteFactory<TournamentEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentDetailPage), new DiRouteFactory<TournamentDetailPage>(services));
+        Routing.RegisterRoute(nameof(SeriesEditPage), new DiRouteFactory<SeriesEditPage>(services));
+        Routing.RegisterRoute(nameof(SeriesDetailPage), new DiRouteFactory<SeriesDetailPage>(services));
         Routing.RegisterRoute(nameof(LeagueEditPage), new DiRouteFactory<LeagueEditPage>(services));
     }
 
@@ -213,7 +223,7 @@ public partial class AppShell : Shell
             var n = await _sync.GetPendingCountAsync().ConfigureAwait(true);
             _pendingLabel.Text = n == 0
                 ? "Pending sync: 0"
-                : $"Pending sync: {n} (use Sync on Matches / Tournaments / Nets)";
+                : $"Pending sync: {n} (use Sync on Matches / Tournaments / Series / Nets)";
         }
         catch
         {

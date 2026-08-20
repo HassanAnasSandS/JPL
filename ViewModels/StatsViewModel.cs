@@ -47,13 +47,14 @@ public partial class StatsViewModel : ObservableObject
     public bool IsBowlingTab => !ShowBattingVs;
     public bool IsMatchStats => SelectedCategory == 0;
     public bool IsTournamentStats => SelectedCategory == 1;
-    public bool IsBattingStats => SelectedCategory == 2;
+    public bool IsSeriesStats => SelectedCategory == 2;
+    public bool IsBattingStats => SelectedCategory == 3;
     public bool IsMatchBattingStats => IsBattingStats && IsMatchesSource;
     public bool IsNetsBattingStats => IsBattingStats && IsNetsSource;
-    public bool IsBowlingStats => SelectedCategory == 3;
-    public bool IsFieldingStats => SelectedCategory == 4;
-    public bool IsCaptaincyStats => SelectedCategory == 5;
-    public bool IsAttendanceStats => SelectedCategory == 6;
+    public bool IsBowlingStats => SelectedCategory == 4;
+    public bool IsFieldingStats => SelectedCategory == 5;
+    public bool IsCaptaincyStats => SelectedCategory == 6;
+    public bool IsAttendanceStats => SelectedCategory == 7;
     public bool ShowMatchCategories => !IsNetsSource;
     public bool IsMatchesSource => !IsNetsSource;
     public string StatsSourceLabel => IsNetsSource ? "Nets" : "Matches";
@@ -152,8 +153,8 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(TableScopeText));
         OnPropertyChanged(nameof(IsMatchBattingStats));
         OnPropertyChanged(nameof(IsNetsBattingStats));
-        if (value && SelectedCategory is 0 or 1 or 5 or 6)
-            SelectedCategory = 2;
+        if (value && SelectedCategory is 0 or 1 or 2 or 6 or 7)
+            SelectedCategory = 3;
         else
             ApplyCategory();
         _ = LoadAsync();
@@ -163,6 +164,7 @@ public partial class StatsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsMatchStats));
         OnPropertyChanged(nameof(IsTournamentStats));
+        OnPropertyChanged(nameof(IsSeriesStats));
         OnPropertyChanged(nameof(IsBattingStats));
         OnPropertyChanged(nameof(IsMatchBattingStats));
         OnPropertyChanged(nameof(IsNetsBattingStats));
@@ -186,11 +188,12 @@ public partial class StatsViewModel : ObservableObject
         SelectedCategory = category switch
         {
             "tournament" => 1,
-            "batting" => 2,
-            "bowling" => 3,
-            "fielding" => 4,
-            "captaincy" => 5,
-            "attendance" => 6,
+            "series" => 2,
+            "batting" => 3,
+            "bowling" => 4,
+            "fielding" => 5,
+            "captaincy" => 6,
+            "attendance" => 7,
             _ => 0
         };
     }
@@ -205,28 +208,33 @@ public partial class StatsViewModel : ObservableObject
                 SetDefaultSort("Tournaments");
                 break;
             case 2:
+                CategoryTitle = "Series";
+                CategoryHint = "Series played, won, lost, tied";
+                SetDefaultSort("Series");
+                break;
+            case 3:
                 CategoryTitle = "Batting";
                 CategoryHint = IsNetsSource
                     ? "Runs, sessions, dismissals, SR, avg per session, avg per out"
                     : "Runs, highest score, balls, scoring shots, dismissals, SR, average";
                 SetDefaultSort("Runs");
                 break;
-            case 3:
+            case 4:
                 CategoryTitle = "Bowling";
                 CategoryHint = "Wickets, best figures, hat-tricks, runs conceded, extras, SR, economy";
                 SetDefaultSort("Wickets");
                 break;
-            case 4:
+            case 5:
                 CategoryTitle = "Fielding";
                 CategoryHint = "Catches, run outs, stumpings";
                 SetDefaultSort("Catches");
                 break;
-            case 5:
+            case 6:
                 CategoryTitle = "Captaincy";
-                CategoryHint = "Matches and tournaments as captain";
+                CategoryHint = "Matches, series, and tournaments as captain";
                 SetDefaultSort("CaptainMatches");
                 break;
-            case 6:
+            case 7:
                 CategoryTitle = "Attendance";
                 CategoryHint = "Present, absent, attendance %";
                 SetDefaultSort("AttendancePct");
@@ -471,6 +479,14 @@ public partial class StatsViewModel : ObservableObject
         "CaptainTournamentWon" => r.CaptainTournamentWon,
         "CaptainTournamentLoss" => r.CaptainTournamentLoss,
         "CaptainTournamentTied" => r.CaptainTournamentTied,
+        "Series" => r.Series,
+        "SeriesWon" => r.SeriesWon,
+        "SeriesLoss" => r.SeriesLoss,
+        "SeriesTied" => r.SeriesTied,
+        "CaptainSeries" => r.CaptainSeries,
+        "CaptainSeriesWon" => r.CaptainSeriesWon,
+        "CaptainSeriesLoss" => r.CaptainSeriesLoss,
+        "CaptainSeriesTied" => r.CaptainSeriesTied,
         "BallsFaced" => r.BallsFaced,
         "Runs" => r.Runs,
         "Dots" => r.Dots,
@@ -546,6 +562,14 @@ public partial class StatsViewModel : ObservableObject
         "CaptainTournamentWon" => "Captain titles",
         "CaptainTournamentLoss" => "Captain tour lost",
         "CaptainTournamentTied" => "Captain tour tied",
+        "Series" => "Series",
+        "SeriesWon" => "Series won",
+        "SeriesLoss" => "Series lost",
+        "SeriesTied" => "Series tied",
+        "CaptainSeries" => "Captain series",
+        "CaptainSeriesWon" => "Captain series won",
+        "CaptainSeriesLoss" => "Captain series lost",
+        "CaptainSeriesTied" => "Captain series tied",
         "BallsFaced" => "Balls faced",
         "Runs" => "Runs",
         "Dots" => "Dots",

@@ -62,20 +62,43 @@
                                        FontAttributes="Bold"
                                        TextColor="{StaticResource Secondary}"
                                        Margin="14,12,14,4" />
+                                <Grid ColumnDefinitions="*,36,32,28,28,40"
+                                      Padding="16,4,16,4"
+                                      BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                                    <Label Text="Batter" FontSize="10" FontAttributes="Bold"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    <Label Grid.Column="1" Text="R" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    <Label Grid.Column="2" Text="B" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    <Label Grid.Column="3" Text="4s" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    <Label Grid.Column="4" Text="6s" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    <Label Grid.Column="5" Text="SR" FontSize="10" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                </Grid>
                                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Batting}" Spacing="0" Padding="10,0,10,6">
                                     <BindableLayout.ItemTemplate>
                                         <DataTemplate x:DataType="svc:BattingCardRow">
-                                            <Grid ColumnDefinitions="*,40,36" Padding="6,8" RowDefinitions="Auto,Auto">
+                                            <Grid ColumnDefinitions="*,36,32,28,28,40" Padding="6,8" RowDefinitions="Auto,Auto">
                                                 <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold"
                                                        LineBreakMode="TailTruncation" />
                                                 <Label Grid.Row="1" Text="{Binding StatusText}" FontSize="10"
+                                                       LineBreakMode="TailTruncation"
                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                <Label Grid.Column="1" Grid.RowSpan="2" Text="{Binding Runs}" FontSize="16"
+                                                <Label Grid.Column="1" Grid.RowSpan="2" Text="{Binding Runs}" FontSize="15"
                                                        FontAttributes="Bold" HorizontalTextAlignment="End" VerticalOptions="Center"
                                                        TextColor="{StaticResource Primary}" />
-                                                <Label Grid.Column="2" Grid.RowSpan="2"
-                                                       Text="{Binding Balls, StringFormat='({0})'}" FontSize="12"
+                                                <Label Grid.Column="2" Grid.RowSpan="2" Text="{Binding Balls}" FontSize="13"
                                                        HorizontalTextAlignment="End" VerticalOptions="Center" />
+                                                <Label Grid.Column="3" Grid.RowSpan="2" Text="{Binding Fours}" FontSize="13"
+                                                       HorizontalTextAlignment="End" VerticalOptions="Center" />
+                                                <Label Grid.Column="4" Grid.RowSpan="2" Text="{Binding Sixes}" FontSize="13"
+                                                       HorizontalTextAlignment="End" VerticalOptions="Center" />
+                                                <Label Grid.Column="5" Grid.RowSpan="2" Text="{Binding StrikeRateText}" FontSize="12"
+                                                       HorizontalTextAlignment="End" VerticalOptions="Center"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
                                             </Grid>
                                         </DataTemplate>
                                     </BindableLayout.ItemTemplate>

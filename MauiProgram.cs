@@ -116,6 +116,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVenueBookingService, VenueBookingService>();
         builder.Services.AddSingleton<IVenueService, VenueService>();
         builder.Services.AddSingleton<ITournamentService, TournamentService>();
+        builder.Services.AddSingleton<ISeriesService, SeriesService>();
         builder.Services.AddSingleton<ILeagueService, LeagueService>();
 
         builder.Services.AddTransient<LoginViewModel>();
@@ -149,6 +150,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<TournamentsViewModel>();
         builder.Services.AddTransient<TournamentEditViewModel>();
         builder.Services.AddTransient<TournamentDetailViewModel>();
+        builder.Services.AddSingleton<SeriesListViewModel>();
+        builder.Services.AddTransient<SeriesEditViewModel>();
+        builder.Services.AddTransient<SeriesDetailViewModel>();
 
         builder.Services.AddTransient<LoginPage>();
         builder.Services.AddTransient<LeaguePickerPage>();
@@ -181,6 +185,9 @@ public static class MauiProgram
         builder.Services.AddTransient<TournamentsPage>();
         builder.Services.AddTransient<TournamentEditPage>();
         builder.Services.AddTransient<TournamentDetailPage>();
+        builder.Services.AddTransient<SeriesPage>();
+        builder.Services.AddTransient<SeriesEditPage>();
+        builder.Services.AddTransient<SeriesDetailPage>();
         builder.Services.AddTransient<AppShell>();
 
 #if DEBUG
@@ -206,7 +213,21 @@ public static class MauiProgram
                 using var scope = services.CreateScope();
                 var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<JplDbContext>>();
                 await using var db = await factory.CreateDbContextAsync().ConfigureAwait(false);
-                await DbBootstrap.InitializeAsync(db).ConfigureAwait(false);
+                try
+                {
+                    await DbBootstrap.InitializeAsync(db).ConfigureAwait(false);
+                }
+                catch
+                {
+                    try
+                    {
+                        await DbBootstrap.EnsureNetSessionTablesAsync(db).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        /* login must still open */
+                    }
+                }
 
                 var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
                 await auth.InitializeAsync().ConfigureAwait(false);

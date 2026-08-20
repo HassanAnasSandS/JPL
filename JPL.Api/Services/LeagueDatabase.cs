@@ -201,7 +201,9 @@ public sealed class LeagueDatabaseManager
         await using var db = CreateContext(connection, leagueId);
         await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
         await EnsureMatchSquadColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureOversModeColumnsAsync(dbName, ct).ConfigureAwait(false);
         await EnsureNetSessionTablesAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureSeriesTablesAsync(dbName, ct).ConfigureAwait(false);
         await DropSportsLeagueIdColumnsAsync(dbName, ct).ConfigureAwait(false);
         await DropLeagueDirectoryTablesAsync(dbName, ct).ConfigureAwait(false);
     }
@@ -228,6 +230,52 @@ public sealed class LeagueDatabaseManager
             await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
             await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Matches" ADD COLUMN "SquadRosterJson" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    /// <summary>EnsureCreated does not add columns to existing league catalogs.</summary>
+    private async Task EnsureOversModeColumnsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Matches', N'OversMode') IS NULL
+                    ALTER TABLE dbo.Matches ADD OversMode tinyint NOT NULL CONSTRAINT DF_Matches_OversMode DEFAULT 0;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'OversMode') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD OversMode tinyint NOT NULL CONSTRAINT DF_Tournaments_OversMode DEFAULT 0;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Matches" ADD COLUMN "OversMode" INTEGER NOT NULL DEFAULT 0;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Tournaments" ADD COLUMN "OversMode" INTEGER NOT NULL DEFAULT 0;""", ct)
                 .ConfigureAwait(false);
         }
         catch
@@ -341,6 +389,140 @@ public sealed class LeagueDatabaseManager
         }
     }
 
+    /// <summary>EnsureCreated does not add tables/columns to existing league catalogs.</summary>
+    private async Task EnsureSeriesTablesAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Matches', N'SeriesId') IS NULL
+                    ALTER TABLE dbo.Matches ADD SeriesId uniqueidentifier NULL;
+                IF COL_LENGTH(N'dbo.Matches', N'SeriesFixtureId') IS NULL
+                    ALTER TABLE dbo.Matches ADD SeriesFixtureId uniqueidentifier NULL;
+
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.Series (
+                        Id uniqueidentifier NOT NULL CONSTRAINT PK_Series PRIMARY KEY,
+                        Name nvarchar(160) NOT NULL,
+                        TeamAId uniqueidentifier NOT NULL,
+                        TeamBId uniqueidentifier NOT NULL,
+                        MatchCount int NOT NULL,
+                        VenueId uniqueidentifier NOT NULL,
+                        Format tinyint NOT NULL,
+                        OversLimit int NOT NULL,
+                        OversMode tinyint NOT NULL CONSTRAINT DF_Series_OversMode DEFAULT 0,
+                        LastBatsmanCanBatAsSingleWicket bit NOT NULL CONSTRAINT DF_Series_LastBat DEFAULT 0,
+                        BowlerMaxOvers int NOT NULL CONSTRAINT DF_Series_BowlerMax DEFAULT 0,
+                        Status tinyint NOT NULL,
+                        WinnerTeamId uniqueidentifier NULL,
+                        IsTied bit NOT NULL CONSTRAINT DF_Series_IsTied DEFAULT 0,
+                        Version bigint NOT NULL,
+                        CreatedAtUtc datetimeoffset NOT NULL,
+                        UpdatedAtUtc datetimeoffset NOT NULL,
+                        IsDeleted bit NOT NULL
+                    );
+                    CREATE INDEX IX_Series_CreatedAtUtc ON dbo.Series (CreatedAtUtc);
+                END
+
+                IF EXISTS (
+                    SELECT 1 FROM sys.columns c
+                    INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
+                    WHERE c.object_id = OBJECT_ID(N'dbo.Series')
+                      AND c.name IN (N'CreatedAtUtc', N'UpdatedAtUtc')
+                      AND t.name IN (N'datetime', N'datetime2'))
+                BEGIN
+                    DROP INDEX IF EXISTS IX_Series_CreatedAtUtc ON dbo.Series;
+                    ALTER TABLE dbo.Series ALTER COLUMN CreatedAtUtc datetimeoffset NOT NULL;
+                    ALTER TABLE dbo.Series ALTER COLUMN UpdatedAtUtc datetimeoffset NOT NULL;
+                    CREATE INDEX IX_Series_CreatedAtUtc ON dbo.Series (CreatedAtUtc);
+                END
+
+                IF OBJECT_ID(N'dbo.SeriesFixtures', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SeriesFixtures (
+                        Id uniqueidentifier NOT NULL CONSTRAINT PK_SeriesFixtures PRIMARY KEY,
+                        SeriesId uniqueidentifier NOT NULL,
+                        Sequence int NOT NULL,
+                        Label nvarchar(80) NOT NULL,
+                        TeamAId uniqueidentifier NOT NULL,
+                        TeamBId uniqueidentifier NOT NULL,
+                        MatchId uniqueidentifier NULL,
+                        CONSTRAINT FK_SeriesFixtures_Series_SeriesId
+                            FOREIGN KEY (SeriesId) REFERENCES dbo.Series (Id) ON DELETE CASCADE
+                    );
+                    CREATE INDEX IX_SeriesFixtures_SeriesId_Sequence ON dbo.SeriesFixtures (SeriesId, Sequence);
+                    CREATE INDEX IX_SeriesFixtures_MatchId ON dbo.SeriesFixtures (MatchId);
+                END
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                        """ALTER TABLE "Matches" ADD COLUMN "SeriesId" TEXT NULL;""", ct)
+                    .ConfigureAwait(false);
+            }
+            catch { /* exists */ }
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                        """ALTER TABLE "Matches" ADD COLUMN "SeriesFixtureId" TEXT NULL;""", ct)
+                    .ConfigureAwait(false);
+            }
+            catch { /* exists */ }
+
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "Series" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_Series" PRIMARY KEY,
+                    "Name" TEXT NOT NULL,
+                    "TeamAId" TEXT NOT NULL,
+                    "TeamBId" TEXT NOT NULL,
+                    "MatchCount" INTEGER NOT NULL,
+                    "VenueId" TEXT NOT NULL,
+                    "Format" INTEGER NOT NULL,
+                    "OversLimit" INTEGER NOT NULL,
+                    "OversMode" INTEGER NOT NULL DEFAULT 0,
+                    "LastBatsmanCanBatAsSingleWicket" INTEGER NOT NULL DEFAULT 0,
+                    "BowlerMaxOvers" INTEGER NOT NULL DEFAULT 0,
+                    "Status" INTEGER NOT NULL,
+                    "WinnerTeamId" TEXT NULL,
+                    "IsTied" INTEGER NOT NULL DEFAULT 0,
+                    "Version" INTEGER NOT NULL,
+                    "CreatedAtUtc" TEXT NOT NULL,
+                    "UpdatedAtUtc" TEXT NOT NULL,
+                    "IsDeleted" INTEGER NOT NULL
+                );
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "SeriesFixtures" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_SeriesFixtures" PRIMARY KEY,
+                    "SeriesId" TEXT NOT NULL,
+                    "Sequence" INTEGER NOT NULL,
+                    "Label" TEXT NOT NULL,
+                    "TeamAId" TEXT NOT NULL,
+                    "TeamBId" TEXT NOT NULL,
+                    "MatchId" TEXT NULL,
+                    CONSTRAINT "FK_SeriesFixtures_Series_SeriesId" FOREIGN KEY ("SeriesId") REFERENCES "Series" ("Id") ON DELETE CASCADE
+                );
+                """, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
     private async Task DropSportsLeagueIdColumnsAsync(string dbName, CancellationToken ct)
     {
         if (!_sqlServer || !SafeName.IsMatch(dbName))
@@ -348,7 +530,7 @@ public sealed class LeagueDatabaseManager
 
         var tables = new[]
         {
-            "Players", "Teams", "Matches", "Auctions", "Venues", "VenueBookings", "Tournaments"
+            "Players", "Teams", "Matches", "Auctions", "Venues", "VenueBookings", "Tournaments", "Series"
         };
 
         await using var conn = new SqlConnection(ToConnection(dbName));
@@ -426,7 +608,7 @@ public sealed class LeagueDatabaseManager
 
         var tables = new[]
         {
-            "Deliveries", "Innings", "TournamentFixtures", "TournamentTeams", "Tournaments",
+            "Deliveries", "Innings", "SeriesFixtures", "Series", "TournamentFixtures", "TournamentTeams", "Tournaments",
             "VenueBookingParticipants", "VenueBookings", "AuctionLots", "AuctionCaptains", "Auctions",
             "TeamPlayers", "Matches", "Teams", "Players", "Venues", "SyncReceipts"
         };

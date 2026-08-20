@@ -31,6 +31,8 @@ public sealed class ApiDbContext : DbContext
     public DbSet<Tournament> Tournaments => Set<Tournament>();
     public DbSet<TournamentTeam> TournamentTeams => Set<TournamentTeam>();
     public DbSet<TournamentFixture> TournamentFixtures => Set<TournamentFixture>();
+    public DbSet<Series> Series => Set<Series>();
+    public DbSet<SeriesFixture> SeriesFixtures => Set<SeriesFixture>();
     public DbSet<NetSession> NetSessions => Set<NetSession>();
     public DbSet<NetDelivery> NetDeliveries => Set<NetDelivery>();
 
@@ -158,6 +160,23 @@ public sealed class ApiDbContext : DbContext
             e.HasOne(x => x.Tournament).WithMany(t => t.Fixtures)
                 .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.TournamentId, x.Sequence });
+            e.HasIndex(x => x.MatchId);
+        });
+
+        modelBuilder.Entity<Series>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.HasIndex(x => x.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<SeriesFixture>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Label).HasMaxLength(80).IsRequired();
+            e.HasOne(x => x.Series).WithMany(s => s.Fixtures)
+                .HasForeignKey(x => x.SeriesId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.SeriesId, x.Sequence });
             e.HasIndex(x => x.MatchId);
         });
 

@@ -30,6 +30,16 @@ public sealed class PlayerCareerDto
     public int CaptainTournamentLoss { get; set; }
     public int CaptainTournamentTied { get; set; }
 
+    // Series (completed only) — same shape as Tournament; ties count as tied, not loss
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+    public int CaptainSeries { get; set; }
+    public int CaptainSeriesWon { get; set; }
+    public int CaptainSeriesLoss { get; set; }
+    public int CaptainSeriesTied { get; set; }
+
     public int InningsBatted { get; set; }
     public int BallsFaced { get; set; }
     public int Runs { get; set; }
@@ -419,6 +429,16 @@ public static class StatsCalculator
             tournamentQuery = tournamentQuery.Where(t => t.VenueId == tourVenueId);
         var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
 
+        IQueryable<Series> seriesQuery = db.Series.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.Status == SeriesStatus.Completed);
+        if (fromUtc is DateTime seriesFrom)
+            seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc >= seriesFrom);
+        if (toExclusiveUtc is DateTime seriesTo)
+            seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc < seriesTo);
+        if (venueId is Guid seriesVenueId)
+            seriesQuery = seriesQuery.Where(s => s.VenueId == seriesVenueId);
+        var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
+
         var inningsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
         var batByPlayer = allDeliveries.GroupBy(d => d.BatterId).ToDictionary(g => g.Key, g => g.ToList());
         var bowlByPlayer = allDeliveries.GroupBy(d => d.BowlerId).ToDictionary(g => g.Key, g => g.ToList());
@@ -468,12 +488,14 @@ public static class StatsCalculator
             ApplyFielding(summary, allDeliveries, player.Id);
             ApplyMatchResults(summary, player.Id, matches, inningsByMatch, inningsById, asBatter, asBowler, teams);
             ApplyTournamentResults(summary, player.Id, tournaments, teams);
+            ApplySeriesResults(summary, player.Id, seriesList, teams);
             ApplyAttendance(summary, attendanceTotal, presentByPlayer.GetValueOrDefault(player.Id));
 
             if (summary.Matches == 0 && summary.Runs == 0 && summary.Wickets == 0
                 && asBatter.Count == 0 && asBowler.Count == 0
                 && summary.AttendancePresent == 0
-                && summary.Tournaments == 0)
+                && summary.Tournaments == 0
+                && summary.Series == 0)
                 continue;
 
             list.Add(summary);
@@ -860,6 +882,51 @@ public static class StatsCalculator
             summary.CaptainTournaments++;
             if (won) summary.CaptainTournamentWon++;
             else summary.CaptainTournamentLoss++;
+        }
+    }
+
+    private static void ApplySeriesResults(
+        PlayerCareerDto summary,
+        Guid playerId,
+        List<Series> seriesList,
+        Dictionary<Guid, Team> teams)
+    {
+        foreach (var series in seriesList)
+        {
+            Guid? playerTeamId = null;
+            foreach (var teamId in new[] { series.TeamAId, series.TeamBId })
+            {
+                if (!teams.TryGetValue(teamId, out var team))
+                    continue;
+                if (team.TeamPlayers.Any(tp => tp.PlayerId == playerId))
+                {
+                    playerTeamId = teamId;
+                    break;
+                }
+            }
+
+            if (playerTeamId is null)
+                continue;
+
+            summary.Series++;
+            if (series.IsTied)
+                summary.SeriesTied++;
+            else if (series.WinnerTeamId == playerTeamId)
+                summary.SeriesWon++;
+            else
+                summary.SeriesLoss++;
+
+            if (!teams.TryGetValue(playerTeamId.Value, out var playerTeam)
+                || playerTeam.CaptainPlayerId != playerId)
+                continue;
+
+            summary.CaptainSeries++;
+            if (series.IsTied)
+                summary.CaptainSeriesTied++;
+            else if (series.WinnerTeamId == playerTeamId)
+                summary.CaptainSeriesWon++;
+            else
+                summary.CaptainSeriesLoss++;
         }
     }
 

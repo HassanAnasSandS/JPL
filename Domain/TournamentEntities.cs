@@ -26,6 +26,7 @@ public sealed class Tournament
     public Guid VenueId { get; set; }
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
     public int OversLimit { get; set; } = 8;
+    public OversMode OversMode { get; set; } = OversMode.PerInnings;
     public bool LastBatsmanCanBatAsSingleWicket { get; set; }
     public int BowlerMaxOvers { get; set; }
     public TournamentStatus Status { get; set; } = TournamentStatus.Draft;

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using JPL.Domain;
 using JPL.Services;
 
 namespace JPL.ViewModels;
@@ -47,6 +48,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
     private Guid _venueId;
     private byte _format;
     private int _oversLimit = 8;
+    private byte _oversMode;
     private bool _lastBatsmanCanBat;
     private int _bowlerMaxOvers;
 
@@ -95,12 +97,13 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
         _venueId = detail.VenueId;
         _format = detail.Format;
         _oversLimit = detail.OversLimit;
+        _oversMode = (byte)detail.OversMode;
         _lastBatsmanCanBat = detail.LastBatsmanCanBatAsSingleWicket;
         _bowlerMaxOvers = detail.BowlerMaxOvers;
         var lastBat = detail.LastBatsmanCanBatAsSingleWicket ? "Last bat ON" : "Last bat OFF";
         var bowlerMax = detail.BowlerMaxOvers <= 0 ? "no bowler max" : $"bowler max {detail.BowlerMaxOvers}";
         MatchDefaultsLine =
-            $"{detail.VenueName} · {detail.FormatText} · {detail.OversLimit} overs · {lastBat} · {bowlerMax}";
+            $"{detail.VenueName} · {detail.FormatText} · {OversRules.ShortLabel(detail.OversMode, detail.OversLimit)} · {lastBat} · {bowlerMax}";
         HasWinner = !string.IsNullOrWhiteSpace(detail.WinnerTeamName);
         WinnerLine = HasWinner ? $"Champion — {detail.WinnerTeamName}" : string.Empty;
         IsDraft = detail.Status == 0;
@@ -263,7 +266,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
                 $"{nameof(Pages.MatchEditPage)}" +
                 $"?tournamentId={_id}&fixtureId={fixture.Id}" +
                 $"&teamAId={fixture.TeamAId}&teamBId={fixture.TeamBId}&title={title}" +
-                $"&venueId={_venueId}&format={_format}&overs={_oversLimit}" +
+                $"&venueId={_venueId}&format={_format}&overs={_oversLimit}&oversMode={_oversMode}" +
                 $"&lastBat={(_lastBatsmanCanBat ? 1 : 0)}&bowlerMax={_bowlerMaxOvers}" +
                 $"&lockSettings=1")
             .ConfigureAwait(true);

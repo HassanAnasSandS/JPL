@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.SeriesEditPage"
+             x:DataType="vm:SeriesEditViewModel"
+             Title="{Binding PageTitle}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="14" Spacing="12">
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Setup" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Series name"
+                           Text="{Binding Name}"
+                           MaxLength="160" />
+                    <Label Text="Matches in series *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Match count"
+                            ItemsSource="{Binding MatchCountOptions}"
+                            SelectedItem="{Binding MatchCount}" />
+                    <Label Text="Always two teams. Every match uses the same venue, format and overs."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <Label Text="Team A *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Select team A"
+                            ItemsSource="{Binding TeamOptions}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SelectedItem="{Binding SelectedTeamA}" />
+                    <Label Text="Team B *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Select team B"
+                            ItemsSource="{Binding TeamOptions}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SelectedItem="{Binding SelectedTeamB}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Match defaults *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Applied to every series match (locked when starting)."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+
+                    <Label Text="Venue *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Select venue"
+                            ItemsSource="{Binding VenueOptions}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SelectedItem="{Binding SelectedVenue}" />
+
+                    <Label Text="Format *" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Match format"
+                            ItemsSource="{Binding FormatOptions}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedFormat}" />
+
+                    <HorizontalStackLayout Spacing="12">
+                        <Switch IsToggled="{Binding NoOversLimit}" VerticalOptions="Center" />
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="No overs limit" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                            <Label Text="Innings end only on all out or declare."
+                                   Style="{StaticResource MutedLabel}" FontSize="12" />
+                        </VerticalStackLayout>
+                    </HorizontalStackLayout>
+
+                    <VerticalStackLayout Spacing="10" IsVisible="{Binding ShowOversFields}">
+                        <HorizontalStackLayout Spacing="12">
+                            <Switch IsToggled="{Binding OversAreMatchTotal}" VerticalOptions="Center" />
+                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Label Text="Whole match overs" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                                <Label Text="On: all innings share one over pool."
+                                       Style="{StaticResource MutedLabel}" FontSize="12" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                        <Label Text="{Binding OversFieldLabel}" FontSize="12" Style="{StaticResource MutedLabel}" />
+                        <Entry Placeholder="e.g. 8, 20"
+                               Text="{Binding OversLimit}"
+                               Keyboard="Numeric" />
+                        <Label Text="{Binding OversHint}" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
+
+                    <HorizontalStackLayout Spacing="12">
+                        <Switch IsToggled="{Binding LastBatsmanCanBatAsSingleWicket}" VerticalOptions="Center" />
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="Last batsman can bat as single wicket"
+                                   FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                            <Label Text="Last remaining batsman continues alone."
+                                   Style="{StaticResource MutedLabel}" FontSize="12" />
+                        </VerticalStackLayout>
+                    </HorizontalStackLayout>
+
+                    <Label Text="Bowler maximum overs" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Entry Placeholder="0 = no limit"
+                           Text="{Binding BowlerMaxOvers}"
+                           Keyboard="Numeric" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+            <Button Text="Save draft"
+                    Style="{StaticResource GoldButton}"
+                    HeightRequest="48"
+                    Command="{Binding SaveCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

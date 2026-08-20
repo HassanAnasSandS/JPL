@@ -81,6 +81,8 @@ public partial class ScoringViewModel : ObservableObject
 
     private Guid _matchId;
     private bool _isTournamentMatch;
+    /// <summary>OnAppearing re-inits the page; skip while a ball is being scored so wicket/over popups are not cancelled.</summary>
+    private bool _isScoringBall;
 
     partial void OnDidNotBatTextChanged(string value)
         => OnPropertyChanged(nameof(HasDidNotBat));
@@ -137,8 +139,13 @@ public partial class ScoringViewModel : ObservableObject
         SelectedWicketOption = WicketOptions[0];
     }
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync() => await InitializeAsync(force: false).ConfigureAwait(true);
+
+    public async Task InitializeAsync(bool force)
     {
+        if (_isScoringBall && !force)
+            return;
+
         if (!Guid.TryParse(MatchId, out _matchId))
         {
             ErrorMessage = "Invalid match.";
@@ -183,6 +190,11 @@ public partial class ScoringViewModel : ObservableObject
             ? "Tournament match — sync from Tournaments list after the tournament is finished."
             : "Balls save locally; Sync pushes match data only. Players/teams use direct API.";
 
+        var keepStrikerId = Striker?.Id;
+        var keepNonStrikerId = NonStriker?.Id;
+        var keepBowlerId = Bowler?.Id;
+        var keepFielderId = Fielder?.Id;
+
         Batters.Clear();
         foreach (var p in ctx.Batters) Batters.Add(p);
         ApplyBowlersFromContext(ctx);
@@ -198,16 +210,22 @@ public partial class ScoringViewModel : ObservableObject
         SquadHint = $"{ctx.TeamAName} vs {ctx.TeamBName} · available batters {Batters.Count} · bowlers {Bowlers.Count} · fielders {Fielders.Count}";
         CanEndInnings = CanWrite;
 
-        Striker = Batters.Count > 0 ? Batters[0] : null;
-        if (Batters.Count > 1)
-            NonStriker = Batters[1];
-        else if (Batters.Count == 1 && LastBatsmanCanBatAsSingleWicket)
+        var snap = await _matches.GetLiveSnapshotAsync(_matchId).ConfigureAwait(true);
+        ApplyCreasePlayers(
+            keepStrikerId ?? snap?.StrikerId,
+            keepNonStrikerId ?? snap?.NonStrikerId,
+            keepBowlerId ?? snap?.BowlerId);
+
+        if (LastBatsmanCanBatAsSingleWicket && Batters.Count == 1)
+        {
+            Striker ??= Batters[0];
             NonStriker = null;
-        else
-            NonStriker = Batters.Count > 0 ? Batters[0] : null;
+        }
+
         ApplyLoneBatsmanState();
-        if (Bowler is null && Bowlers.Count > 0)
-            Bowler = Bowlers[0];
+        Fielder = keepFielderId is Guid fid
+            ? Fielders.FirstOrDefault(p => p.Id == fid)
+            : Fielder;
         if (Fielder is null && Fielders.Count > 0)
             Fielder = Fielders[0];
         RebuildCreaseBatters();
@@ -218,10 +236,24 @@ public partial class ScoringViewModel : ObservableObject
         await RefreshScorecardAsync().ConfigureAwait(true);
         await RefreshDuelAsync().ConfigureAwait(true);
 
-        var snap = await _matches.GetLiveSnapshotAsync(_matchId).ConfigureAwait(true);
         ApplyTargetAchievedFromSnapshot(snap);
         if (IsTargetAchieved)
             await PromptTargetAchievedAsync().ConfigureAwait(true);
+    }
+
+    private void ApplyCreasePlayers(Guid? strikerId, Guid? nonStrikerId, Guid? bowlerId)
+    {
+        Striker = strikerId is Guid sid
+            ? Batters.FirstOrDefault(p => p.Id == sid)
+            : null;
+        NonStriker = nonStrikerId is Guid nid
+            ? Batters.FirstOrDefault(p => p.Id == nid)
+            : null;
+        if (Striker is not null && NonStriker is not null && Striker.Id == NonStriker.Id)
+            NonStriker = null;
+        Bowler = bowlerId is Guid bid
+            ? Bowlers.FirstOrDefault(p => p.Id == bid)
+            : null;
     }
 
     private void ApplyLoneBatsmanState()
@@ -387,6 +419,7 @@ public partial class ScoringViewModel : ObservableObject
         try
         {
             IsBusy = true;
+            _isScoringBall = true;
             ErrorMessage = null;
 
             var extra = SelectedExtraOption?.Value ?? ExtraType.None;
@@ -533,9 +566,12 @@ public partial class ScoringViewModel : ObservableObject
 
             if (snap?.InningsOversComplete == true)
             {
+                var autoMsg = snap.OversMode == OversMode.MatchTotal
+                    ? $"Match overs complete ({snap.OversLimit}). End innings now?"
+                    : $"{snap.OversLimit} overs done for this turn. End innings now?";
                 var auto = await Shell.Current.DisplayAlert(
                     "Overs complete",
-                    $"{snap.OversLimit} overs done for this turn. End innings now?",
+                    autoMsg,
                     "End innings",
                     "Later").ConfigureAwait(true);
                 if (auto)
@@ -548,7 +584,11 @@ public partial class ScoringViewModel : ObservableObject
             }
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
-        finally { IsBusy = false; }
+        finally
+        {
+            _isScoringBall = false;
+            IsBusy = false;
+        }
     }
 
     private void ApplyTargetAchievedFromSnapshot(LiveScoreSnapshot? snap)
@@ -822,7 +862,7 @@ public partial class ScoringViewModel : ObservableObject
             Striker = null;
             NonStriker = null;
             Bowler = null;
-            await InitializeAsync().ConfigureAwait(true);
+            await InitializeAsync(force: true).ConfigureAwait(true);
             await Shell.Current.DisplayAlert("Next innings", result.Message, "OK").ConfigureAwait(true);
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
@@ -907,17 +947,29 @@ public partial class ScoringViewModel : ObservableObject
         ShowRatePanel = snap is not null;
         IsChase = snap?.IsChase == true;
         CurrentRunRateText = snap is null ? "-" : snap.CurrentRunRate.ToString("0.##");
-        ProjectedScoreText = snap is null ? "-" : snap.ProjectedScore.ToString();
+        ProjectedScoreText = snap is null || snap.OversMode == OversMode.Unlimited
+            ? "-"
+            : snap.ProjectedScore.ToString();
 
         if (snap is { IsChase: true, RunsRequired: int need })
         {
-            var oversLeft = $"{snap.BallsRemaining / 6}.{snap.BallsRemaining % 6}";
-            ChaseNeedText = need == 0
-                ? $"Target {snap.Target} achieved"
-                : $"Need {need} runs from {snap.BallsRemaining} balls ({oversLeft} ov)";
-            RequiredRunRateText = snap.RequiredRunRate is double rrr
-                ? rrr.ToString("0.##")
-                : "-";
+            if (snap.OversMode == OversMode.Unlimited)
+            {
+                ChaseNeedText = need == 0
+                    ? $"Target {snap.Target} achieved"
+                    : $"Need {need} runs";
+                RequiredRunRateText = "-";
+            }
+            else
+            {
+                var oversLeft = $"{snap.BallsRemaining / 6}.{snap.BallsRemaining % 6}";
+                ChaseNeedText = need == 0
+                    ? $"Target {snap.Target} achieved"
+                    : $"Need {need} runs from {snap.BallsRemaining} balls ({oversLeft} ov)";
+                RequiredRunRateText = snap.RequiredRunRate is double rrr
+                    ? rrr.ToString("0.##")
+                    : "-";
+            }
         }
         else
         {

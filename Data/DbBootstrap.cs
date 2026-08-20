@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 11;
+    private const int SchemaVersion = 14;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -21,8 +21,11 @@ public static class DbBootstrap
     {
         await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
 
-        // Schema version lives in the SQLite file so app updates keep live unsynced matches.
-        // Preferences alone is not enough if prefs and the DB ever get out of sync.
+        // EnsureCreated does not add tables to an existing file. Phones that already
+        // have a schema version skip the version-gated block, so nets/series CREATE
+        // must run every launch (all statements are IF NOT EXISTS / ADD COLUMN).
+        await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
+
         var dbVersion = await ReadUserVersionAsync(db, ct).ConfigureAwait(false);
         if (dbVersion < SchemaVersion)
         {
@@ -30,6 +33,10 @@ public static class DbBootstrap
             await db.Database.ExecuteSqlRawAsync($"PRAGMA user_version = {SchemaVersion};", ct)
                 .ConfigureAwait(false);
             Preferences.Default.Set(SchemaVersionKey, SchemaVersion);
+        }
+        else
+        {
+            await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
         }
 
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
@@ -184,6 +191,10 @@ public static class DbBootstrap
             """ALTER TABLE "Matches" ADD COLUMN "BowlerMaxOvers" INTEGER NOT NULL DEFAULT 0;""", ct)
             .ConfigureAwait(false);
 
+        await EnsureColumnAsync(db, "Matches", "OversMode",
+            """ALTER TABLE "Matches" ADD COLUMN "OversMode" INTEGER NOT NULL DEFAULT 0;""", ct)
+            .ConfigureAwait(false);
+
         await EnsureColumnAsync(db, "Innings", "IsFollowOn",
             """ALTER TABLE "Innings" ADD COLUMN "IsFollowOn" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
 
@@ -268,11 +279,18 @@ public static class DbBootstrap
             /* VenueName column may already be gone */
         }
 
-        await db.Database.ExecuteSqlRawAsync($"""
-            UPDATE "VenueBookings"
-            SET "VenueId" = '{VenueSeeds.FalconId:D}'
-            WHERE "VenueId" IS NULL OR "VenueId" = '';
-            """, ct).ConfigureAwait(false);
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync($"""
+                UPDATE "VenueBookings"
+                SET "VenueId" = '{VenueSeeds.FalconId:D}'
+                WHERE "VenueId" IS NULL OR "VenueId" = '';
+                """, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* table or column may not exist yet */
+        }
 
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "VenueBookings" (
@@ -312,6 +330,10 @@ public static class DbBootstrap
             """ALTER TABLE "Matches" ADD COLUMN "TournamentId" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "TournamentFixtureId",
             """ALTER TABLE "Matches" ADD COLUMN "TournamentFixtureId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "SeriesId",
+            """ALTER TABLE "Matches" ADD COLUMN "SeriesId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "SeriesFixtureId",
+            """ALTER TABLE "Matches" ADD COLUMN "SeriesFixtureId" TEXT NULL;""", ct).ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "Tournaments" (
@@ -344,6 +366,9 @@ public static class DbBootstrap
         await EnsureColumnAsync(db, "Tournaments", "BowlerMaxOvers",
             """ALTER TABLE "Tournaments" ADD COLUMN "BowlerMaxOvers" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
 
+        await EnsureColumnAsync(db, "Tournaments", "OversMode",
+            """ALTER TABLE "Tournaments" ADD COLUMN "OversMode" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
+
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "TournamentTeams" (
                 "TournamentId" TEXT NOT NULL,
@@ -371,6 +396,51 @@ public static class DbBootstrap
             );
             """, ct).ConfigureAwait(false);
 
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "Series" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Series" PRIMARY KEY,
+                "Name" TEXT NOT NULL,
+                "TeamAId" TEXT NOT NULL,
+                "TeamBId" TEXT NOT NULL,
+                "MatchCount" INTEGER NOT NULL,
+                "VenueId" TEXT NOT NULL,
+                "Format" INTEGER NOT NULL DEFAULT 0,
+                "OversLimit" INTEGER NOT NULL DEFAULT 8,
+                "OversMode" INTEGER NOT NULL DEFAULT 0,
+                "LastBatsmanCanBatAsSingleWicket" INTEGER NOT NULL DEFAULT 0,
+                "BowlerMaxOvers" INTEGER NOT NULL DEFAULT 0,
+                "Status" INTEGER NOT NULL,
+                "WinnerTeamId" TEXT NULL,
+                "IsTied" INTEGER NOT NULL DEFAULT 0,
+                "Version" INTEGER NOT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL,
+                "IsDeleted" INTEGER NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SeriesFixtures" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SeriesFixtures" PRIMARY KEY,
+                "SeriesId" TEXT NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "Label" TEXT NOT NULL,
+                "TeamAId" TEXT NOT NULL,
+                "TeamBId" TEXT NOT NULL,
+                "MatchId" TEXT NULL,
+                CONSTRAINT "FK_SeriesFixtures_Series_SeriesId" FOREIGN KEY ("SeriesId") REFERENCES "Series" ("Id") ON DELETE CASCADE
+            );
+            """, ct).ConfigureAwait(false);
+
+        await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Create nets tables on every launch. Existing DBs skip EnsureCreated for new tables,
+    /// and a failed earlier migration must not leave Nets Practice broken.
+    /// </summary>
+    public static async Task EnsureNetSessionTablesAsync(JplDbContext db, CancellationToken ct = default)
+    {
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "NetSessions" (
                 "Id" TEXT NOT NULL CONSTRAINT "PK_NetSessions" PRIMARY KEY,
@@ -409,6 +479,14 @@ public static class DbBootstrap
                 CONSTRAINT "FK_NetDeliveries_NetSessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "NetSessions" ("Id") ON DELETE CASCADE
             );
             """, ct).ConfigureAwait(false);
+
+        const string jpl = "b1000001-0000-4000-8000-000000000001";
+        await EnsureColumnAsync(db, "NetSessions", "LeagueId",
+            $"""ALTER TABLE "NetSessions" ADD COLUMN "LeagueId" TEXT NOT NULL DEFAULT '{jpl}';""", ct)
+            .ConfigureAwait(false);
+        await EnsureColumnAsync(db, "NetSessions", "PlayerRosterJson",
+            """ALTER TABLE "NetSessions" ADD COLUMN "PlayerRosterJson" TEXT NULL;""", ct)
+            .ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync(
             """CREATE INDEX IF NOT EXISTS "IX_NetSessions_SessionDateUtc" ON "NetSessions" ("SessionDateUtc");""",

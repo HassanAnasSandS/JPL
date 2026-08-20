@@ -26,8 +26,11 @@
                         <Picker Title="Select venue"
                                 ItemsSource="{Binding VenueOptions}"
                                 ItemDisplayBinding="{Binding Name}"
-                                SelectedItem="{Binding SelectedVenue}"
-                                IsEnabled="{Binding CanEditMatchSettings}" />
+                                SelectedItem="{Binding SelectedVenue}" />
+                        <Label Text="Pre-filled from tournament/series. Change if this match is at another ground."
+                               IsVisible="{Binding LockMatchSettings}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
 
                         <Label Text="Format *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
                         <Picker Title="Match format"
@@ -37,18 +40,48 @@
                                 IsEnabled="{Binding CanEditMatchSettings}" />
                         <Label Text="{Binding FormatHint}" Style="{StaticResource MutedLabel}" />
 
-                        <Label Text="Overs per side *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
-                        <Entry Placeholder="e.g. 6, 8, 10"
-                               Text="{Binding OversLimit}"
-                               Keyboard="Numeric"
-                               IsEnabled="{Binding CanEditMatchSettings}" />
+                        <HorizontalStackLayout Spacing="12">
+                            <Switch IsToggled="{Binding NoOversLimit}"
+                                    VerticalOptions="Center"
+                                    IsEnabled="{Binding CanEditMatchSettings}" />
+                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Label Text="No overs limit"
+                                       FontAttributes="Bold"
+                                       Style="{StaticResource BodyLabel}" />
+                                <Label Text="Innings end only when the side is all out or you declare. Overs never end the innings."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+
+                        <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowOversFields}">
+                            <HorizontalStackLayout Spacing="12">
+                                <Switch IsToggled="{Binding OversAreMatchTotal}"
+                                        VerticalOptions="Center"
+                                        IsEnabled="{Binding CanEditMatchSettings}" />
+                                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                    <Label Text="Whole match overs"
+                                           FontAttributes="Bold"
+                                           Style="{StaticResource BodyLabel}" />
+                                    <Label Text="On: one over pool for the entire match (all innings share it). Off: each innings has its own quota."
+                                           Style="{StaticResource MutedLabel}"
+                                           FontSize="12" />
+                                </VerticalStackLayout>
+                            </HorizontalStackLayout>
+
+                            <Label Text="{Binding OversFieldLabel}" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                            <Entry Placeholder="e.g. 20, 50, 100"
+                                   Text="{Binding OversLimit}"
+                                   Keyboard="Numeric"
+                                   IsEnabled="{Binding CanEditMatchSettings}" />
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </Border>
 
                 <Border Style="{StaticResource CardBorder}">
                     <VerticalStackLayout Spacing="12">
                         <Label Text="Match settings" Style="{StaticResource SectionLabel}" />
-                        <Label Text="Tournament defaults — read only"
+                        <Label Text="Format and overs come from tournament/series (locked). Venue is pre-selected and can be changed."
                                IsVisible="{Binding LockMatchSettings}"
                                Style="{StaticResource MutedLabel}"
                                FontSize="12" />

@@ -23,6 +23,7 @@ public sealed class StatsTabTemplateSelector : DataTemplateSelector
 {
     public DataTemplate Match { get; set; } = null!;
     public DataTemplate Tournament { get; set; } = null!;
+    public DataTemplate Series { get; set; } = null!;
     public DataTemplate Batting { get; set; } = null!;
     public DataTemplate NetsBatting { get; set; } = null!;
     public DataTemplate Bowling { get; set; } = null!;
@@ -48,11 +49,12 @@ public sealed class StatsTabTemplateSelector : DataTemplateSelector
         return (vm?.SelectedCategory ?? 0) switch
         {
             1 => Tournament,
-            2 => vm?.IsNetsSource == true ? NetsBatting : Batting,
-            3 => Bowling,
-            4 => Fielding,
-            5 => Captaincy,
-            6 => Attendance,
+            2 => Series,
+            3 => vm?.IsNetsSource == true ? NetsBatting : Batting,
+            4 => Bowling,
+            5 => Fielding,
+            6 => Captaincy,
+            7 => Attendance,
             _ => Match
         };
     }

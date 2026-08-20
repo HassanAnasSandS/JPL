@@ -12,15 +12,19 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     private readonly ITeamService _teams;
     private readonly IAuthService _auth;
     private readonly ITournamentService _tournaments;
+    private readonly ISeriesService _series;
     private readonly IVenueService _venues;
 
     private Guid? _tournamentId;
     private Guid? _tournamentFixtureId;
+    private Guid? _seriesId;
+    private Guid? _seriesFixtureId;
     private Guid? _pendingTeamAId;
     private Guid? _pendingTeamBId;
     private Guid? _pendingVenueId;
     private byte? _pendingFormat;
     private int? _pendingOvers;
+    private byte? _pendingOversMode;
     private bool? _pendingLastBat;
     private int? _pendingBowlerMax;
 
@@ -32,6 +36,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     [ObservableProperty] private string title = string.Empty;
     [ObservableProperty] private VenueListItem? selectedVenue;
     [ObservableProperty] private int oversLimit = 8;
+    [ObservableProperty] private bool noOversLimit;
+    [ObservableProperty] private bool oversAreMatchTotal = true;
     [ObservableProperty] private SelectOption<MatchFormat>? selectedFormat;
     [ObservableProperty] private TeamListItem? teamA;
     [ObservableProperty] private TeamListItem? teamB;
@@ -52,11 +58,19 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     [ObservableProperty] private bool lastBatsmanCanBatAsSingleWicket;
     [ObservableProperty] private int bowlerMaxOvers;
     [ObservableProperty] private bool isTournamentMatch;
+    [ObservableProperty] private bool isSeriesMatch;
     [ObservableProperty] private bool lockMatchSettings;
     [ObservableProperty] private string pageTitle = "New match";
 
-    public bool CanChangeTeams => !IsTournamentMatch;
+    public bool CanChangeTeams => !IsTournamentMatch && !IsSeriesMatch;
     public bool CanEditMatchSettings => !LockMatchSettings;
+    public bool ShowOversFields => !NoOversLimit;
+    public string OversFieldLabel => OversAreMatchTotal ? "Match overs *" : "Overs per innings *";
+    public OversMode CurrentOversMode => NoOversLimit
+        ? OversMode.Unlimited
+        : OversAreMatchTotal
+            ? OversMode.MatchTotal
+            : OversMode.PerInnings;
 
     /// <summary>True when the coin landed on Heads.</summary>
     public bool LastCoinWasHeads { get; private set; } = true;
@@ -99,12 +113,14 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         ITeamService teams,
         IAuthService auth,
         ITournamentService tournaments,
+        ISeriesService series,
         IVenueService venues)
     {
         _matches = matches;
         _teams = teams;
         _auth = auth;
         _tournaments = tournaments;
+        _series = series;
         _venues = venues;
 
         FormatOptions.Add(new SelectOption<MatchFormat>
@@ -122,6 +138,17 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
 
     partial void OnSelectedFormatChanged(SelectOption<MatchFormat>? value) => UpdateHint();
     partial void OnOversLimitChanged(int value) => UpdateHint();
+    partial void OnNoOversLimitChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowOversFields));
+        OnPropertyChanged(nameof(OversFieldLabel));
+        UpdateHint();
+    }
+    partial void OnOversAreMatchTotalChanged(bool value)
+    {
+        OnPropertyChanged(nameof(OversFieldLabel));
+        UpdateHint();
+    }
     partial void OnLockMatchSettingsChanged(bool value)
         => OnPropertyChanged(nameof(CanEditMatchSettings));
     partial void OnIsTossOverlayVisibleChanged(bool value)
@@ -244,35 +271,74 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     private void UpdateHint()
     {
         var format = SelectedFormat?.Value ?? MatchFormat.SingleInning;
+        if (NoOversLimit)
+        {
+            FormatHint = format == MatchFormat.DoubleInnings
+                ? "Each side bats twice. Innings end only on all out or declare — overs never stop a turn."
+                : "Each side bats once. Innings end only on all out or declare — overs never stop a turn.";
+            return;
+        }
+
+        if (OversAreMatchTotal)
+        {
+            FormatHint = format == MatchFormat.DoubleInnings
+                ? $"Each side bats twice. All turns share {OversLimit} overs for the whole match. All out or declare still ends a turn."
+                : $"Each side bats once. Both sides share {OversLimit} overs for the whole match. All out or declare still ends a turn.";
+            return;
+        }
+
         FormatHint = format == MatchFormat.DoubleInnings
             ? $"Each side bats twice ({OversLimit} overs each turn). Follow-on available after 2nd innings if leading."
             : $"Each side bats once ({OversLimit} overs each).";
+    }
+
+    private void ApplyOversMode(OversMode mode)
+    {
+        NoOversLimit = mode == OversMode.Unlimited;
+        OversAreMatchTotal = mode != OversMode.PerInnings;
     }
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
         _tournamentId = null;
         _tournamentFixtureId = null;
+        _seriesId = null;
+        _seriesFixtureId = null;
         _pendingTeamAId = null;
         _pendingTeamBId = null;
         _pendingVenueId = null;
         _pendingFormat = null;
         _pendingOvers = null;
+        _pendingOversMode = null;
         _pendingLastBat = null;
         _pendingBowlerMax = null;
         IsTournamentMatch = false;
+        IsSeriesMatch = false;
         LockMatchSettings = false;
         PageTitle = "New match";
 
         if (query.TryGetValue("tournamentId", out var tid) && Guid.TryParse($"{tid}", out var tournamentId))
             _tournamentId = tournamentId;
+        if (query.TryGetValue("seriesId", out var sid) && Guid.TryParse($"{sid}", out var seriesId))
+            _seriesId = seriesId;
         if (query.TryGetValue("fixtureId", out var fid) && Guid.TryParse($"{fid}", out var fixtureId))
-            _tournamentFixtureId = fixtureId;
+        {
+            if (_seriesId is not null)
+                _seriesFixtureId = fixtureId;
+            else
+                _tournamentFixtureId = fixtureId;
+        }
 
         if (_tournamentId is not null && _tournamentFixtureId is not null)
         {
             IsTournamentMatch = true;
             PageTitle = "Tournament match";
+        }
+
+        if (_seriesId is not null && _seriesFixtureId is not null)
+        {
+            IsSeriesMatch = true;
+            PageTitle = "Series match";
         }
 
         if (query.TryGetValue("lockSettings", out var lockRaw)
@@ -294,6 +360,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
             _pendingFormat = format;
         if (query.TryGetValue("overs", out var oObj) && int.TryParse($"{oObj}", out var overs))
             _pendingOvers = overs;
+        if (query.TryGetValue("oversMode", out var omObj) && byte.TryParse($"{omObj}", out var oversMode))
+            _pendingOversMode = oversMode;
         if (query.TryGetValue("lastBat", out var lbObj) && int.TryParse($"{lbObj}", out var lastBat))
             _pendingLastBat = lastBat != 0;
         if (query.TryGetValue("bowlerMax", out var bmObj) && int.TryParse($"{bmObj}", out var bowlerMax))
@@ -343,6 +411,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
             SelectedFormat = FormatOptions.FirstOrDefault(f => (byte)f.Value == pendingFormat) ?? SelectedFormat;
         if (_pendingOvers is int pendingOvers && pendingOvers > 0)
             OversLimit = pendingOvers;
+        if (_pendingOversMode is byte pendingMode)
+            ApplyOversMode((OversMode)pendingMode);
         if (_pendingLastBat is bool pendingLastBat)
             LastBatsmanCanBatAsSingleWicket = pendingLastBat;
         if (_pendingBowlerMax is int pendingBowlerMax)
@@ -480,14 +550,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
                 throw new InvalidOperationException("Select two different teams.");
             if (SelectedFormat is null)
                 throw new InvalidOperationException("Select a match format.");
-            if (OversLimit <= 0)
-                throw new InvalidOperationException("Overs per side must be greater than 0.");
-            if (OversLimit > 100)
-                throw new InvalidOperationException("Overs per side must be 100 or fewer.");
-            if (BowlerMaxOvers < 0)
-                throw new InvalidOperationException("Bowler maximum overs cannot be negative.");
-            if (BowlerMaxOvers > OversLimit)
-                throw new InvalidOperationException("Bowler maximum overs cannot exceed overs per side.");
+            OversRules.Validate(CurrentOversMode, OversLimit, BowlerMaxOvers);
             if (TossWinner is null)
                 throw new InvalidOperationException("Flip the coin to decide the toss winner.");
             if (BattingFirst is null)
@@ -515,7 +578,10 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
                 LastBatsmanCanBatAsSingleWicket,
                 BowlerMaxOvers,
                 _tournamentId,
-                _tournamentFixtureId)).ConfigureAwait(true);
+                _tournamentFixtureId,
+                _seriesId,
+                _seriesFixtureId,
+                CurrentOversMode)).ConfigureAwait(true);
 
             if (_tournamentId is Guid tid && _tournamentFixtureId is Guid fid)
             {
@@ -526,6 +592,18 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
                 catch
                 {
                     /* offline — sync payload still carries TournamentFixtureId */
+                }
+            }
+
+            if (_seriesId is Guid seriesId && _seriesFixtureId is Guid seriesFid)
+            {
+                try
+                {
+                    await _series.LinkMatchAsync(seriesId, seriesFid, match.Id).ConfigureAwait(true);
+                }
+                catch
+                {
+                    /* offline — sync payload still carries SeriesFixtureId */
                 }
             }
 

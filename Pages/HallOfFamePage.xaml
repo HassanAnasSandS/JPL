@@ -64,6 +64,22 @@
                         </DataTrigger>
                     </Button.Triggers>
                 </Button>
+                <Button Text="Series Champion"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="serieschamp"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsSeriesChamp}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
             </HorizontalStackLayout>
         </ScrollView>
 

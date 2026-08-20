@@ -62,6 +62,16 @@ public sealed class PlayerCareerSummary
     public int CaptainTournamentLoss { get; set; }
     public int CaptainTournamentTied { get; set; }
 
+    // Series
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+    public int CaptainSeries { get; set; }
+    public int CaptainSeriesWon { get; set; }
+    public int CaptainSeriesLoss { get; set; }
+    public int CaptainSeriesTied { get; set; }
+
     // Batting
     public int InningsBatted { get; set; }
     public int BallsFaced { get; set; }

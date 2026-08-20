@@ -49,8 +49,12 @@ public sealed class Match : ILeagueScoped
     public Guid TeamBId { get; set; }
     public Guid? TeamACaptainId { get; set; }
     public Guid? TeamBCaptainId { get; set; }
-    /// <summary>Overs allotted to each innings / each side's turn.</summary>
+    /// <summary>
+    /// Overs quota. Meaning depends on <see cref="OversMode"/>:
+    /// per innings, shared match pool, or ignored when unlimited.
+    /// </summary>
     public int OversLimit { get; set; } = 20;
+    public OversMode OversMode { get; set; } = OversMode.PerInnings;
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
     public DateTime MatchDateUtc { get; set; } = DateTime.Now;
     public string? Venue { get; set; }
@@ -72,6 +76,9 @@ public sealed class Match : ILeagueScoped
     /// <summary>When set, match belongs to a tournament (hidden from Matches module).</summary>
     public Guid? TournamentId { get; set; }
     public Guid? TournamentFixtureId { get; set; }
+    /// <summary>When set, match belongs to a series (hidden from Matches module).</summary>
+    public Guid? SeriesId { get; set; }
+    public Guid? SeriesFixtureId { get; set; }
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;

@@ -21,6 +21,7 @@ public partial class HallOfFameViewModel : ObservableObject
     public bool IsPotm => SelectedCategory == 0;
     public bool IsCaptain => SelectedCategory == 1;
     public bool IsTourChamp => SelectedCategory == 2;
+    public bool IsSeriesChamp => SelectedCategory == 3;
 
     public HallOfFameViewModel(IApiClient api) => _api = api;
 
@@ -29,6 +30,7 @@ public partial class HallOfFameViewModel : ObservableObject
         OnPropertyChanged(nameof(IsPotm));
         OnPropertyChanged(nameof(IsCaptain));
         OnPropertyChanged(nameof(IsTourChamp));
+        OnPropertyChanged(nameof(IsSeriesChamp));
         ApplyCategory();
     }
 
@@ -39,6 +41,7 @@ public partial class HallOfFameViewModel : ObservableObject
         {
             "captain" => 1,
             "tourchamp" => 2,
+            "serieschamp" => 3,
             _ => 0
         };
     }
@@ -83,6 +86,11 @@ public partial class HallOfFameViewModel : ObservableObject
                 CategoryTitle = "Tournament Champions";
                 CategoryHint = "Trophy when a captain’s side wins the tournament";
                 rows = _bundle.TournamentChampionTrophies;
+                break;
+            case 3:
+                CategoryTitle = "Series Champions";
+                CategoryHint = "Trophy when a captain’s side wins the series";
+                rows = _bundle.SeriesChampionTrophies;
                 break;
             default:
                 CategoryTitle = "Player of the Match";

@@ -55,10 +55,41 @@
                             ItemDisplayBinding="{Binding Label}"
                             SelectedItem="{Binding SelectedFormat}" />
 
-                    <Label Text="Overs per side *" FontSize="12" Style="{StaticResource MutedLabel}" />
-                    <Entry Placeholder="e.g. 6, 8, 10"
-                           Text="{Binding OversLimit}"
-                           Keyboard="Numeric" />
+                    <HorizontalStackLayout Spacing="12">
+                        <Switch IsToggled="{Binding NoOversLimit}"
+                                VerticalOptions="Center" />
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="No overs limit"
+                                   FontAttributes="Bold"
+                                   Style="{StaticResource BodyLabel}" />
+                            <Label Text="Innings end only on all out or declare."
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                        </VerticalStackLayout>
+                    </HorizontalStackLayout>
+
+                    <VerticalStackLayout Spacing="10" IsVisible="{Binding ShowOversFields}">
+                        <HorizontalStackLayout Spacing="12">
+                            <Switch IsToggled="{Binding OversAreMatchTotal}"
+                                    VerticalOptions="Center" />
+                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Label Text="Whole match overs"
+                                       FontAttributes="Bold"
+                                       Style="{StaticResource BodyLabel}" />
+                                <Label Text="On: all innings share one over pool. Off: each innings has its own quota."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+
+                        <Label Text="{Binding OversFieldLabel}" FontSize="12" Style="{StaticResource MutedLabel}" />
+                        <Entry Placeholder="e.g. 20, 50, 100"
+                               Text="{Binding OversLimit}"
+                               Keyboard="Numeric" />
+                        <Label Text="{Binding OversHint}"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
 
                     <HorizontalStackLayout Spacing="12">
                         <Switch IsToggled="{Binding LastBatsmanCanBatAsSingleWicket}"

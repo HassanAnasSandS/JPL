@@ -33,6 +33,12 @@ public interface ISyncService
     /// </summary>
     Task FlushTournamentAsync(Guid tournamentId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Flush all completed matches for a series.
+    /// Caller must ensure the series is fully finished (see ISeriesService.EnsureReadyToSyncAsync).
+    /// </summary>
+    Task FlushSeriesAsync(Guid seriesId, CancellationToken ct = default);
+
     Task<int> GetPendingCountAsync(CancellationToken ct = default);
 
     /// <summary>Standalone completed matches that still have pending/failed outbox rows.</summary>
@@ -46,6 +52,9 @@ public interface ISyncService
 
     /// <summary>Tournaments with pending outbox and no live matches (UI still gates on fully completed).</summary>
     Task<HashSet<Guid>> GetPendingTournamentIdsAsync(CancellationToken ct = default);
+
+    /// <summary>Series with pending outbox and no live matches (UI still gates on fully completed).</summary>
+    Task<HashSet<Guid>> GetPendingSeriesIdsAsync(CancellationToken ct = default);
 }
 
 public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
@@ -86,6 +95,9 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         if (match.TournamentId is not null)
             throw new InvalidOperationException(
                 "Tournament matches sync from the Tournaments list after the tournament is finished.");
+        if (match.SeriesId is not null)
+            throw new InvalidOperationException(
+                "Series matches sync from the Series list after the series is finished.");
 
         if (match.Status != MatchStatus.Completed)
             throw new InvalidOperationException("Only completed matches can be synced.");
@@ -122,12 +134,41 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    public async Task FlushSeriesAsync(Guid seriesId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var matches = await db.Matches.AsNoTracking()
+            .Where(m => m.SeriesId == seriesId)
+            .Select(m => new { m.Id, m.Status })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        if (matches.Count == 0)
+            throw new InvalidOperationException("No local matches found for this series.");
+
+        if (matches.Any(m => m.Status is MatchStatus.Setup or MatchStatus.InProgress))
+            throw new InvalidOperationException(
+                "Finish every series match before syncing. Live/setup matches stay on this device.");
+
+        var completedIds = matches
+            .Where(m => m.Status == MatchStatus.Completed)
+            .Select(m => m.Id)
+            .ToHashSet();
+
+        if (completedIds.Count == 0)
+            throw new InvalidOperationException("No completed series matches to sync.");
+
+        await FlushInternalAsync(allowedMatchIds: completedIds, standaloneOnly: false, ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<int> GetPendingCountAsync(CancellationToken ct = default)
     {
         var standalone = await GetPendingStandaloneMatchIdsAsync(ct).ConfigureAwait(false);
         var tours = await GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
+        var series = await GetPendingSeriesIdsAsync(ct).ConfigureAwait(false);
         var nets = await GetPendingNetSessionIdsAsync(ct).ConfigureAwait(false);
-        return standalone.Count + tours.Count + nets.Count;
+        return standalone.Count + tours.Count + series.Count + nets.Count;
     }
 
     public async Task<HashSet<Guid>> GetPendingStandaloneMatchIdsAsync(CancellationToken ct = default)
@@ -140,7 +181,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
             return new HashSet<Guid>();
 
         var standalone = await db.Matches.AsNoTracking()
-            .Where(m => m.Status == MatchStatus.Completed && m.TournamentId == null)
+            .Where(m => m.Status == MatchStatus.Completed && m.TournamentId == null && m.SeriesId == null)
             .Select(m => m.Id)
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -165,6 +206,35 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
 
         var result = new HashSet<Guid>();
         foreach (var g in tourMatches.GroupBy(m => m.TournamentId))
+        {
+            if (g.Any(m => m.Status is MatchStatus.Setup or MatchStatus.InProgress))
+                continue;
+            if (!g.Any(m => m.Status == MatchStatus.Completed))
+                continue;
+            if (g.Any(m => m.Status == MatchStatus.Completed && pendingByMatch.Contains(m.Id)))
+                result.Add(g.Key);
+        }
+
+        return result;
+    }
+
+    public async Task<HashSet<Guid>> GetPendingSeriesIdsAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await PurgeIncompleteMatchOutboxAsync(db, ct).ConfigureAwait(false);
+
+        var pendingByMatch = await GetPendingMatchIdSetAsync(db, ct).ConfigureAwait(false);
+        if (pendingByMatch.Count == 0)
+            return new HashSet<Guid>();
+
+        var seriesMatches = await db.Matches.AsNoTracking()
+            .Where(m => m.SeriesId != null)
+            .Select(m => new { m.Id, SeriesId = m.SeriesId!.Value, m.Status })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var result = new HashSet<Guid>();
+        foreach (var g in seriesMatches.GroupBy(m => m.SeriesId))
         {
             if (g.Any(m => m.Status is MatchStatus.Setup or MatchStatus.InProgress))
                 continue;
@@ -412,7 +482,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
     {
         var q = db.Matches.AsNoTracking().Where(m => m.Status == MatchStatus.Completed);
         if (standaloneOnly)
-            q = q.Where(m => m.TournamentId == null);
+            q = q.Where(m => m.TournamentId == null && m.SeriesId == null);
 
         var ids = await q.Select(m => m.Id).ToListAsync(ct).ConfigureAwait(false);
         var set = ids.ToHashSet();

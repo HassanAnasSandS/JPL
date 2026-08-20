@@ -664,7 +664,7 @@ public sealed class MatchesController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<MatchSummaryDto>>> GetCompleted(CancellationToken ct)
     {
         var matches = await _db.Matches.AsNoTracking()
-            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed && m.TournamentId == null)
+            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed && m.TournamentId == null && m.SeriesId == null)
             .OrderByDescending(m => m.MatchDateUtc)
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -742,7 +742,8 @@ public sealed class MatchesController : ControllerBase
                 result,
                 winnerId,
                 m.PlayerOfTheMatchPlayerId,
-                potmName);
+                potmName,
+                (byte)m.OversMode);
         }).ToList();
 
         return Ok(list);
@@ -864,7 +865,7 @@ public sealed class MatchesController : ControllerBase
             squadRows.Count(tp => tp.TeamId == match.TeamBId));
 
         var formatText = match.Format == MatchFormat.DoubleInnings ? "Double innings" : "Single inning";
-        var meta = $"{formatText} · {match.OversLimit} ov/side · {match.MatchDateUtc:dd MMM yyyy}";
+        var meta = $"{formatText} · {OversRules.ShortLabel(match.OversMode, match.OversLimit)} · {match.MatchDateUtc:dd MMM yyyy}";
         if (!string.IsNullOrWhiteSpace(match.Venue))
             meta += $" · {match.Venue}";
 
@@ -1194,24 +1195,30 @@ public sealed class NetSessionsController : ControllerBase
                 bowlingOrder.Add(d.BowlerId);
         }
 
-        var batting = battingOrder.Select(pid =>
+        var batting = new List<NetScorecardBattingDto>();
+        foreach (var pid in battingOrder)
         {
-            var faced = deliveries.Where(d => d.BatterId == pid).ToList();
-            var outs = deliveries.Where(d => d.IsWicket && d.DismissedPlayerId == pid).ToList();
-            var lastOut = outs.LastOrDefault();
-            return new NetScorecardBattingDto
+            var spells = SplitNetBatterSpells(deliveries, pid);
+            foreach (var faced in spells)
             {
-                PlayerId = pid,
-                Name = NameOf(pid),
-                Runs = faced.Sum(d => d.RunsOffBat),
-                Balls = faced.Count(d => d.IsLegalDelivery),
-                Fours = faced.Count(d => d.RunsOffBat == 4),
-                Sixes = faced.Count(d => d.RunsOffBat == 6),
-                IsOut = lastOut is not null,
-                Outs = outs.Count,
-                Dismissal = lastOut is null ? string.Empty : FormatNetDismissal(lastOut, NameOf)
-            };
-        }).ToList();
+                var isOut = faced.Count > 0
+                            && faced[^1].IsWicket
+                            && faced[^1].DismissedPlayerId == pid;
+                var outBall = isOut ? faced[^1] : null;
+                batting.Add(new NetScorecardBattingDto
+                {
+                    PlayerId = pid,
+                    Name = NameOf(pid),
+                    Runs = faced.Sum(d => d.RunsOffBat),
+                    Balls = faced.Count(d => d.IsLegalDelivery),
+                    Fours = faced.Count(d => d.RunsOffBat == 4),
+                    Sixes = faced.Count(d => d.RunsOffBat == 6),
+                    IsOut = isOut,
+                    Outs = isOut ? 1 : 0,
+                    Dismissal = outBall is null ? string.Empty : FormatNetDismissal(outBall, NameOf)
+                });
+            }
+        }
 
         var bowling = bowlingOrder.Select(pid =>
         {
@@ -1329,6 +1336,28 @@ public sealed class NetSessionsController : ControllerBase
             runsInOver = 0;
         }
         return maidens;
+    }
+
+    private static List<List<NetDelivery>> SplitNetBatterSpells(IReadOnlyList<NetDelivery> deliveries, Guid pid)
+    {
+        var spells = new List<List<NetDelivery>>();
+        List<NetDelivery>? current = null;
+        foreach (var d in deliveries)
+        {
+            if (d.BatterId != pid)
+                continue;
+            current ??= new List<NetDelivery>();
+            current.Add(d);
+            if (d.IsWicket && d.DismissedPlayerId == pid)
+            {
+                spells.Add(current);
+                current = null;
+            }
+        }
+
+        if (current is { Count: > 0 })
+            spells.Add(current);
+        return spells;
     }
 
     private static string FormatNetDismissal(NetDelivery d, Func<Guid, string> nameOf)
@@ -1567,6 +1596,13 @@ public sealed class SyncController : ControllerBase
                 if (fixture is not null)
                     fixture.MatchId = dto.Id;
             }
+            if (dto.SeriesFixtureId is Guid newSeriesFixtureId)
+            {
+                var seriesFixture = await _db.SeriesFixtures.FirstOrDefaultAsync(f => f.Id == newSeriesFixtureId, ct)
+                    .ConfigureAwait(false);
+                if (seriesFixture is not null)
+                    seriesFixture.MatchId = dto.Id;
+            }
             return;
         }
 
@@ -1579,6 +1615,7 @@ public sealed class SyncController : ControllerBase
         existing.TeamACaptainId = dto.TeamACaptainId;
         existing.TeamBCaptainId = dto.TeamBCaptainId;
         existing.OversLimit = dto.OversLimit;
+        existing.OversMode = dto.OversMode;
         existing.Format = dto.Format;
         existing.MatchDateUtc = dto.MatchDateUtc;
         existing.Venue = dto.Venue;
@@ -1590,6 +1627,8 @@ public sealed class SyncController : ControllerBase
         existing.PlayerOfTheMatchPlayerId = dto.PlayerOfTheMatchPlayerId;
         existing.TournamentId = dto.TournamentId;
         existing.TournamentFixtureId = dto.TournamentFixtureId;
+        existing.SeriesId = dto.SeriesId;
+        existing.SeriesFixtureId = dto.SeriesFixtureId;
         existing.Version = dto.Version;
         existing.UpdatedAtUtc = dto.UpdatedAtUtc;
         existing.IsDeleted = dto.IsDeleted;
@@ -1600,6 +1639,14 @@ public sealed class SyncController : ControllerBase
                 .ConfigureAwait(false);
             if (fixture is not null && fixture.MatchId != dto.Id)
                 fixture.MatchId = dto.Id;
+        }
+
+        if (dto.SeriesFixtureId is Guid seriesFixtureId && dto.Status == MatchStatus.Completed)
+        {
+            var seriesFixture = await _db.SeriesFixtures.FirstOrDefaultAsync(f => f.Id == seriesFixtureId, ct)
+                .ConfigureAwait(false);
+            if (seriesFixture is not null && seriesFixture.MatchId != dto.Id)
+                seriesFixture.MatchId = dto.Id;
         }
     }
 
@@ -1919,6 +1966,7 @@ public sealed class HallOfFameController : ControllerBase
         var potmCounts = new Dictionary<Guid, int>();
         var captainCounts = new Dictionary<Guid, int>();
         var tourChampCounts = new Dictionary<Guid, int>();
+        var seriesChampCounts = new Dictionary<Guid, int>();
         var playerIds = new HashSet<Guid>();
 
         if (matches.Count > 0)
@@ -1980,6 +2028,35 @@ public sealed class HallOfFameController : ControllerBase
             }
         }
 
+        var seriesList = await _db.Series.AsNoTracking()
+            .Where(s => !s.IsDeleted
+                        && s.Status == SeriesStatus.Completed
+                        && s.WinnerTeamId != null
+                        && !s.IsTied)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        if (seriesList.Count > 0)
+        {
+            var winnerTeamIds = seriesList
+                .Select(s => s.WinnerTeamId!.Value)
+                .Distinct()
+                .ToList();
+            var teams = await _db.Teams.AsNoTracking()
+                .Where(t => winnerTeamIds.Contains(t.Id) && !t.IsDeleted)
+                .ToDictionaryAsync(t => t.Id, t => t, ct)
+                .ConfigureAwait(false);
+
+            foreach (var series in seriesList)
+            {
+                if (!teams.TryGetValue(series.WinnerTeamId!.Value, out var team)
+                    || team.CaptainPlayerId is not Guid capId)
+                    continue;
+                playerIds.Add(capId);
+                seriesChampCounts[capId] = seriesChampCounts.GetValueOrDefault(capId) + 1;
+            }
+        }
+
         var names = playerIds.Count == 0
             ? new Dictionary<Guid, string>()
             : await _db.Players.AsNoTracking()
@@ -2005,7 +2082,8 @@ public sealed class HallOfFameController : ControllerBase
         {
             PlayerOfTheMatch = ToRows(potmCounts, names, "Player of the Match"),
             CaptainTrophies = ToRows(captainCounts, names, "Captain win trophy"),
-            TournamentChampionTrophies = ToRows(tourChampCounts, names, "Tournament champion (captain)")
+            TournamentChampionTrophies = ToRows(tourChampCounts, names, "Tournament champion (captain)"),
+            SeriesChampionTrophies = ToRows(seriesChampCounts, names, "Series champion (captain)")
         });
     }
 
@@ -2769,7 +2847,8 @@ public sealed class TournamentsController : ControllerBase
             QualifyPerGroup = body.QualifyPerGroup,
             VenueId = body.VenueId,
             Format = body.Format,
-            OversLimit = body.OversLimit,
+            OversLimit = OversRules.StoredOversLimit((OversMode)body.OversMode, body.OversLimit),
+            OversMode = (OversMode)body.OversMode,
             LastBatsmanCanBatAsSingleWicket = body.LastBatsmanCanBatAsSingleWicket,
             BowlerMaxOvers = body.BowlerMaxOvers,
             Status = TournamentStatus.Draft,
@@ -2798,7 +2877,8 @@ public sealed class TournamentsController : ControllerBase
         t.QualifyPerGroup = body.QualifyPerGroup;
         t.VenueId = body.VenueId;
         t.Format = body.Format;
-        t.OversLimit = body.OversLimit;
+        t.OversLimit = OversRules.StoredOversLimit((OversMode)body.OversMode, body.OversLimit);
+        t.OversMode = (OversMode)body.OversMode;
         t.LastBatsmanCanBatAsSingleWicket = body.LastBatsmanCanBatAsSingleWicket;
         t.BowlerMaxOvers = body.BowlerMaxOvers;
         t.UpdatedAtUtc = DateTime.Now;
@@ -2904,12 +2984,7 @@ public sealed class TournamentsController : ControllerBase
             throw new InvalidOperationException("Selected venue was not found.");
         if (body.Format is not (0 or 1))
             throw new InvalidOperationException("Format must be Single inning or Double innings.");
-        if (body.OversLimit <= 0 || body.OversLimit > 100)
-            throw new InvalidOperationException("Overs per side must be between 1 and 100.");
-        if (body.BowlerMaxOvers < 0)
-            throw new InvalidOperationException("Bowler maximum overs cannot be negative.");
-        if (body.BowlerMaxOvers > body.OversLimit)
-            throw new InvalidOperationException("Bowler maximum overs cannot exceed overs per side.");
+        OversRules.Validate((OversMode)body.OversMode, body.OversLimit, body.BowlerMaxOvers);
     }
 
     private static string RequireName(string? name)
@@ -3037,6 +3112,7 @@ public sealed class TournamentsController : ControllerBase
             Format = t.Format,
             FormatText = t.Format == (byte)MatchFormat.DoubleInnings ? "Double innings" : "Single inning",
             OversLimit = t.OversLimit,
+            OversMode = (byte)t.OversMode,
             LastBatsmanCanBatAsSingleWicket = t.LastBatsmanCanBatAsSingleWicket,
             BowlerMaxOvers = t.BowlerMaxOvers,
             Status = (byte)t.Status,
