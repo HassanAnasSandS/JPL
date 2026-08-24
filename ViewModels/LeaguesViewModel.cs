@@ -54,8 +54,6 @@ public partial class LeaguesViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAsync()
     {
-        if (IsBusy)
-            return;
         try
         {
             IsBusy = true;

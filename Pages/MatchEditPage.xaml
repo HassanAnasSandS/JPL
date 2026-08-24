@@ -80,6 +80,19 @@
 
                 <Border Style="{StaticResource CardBorder}">
                     <VerticalStackLayout Spacing="12">
+                        <Label Text="Live stream (optional)" Style="{StaticResource SectionLabel}" />
+                        <Entry Placeholder="YouTube / Facebook live link"
+                               Text="{Binding LiveStreamUrl}"
+                               Keyboard="Url"
+                               MaxLength="1000" />
+                        <Label Text="Viewers open the scorecard and watch the match in an iframe with the live score beside it. You can paste this later from Live scoring if the stream starts after toss."
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
                         <Label Text="Match settings" Style="{StaticResource SectionLabel}" />
                         <Label Text="Format and overs come from tournament/series (locked). Venue is pre-selected and can be changed."
                                IsVisible="{Binding LockMatchSettings}"
@@ -118,9 +131,13 @@
                         <Label Text="Team 1 *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
                         <Picker Title="Team 1"
                                 ItemsSource="{Binding Teams}"
-                                ItemDisplayBinding="{Binding Name}"
+                                ItemDisplayBinding="{Binding PickerLabel}"
                                 SelectedItem="{Binding TeamA}"
                                 IsEnabled="{Binding CanChangeTeams}" />
+                        <Label Text="{Binding TeamAPlayingHint}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12"
+                               IsVisible="{Binding HasTeamAPlayingHint}" />
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                             <Button Text="Heads"
                                     Style="{StaticResource GoldButton}"
@@ -140,9 +157,13 @@
                         <Label Text="Team 2 *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
                         <Picker Title="Team 2"
                                 ItemsSource="{Binding Teams}"
-                                ItemDisplayBinding="{Binding Name}"
+                                ItemDisplayBinding="{Binding PickerLabel}"
                                 SelectedItem="{Binding TeamB}"
                                 IsEnabled="{Binding CanChangeTeams}" />
+                        <Label Text="{Binding TeamBPlayingHint}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12"
+                               IsVisible="{Binding HasTeamBPlayingHint}" />
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                             <Button Text="Heads"
                                     Style="{StaticResource GoldButton}"

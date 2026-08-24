@@ -76,6 +76,9 @@ public sealed class SessionAuthMiddleware
         if (path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase))
             return true;
 
+        if (path.StartsWith("/api/public/", StringComparison.OrdinalIgnoreCase))
+            return true;
+
         return false;
     }
 

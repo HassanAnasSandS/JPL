@@ -185,6 +185,8 @@ public sealed class LeagueService : ILeagueService
             Name = dto.Name,
             ImageBytes = string.IsNullOrWhiteSpace(dto.ImageBase64) ? null : Convert.FromBase64String(dto.ImageBase64),
             IsActive = dto.IsActive,
-            CreatedAtUtc = dto.CreatedAtUtc
+            CreatedAtUtc = dto.CreatedAtUtc,
+            LiveMatchCount = dto.LiveMatchCount,
+            LiveNetsCount = dto.LiveNetsCount
         };
 }

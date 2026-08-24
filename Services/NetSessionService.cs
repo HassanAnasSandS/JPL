@@ -45,10 +45,12 @@ public sealed record NetSessionListItem(
     int BallsInOver)
 {
     public bool IsActive => Status is NetSessionStatus.Setup or NetSessionStatus.InProgress;
+    public bool IsLocal { get; init; } = true;
     public bool AllowMutate { get; init; } = true;
-    public bool CanDelete => IsActive && AllowMutate;
+    public bool CanScore => IsActive && AllowMutate && IsLocal;
+    public bool CanDelete => CanScore;
     public bool NeedsSync { get; init; }
-    public string ActionLabel => IsActive && AllowMutate ? "Continue" : "Scorecard";
+    public string ActionLabel => CanScore ? "Continue" : "Scorecard";
     public string DateLabel => SessionDateUtc.ToString("dd MMM yyyy");
     public string ScoreText => $"{Runs}/{Wickets} ({Overs}.{BallsInOver})";
     public string MetaLine => $"{PlayerCount} players · {DateLabel}";
@@ -386,6 +388,15 @@ public sealed class NetSessionService : INetSessionService
 
         var roster = NetRosterPayload.TryParse(session.PlayerRosterJson);
         var players = roster?.Players ?? new List<SquadPlayer>();
+        try
+        {
+            var (livePlayers, _) = await LiveMasterNames.LoadAsync(_api, _dbFactory, ct).ConfigureAwait(false);
+            players = MatchRosterPayload.Relabel(players, livePlayers);
+        }
+        catch
+        {
+            /* keep roster snapshot */
+        }
         return new NetScoringContext(session.Id, session.Name, players);
     }
 
@@ -421,6 +432,16 @@ public sealed class NetSessionService : INetSessionService
         var roster = NetRosterPayload.TryParse(session.PlayerRosterJson);
         var names = (roster?.Players ?? new List<SquadPlayer>())
             .ToDictionary(p => p.Id, p => p.FullName);
+        try
+        {
+            var (livePlayers, _) = await LiveMasterNames.LoadAsync(_api, _dbFactory, ct).ConfigureAwait(false);
+            foreach (var kv in livePlayers)
+                names[kv.Key] = kv.Value;
+        }
+        catch
+        {
+            /* keep roster snapshot */
+        }
 
         string NameOf(Guid id) => names.GetValueOrDefault(id, "?");
 
@@ -562,7 +583,7 @@ public sealed class NetSessionService : INetSessionService
         => new(
             row.Id,
             row.Name,
-            NetSessionStatus.Completed,
+            (NetSessionStatus)row.Status,
             row.SessionDateUtc,
             row.PlayerCount,
             row.Runs,
@@ -571,7 +592,8 @@ public sealed class NetSessionService : INetSessionService
             row.BallsInOver)
         {
             AllowMutate = allowMutate,
-            NeedsSync = needsSync
+            NeedsSync = needsSync,
+            IsLocal = false
         };
 
     private static NetSessionListItem ToListItem(
@@ -591,7 +613,8 @@ public sealed class NetSessionService : INetSessionService
             legal % 6)
         {
             AllowMutate = allowMutate,
-            NeedsSync = needsSync && s.Status == NetSessionStatus.Completed
+            NeedsSync = needsSync && s.Status == NetSessionStatus.Completed,
+            IsLocal = true
         };
     }
 

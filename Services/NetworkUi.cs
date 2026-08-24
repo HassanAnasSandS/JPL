@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using System.Text.Json;
 
 namespace JPL.Services;
 
@@ -39,7 +40,39 @@ public static class NetworkUi
     }
 
     public static string UserMessage(Exception? ex)
-        => IsNetworkFailure(ex) ? OfflineMessage : (ex?.Message ?? OfflineMessage);
+    {
+        if (IsNetworkFailure(ex))
+            return OfflineMessage;
+
+        var raw = ex?.Message ?? OfflineMessage;
+        if (raw.StartsWith("API ", StringComparison.Ordinal) && raw.Contains(':'))
+        {
+            var rest = raw[(raw.IndexOf(':') + 1)..].Trim().Trim('"');
+            if (rest.StartsWith('{') && rest.Contains("message", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(rest);
+                    if (doc.RootElement.TryGetProperty("message", out var m)
+                        || doc.RootElement.TryGetProperty("Message", out m))
+                    {
+                        var text = m.GetString();
+                        if (!string.IsNullOrWhiteSpace(text))
+                            return text;
+                    }
+                }
+                catch
+                {
+                    /* keep rest */
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(rest) && !rest.StartsWith('{'))
+                return rest;
+        }
+
+        return raw;
+    }
 
     public static bool IsCurrentlyOffline()
     {

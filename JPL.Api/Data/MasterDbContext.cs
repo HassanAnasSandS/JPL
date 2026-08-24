@@ -13,6 +13,7 @@ public sealed class MasterDbContext : DbContext
 
     public DbSet<League> Leagues => Set<League>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<LeagueLiveIndex> LeagueLiveIndexes => Set<LeagueLiveIndex>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +31,11 @@ public sealed class MasterDbContext : DbContext
             e.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
             e.HasIndex(x => x.Username).IsUnique();
             e.HasIndex(x => x.LeagueId);
+        });
+
+        modelBuilder.Entity<LeagueLiveIndex>(e =>
+        {
+            e.HasKey(x => x.LeagueId);
         });
 
         SqlServerLocalDateTimes.Map(modelBuilder, (Database.ProviderName ?? "").Contains("SqlServer", StringComparison.OrdinalIgnoreCase));

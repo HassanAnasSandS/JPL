@@ -201,11 +201,44 @@ public sealed class LeagueDatabaseManager
         await using var db = CreateContext(connection, leagueId);
         await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
         await EnsureMatchSquadColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureTeamPlayerPlayingColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureOversModeColumnsAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureLiveStreamUrlColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureScoringOwnerColumnsAsync(dbName, ct).ConfigureAwait(false);
         await EnsureNetSessionTablesAsync(dbName, ct).ConfigureAwait(false);
         await EnsureSeriesTablesAsync(dbName, ct).ConfigureAwait(false);
         await DropSportsLeagueIdColumnsAsync(dbName, ct).ConfigureAwait(false);
         await DropLeagueDirectoryTablesAsync(dbName, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureTeamPlayerPlayingColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.TeamPlayers', N'IsPlaying') IS NULL
+                    ALTER TABLE dbo.TeamPlayers ADD IsPlaying bit NOT NULL CONSTRAINT DF_TeamPlayers_IsPlaying DEFAULT 1;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "TeamPlayers" ADD COLUMN "IsPlaying" INTEGER NOT NULL DEFAULT 1;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
     }
 
     private async Task EnsureMatchSquadColumnAsync(string dbName, CancellationToken ct)
@@ -230,6 +263,80 @@ public sealed class LeagueDatabaseManager
             await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
             await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Matches" ADD COLUMN "SquadRosterJson" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    private async Task EnsureLiveStreamUrlColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Matches', N'LiveStreamUrl') IS NULL
+                    ALTER TABLE dbo.Matches ADD LiveStreamUrl nvarchar(1000) NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    private async Task EnsureScoringOwnerColumnsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Matches', N'StartedByUserId') IS NULL
+                    ALTER TABLE dbo.Matches ADD StartedByUserId uniqueidentifier NULL;
+                IF COL_LENGTH(N'dbo.Matches', N'StartedOnDeviceId') IS NULL
+                    ALTER TABLE dbo.Matches ADD StartedOnDeviceId uniqueidentifier NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Matches" ADD COLUMN "StartedOnDeviceId" TEXT NULL;""", ct)
                 .ConfigureAwait(false);
         }
         catch

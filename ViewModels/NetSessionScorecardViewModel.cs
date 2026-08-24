@@ -25,7 +25,10 @@ public partial class NetSessionScorecardViewModel : ObservableObject
     public bool HasScorecard => Card is not null;
     public bool ShowPlaceholder => Card is null;
 
-    public NetSessionScorecardViewModel(INetSessionService sessions) => _sessions = sessions;
+    public NetSessionScorecardViewModel(INetSessionService sessions)
+    {
+        _sessions = sessions;
+    }
 
     partial void OnCardChanged(NetSessionScorecard? value)
     {
@@ -36,13 +39,16 @@ public partial class NetSessionScorecardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task RefreshAsync()
+    public async Task LoadAsync()
     {
         if (!Guid.TryParse(SessionId, out var id))
         {
             ErrorMessage = "Invalid session.";
             return;
         }
+
+        if (IsBusy)
+            return;
 
         try
         {
@@ -70,4 +76,7 @@ public partial class NetSessionScorecardViewModel : ObservableObject
             IsBusy = false;
         }
     }
+
+    [RelayCommand]
+    public Task RefreshAsync() => LoadAsync();
 }

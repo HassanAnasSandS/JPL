@@ -14,6 +14,7 @@ public partial class ScoringPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        (Shell.Current as AppShell)?.EnsureDesktopSidebar();
         PageSafe.Run(() => _vm.InitializeAsync());
     }
 }

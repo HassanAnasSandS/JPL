@@ -29,7 +29,10 @@ public sealed class LeaguesController : ControllerBase
             .OrderBy(l => l.Name)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        return Ok(list.Select(ToDto).ToList());
+        var live = await db.LeagueLiveIndexes.AsNoTracking()
+            .ToDictionaryAsync(x => x.LeagueId, ct)
+            .ConfigureAwait(false);
+        return Ok(list.Select(l => ToDto(l, live.GetValueOrDefault(l.Id))).ToList());
     }
 
     [HttpGet("{id:guid}")]
@@ -41,7 +44,10 @@ public sealed class LeaguesController : ControllerBase
             .ConfigureAwait(false);
         if (league is null)
             return NotFound();
-        return Ok(ToDto(league));
+        var live = await db.LeagueLiveIndexes.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.LeagueId == id, ct)
+            .ConfigureAwait(false);
+        return Ok(ToDto(league, live));
     }
 
     [HttpPost]
@@ -76,7 +82,7 @@ public sealed class LeaguesController : ControllerBase
         await using var db = _dbs.CreateMaster();
         db.Leagues.Add(league);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Ok(ToDto(league));
+        return Ok(ToDto(league, live: null));
     }
 
     [HttpPut("{id:guid}")]
@@ -97,7 +103,7 @@ public sealed class LeaguesController : ControllerBase
             league.ImageBytes = image;
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Ok(ToDto(league));
+        return Ok(ToDto(league, live: null));
     }
 
     [HttpDelete("{id:guid}")]
@@ -114,6 +120,10 @@ public sealed class LeaguesController : ControllerBase
         var remaining = await db.Leagues.CountAsync(l => l.IsActive && l.Id != id, ct).ConfigureAwait(false);
         if (remaining == 0)
             return BadRequest("Cannot delete the last league.");
+
+        var hasUsers = await db.Users.AnyAsync(u => u.LeagueId == id, ct).ConfigureAwait(false);
+        if (hasUsers)
+            return BadRequest("Cannot delete this league because users are assigned to it.");
 
         league.IsActive = false;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -167,6 +177,13 @@ public sealed class LeaguesController : ControllerBase
         return true;
     }
 
-    private static LeagueDto ToDto(League l)
-        => new(l.Id, l.Name, l.ImageBytes is { Length: > 0 } ? Convert.ToBase64String(l.ImageBytes) : null, l.IsActive, l.CreatedAtUtc);
+    private static LeagueDto ToDto(League l, LeagueLiveIndex? live)
+        => new(
+            l.Id,
+            l.Name,
+            l.ImageBytes is { Length: > 0 } ? Convert.ToBase64String(l.ImageBytes) : null,
+            l.IsActive,
+            l.CreatedAtUtc,
+            live?.LiveMatchCount ?? 0,
+            live?.LiveNetsCount ?? 0);
 }

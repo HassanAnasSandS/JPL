@@ -170,6 +170,17 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null)
         {
+            if (!active.IsScoringOwner)
+            {
+                await Shell.Current.DisplayAlert(
+                    "View only",
+                    ScoringOwnership.OtherAccountMessage,
+                    "OK").ConfigureAwait(true);
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}")
+                    .ConfigureAwait(true);
+                return;
+            }
+
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time on this device. Finish \"{active.Title}\" first.",
@@ -195,9 +206,28 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
     private async Task ResumeFixtureAsync(SeriesFixtureItem? fixture)
     {
         if (fixture?.MatchId is not Guid matchId) return;
+
+        if (!await _matches.IsScoredOnThisDeviceAsync(matchId).ConfigureAwait(true))
+        {
+            await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={matchId}")
+                .ConfigureAwait(true);
+            return;
+        }
+
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null && active.Id != matchId)
         {
+            if (!active.IsScoringOwner)
+            {
+                await Shell.Current.DisplayAlert(
+                    "View only",
+                    ScoringOwnership.OtherAccountMessage,
+                    "OK").ConfigureAwait(true);
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}")
+                    .ConfigureAwait(true);
+                return;
+            }
+
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time on this device. Finish \"{active.Title}\" first.",

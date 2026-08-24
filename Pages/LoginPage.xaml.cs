@@ -10,6 +10,13 @@ public partial class LoginPage : ContentPage
         BindingContext = vm;
     }
 
+    protected override void OnDisappearing()
+    {
+        if (BindingContext is LoginViewModel vm)
+            vm.Detach();
+        base.OnDisappearing();
+    }
+
     void OnLoginScrollSizeChanged(object? sender, EventArgs e)
     {
         // Make host at least viewport height so VerticalOptions=Center works inside ScrollView.

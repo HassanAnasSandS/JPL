@@ -15,7 +15,9 @@ public sealed record LeagueDto(
     string Name,
     string? ImageBase64,
     bool IsActive,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    int LiveMatchCount = 0,
+    int LiveNetsCount = 0);
 
 public sealed record LeagueUpsertRequest(
     string Name,
@@ -59,14 +61,16 @@ public sealed record TeamDto(
     long Version,
     DateTime UpdatedAtUtc,
     bool IsDeleted,
-    bool IsActive = true);
+    bool IsActive = true,
+    IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
 public sealed record TeamUpsertRequest(
     Guid? Id,
     string Name,
     Guid? CaptainPlayerId,
     IReadOnlyList<Guid> PlayerIds,
-    bool IsActive = true);
+    bool IsActive = true,
+    IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
 public sealed record SyncPushRequest(
     Guid IdempotencyKey,
@@ -98,7 +102,10 @@ public sealed record MatchSummaryDto(
     Guid? WinnerTeamId,
     Guid? PlayerOfTheMatchPlayerId = null,
     string? PlayerOfTheMatchName = null,
-    byte OversMode = 0);
+    byte OversMode = 0,
+    Guid? TournamentId = null,
+    Guid? SeriesId = null,
+    string? LiveStreamUrl = null);
 
 /// <summary>Completed nets session card — list is read-only from server; create/score only via outbox sync.</summary>
 public sealed record NetSessionSummaryDto(
@@ -166,7 +173,28 @@ public sealed class MatchScorecardDto
     public Guid? WinnerTeamId { get; set; }
     public Guid? PlayerOfTheMatchPlayerId { get; set; }
     public string? PlayerOfTheMatchName { get; set; }
+    public string? LiveStreamUrl { get; set; }
+    public string CurrentBatter { get; set; } = "—";
+    public string CurrentBowler { get; set; } = "—";
+    public string CurrentOver { get; set; } = "0.0";
+    public string TotalOvers { get; set; } = "—";
+    public string CurrentNonStriker { get; set; } = "—";
+    public string BugTeamScore { get; set; } = "—";
+    public string CurrentRunRate { get; set; } = "-";
+    public List<OverBallMarkDto> ThisOver { get; set; } = new();
+    public byte Status { get; set; }
+    public bool IsChase { get; set; }
+    public string ChaseNeedText { get; set; } = string.Empty;
+    public string RequiredRunRate { get; set; } = "-";
+    public string? TeamACaptainName { get; set; }
+    public string? TeamBCaptainName { get; set; }
     public List<InningsScorecardDto> Innings { get; set; } = new();
+}
+
+public sealed class OverBallMarkDto
+{
+    public string Text { get; set; } = "•";
+    public string Kind { get; set; } = "dot";
 }
 
 public sealed class HallOfFameDto
@@ -544,6 +572,32 @@ public sealed class InningsScorecardDto
     public List<BowlingRowDto> Bowling { get; set; } = new();
     public string DidNotBatText { get; set; } = string.Empty;
     public string DidNotBowlText { get; set; } = string.Empty;
+    public string OversFaced { get; set; } = string.Empty;
+    public string FallOfWicketsText { get; set; } = string.Empty;
+    public string ExtrasText { get; set; } = string.Empty;
+}
+
+/// <summary>Anonymous live ticker + stream embed for the public watch iframe.</summary>
+public sealed class PublicLiveMatchDto
+{
+    public Guid MatchId { get; set; }
+    public Guid LeagueId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public byte Status { get; set; }
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
+    public string TeamAScore { get; set; } = string.Empty;
+    public string TeamBScore { get; set; } = string.Empty;
+    public string ResultText { get; set; } = string.Empty;
+    public string? LiveStreamUrl { get; set; }
+    public string? EmbedSrc { get; set; }
+    public bool HasStream { get; set; }
+    public string? BattingTeamName { get; set; }
+    public string? InningsScore { get; set; }
+    public string? OversText { get; set; }
+    public string? StrikerText { get; set; }
+    public string? NonStrikerText { get; set; }
+    public string? BowlerText { get; set; }
 }
 
 public sealed class BattingRowDto

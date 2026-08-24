@@ -9,13 +9,15 @@
              BackgroundColor="#0D1B2A"
              HideSoftInputOnTapped="True">
 
+    <Grid>
     <!-- ScrollView content is sized to viewport so the form can center on screen. -->
     <ScrollView x:Name="LoginScroll"
                 VerticalOptions="Fill"
                 HorizontalOptions="Fill"
                 VerticalScrollBarVisibility="Never"
                 HorizontalScrollBarVisibility="Never"
-                SizeChanged="OnLoginScrollSizeChanged">
+                SizeChanged="OnLoginScrollSizeChanged"
+                IsEnabled="{Binding IsFormEnabled}">
         <Grid x:Name="ContentHost"
               Padding="28,40"
               HorizontalOptions="Fill"
@@ -98,15 +100,6 @@
                         HeightRequest="52"
                         FontSize="15"
                         CornerRadius="12" />
-                <ActivityIndicator IsRunning="{Binding IsBusy}"
-                                   IsVisible="{Binding IsBusy}"
-                                   Color="#D4AF37"
-                                   HorizontalOptions="Center" />
-                <Label Text="Opening…"
-                       IsVisible="{Binding IsBusy}"
-                       TextColor="#B8C4D4"
-                       HorizontalOptions="Center"
-                       FontSize="12" />
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="#FF6B6B"
                        HorizontalOptions="Center"
@@ -115,4 +108,31 @@
             </VerticalStackLayout>
         </Grid>
     </ScrollView>
+
+        <Grid IsVisible="{Binding ShowBusyOverlay}"
+              BackgroundColor="#CC0D1B2A"
+              InputTransparent="False"
+              ZIndex="10">
+            <VerticalStackLayout Spacing="16"
+                                 VerticalOptions="Center"
+                                 HorizontalOptions="Center"
+                                 Padding="28">
+                <ActivityIndicator IsRunning="{Binding ShowBusyOverlay}"
+                                   Color="#B6FF3B"
+                                   WidthRequest="48"
+                                   HeightRequest="48"
+                                   HorizontalOptions="Center" />
+                <Label Text="{Binding BusyOverlayMessage}"
+                       TextColor="#E8F5D8"
+                       FontSize="15"
+                       HorizontalTextAlignment="Center"
+                       HorizontalOptions="Center" />
+                <Label Text="Please wait — this can take a few seconds."
+                       TextColor="#8899AA"
+                       FontSize="12"
+                       HorizontalTextAlignment="Center"
+                       HorizontalOptions="Center" />
+            </VerticalStackLayout>
+        </Grid>
+    </Grid>
 </ContentPage>

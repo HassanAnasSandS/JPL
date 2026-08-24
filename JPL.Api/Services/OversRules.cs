@@ -14,6 +14,14 @@ internal static class OversRules
     public static int StoredOversLimit(Models.OversMode mode, int oversLimit)
         => mode == Models.OversMode.Unlimited ? 0 : oversLimit;
 
+    public static int? BallsRemaining(Models.OversMode mode, int oversLimit, int inningsLegal, int matchLegal)
+    {
+        if (mode == Models.OversMode.Unlimited)
+            return null;
+        var used = mode == Models.OversMode.MatchTotal ? matchLegal : inningsLegal;
+        return Math.Max(0, oversLimit * 6 - used);
+    }
+
     public static void Validate(Models.OversMode mode, int oversLimit, int bowlerMaxOvers)
     {
         if ((byte)mode > (byte)Models.OversMode.Unlimited)

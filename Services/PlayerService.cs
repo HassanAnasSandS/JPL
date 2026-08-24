@@ -21,11 +21,13 @@ public sealed class PlayerService : IPlayerService
 {
     private readonly IApiClient _api;
     private readonly IAuthService _auth;
+    private readonly IMatchSquadCache _squadCache;
 
-    public PlayerService(IApiClient api, IAuthService auth)
+    public PlayerService(IApiClient api, IAuthService auth, IMatchSquadCache squadCache)
     {
         _api = api;
         _auth = auth;
+        _squadCache = squadCache;
     }
 
     public async Task<IReadOnlyList<Player>> GetAllAsync(CancellationToken ct = default)
@@ -75,6 +77,7 @@ public sealed class PlayerService : IPlayerService
 
         var remote = await _api.UpdatePlayerAsync(id, new { id, fullName = name, isActive = draft.IsActive }, ct)
             .ConfigureAwait(false);
+        _squadCache.ClearAll();
         return ToEntity(remote);
     }
 

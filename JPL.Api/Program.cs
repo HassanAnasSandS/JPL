@@ -17,6 +17,7 @@ public class Program
 
         builder.Services.AddControllers();
         builder.Services.AddOpenApi();
+        builder.Services.AddSignalR();
         builder.Services.AddCors(o =>
         {
             o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
@@ -27,6 +28,7 @@ public class Program
         builder.Services.AddSingleton<LeagueDatabaseManager>();
         builder.Services.AddScoped<IApiDbFactory, ApiDbFactory>();
         builder.Services.AddScoped(sp => sp.GetRequiredService<IApiDbFactory>().CreateForRequest());
+        builder.Services.AddScoped<ILiveFeed, LiveFeed>();
 
         var app = builder.Build();
 
@@ -34,6 +36,16 @@ public class Program
             app.MapOpenApi();
 
         app.UseCors();
+        app.Use(async (ctx, next) =>
+        {
+            ctx.Response.OnStarting(() =>
+            {
+                if (!ctx.Response.Headers.ContainsKey("Referrer-Policy"))
+                    ctx.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+                return Task.CompletedTask;
+            });
+            await next();
+        });
         app.UseDefaultFiles();
         app.UseStaticFiles(new StaticFileOptions
         {
@@ -50,6 +62,7 @@ public class Program
         // Do not force HTTPS redirect on the Kestrel app itself.
         app.UseMiddleware<JPL.Api.Middleware.SessionAuthMiddleware>();
         app.MapControllers();
+        app.MapHub<JPL.Api.Hubs.LiveHub>("/hubs/live");
 
         await InitializeDatabaseAsync(app.Services).ConfigureAwait(false);
 
@@ -85,6 +98,17 @@ public class Program
                 IF COL_LENGTH('Users', 'LeagueId') IS NULL
                     ALTER TABLE Users ADD LeagueId uniqueidentifier NULL;
                 """).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.LeagueLiveIndexes', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.LeagueLiveIndexes (
+                        LeagueId uniqueidentifier NOT NULL CONSTRAINT PK_LeagueLiveIndexes PRIMARY KEY,
+                        LiveMatchCount int NOT NULL,
+                        LiveNetsCount int NOT NULL,
+                        UpdatedAtUtc datetimeoffset NOT NULL
+                    );
+                END
+                """).ConfigureAwait(false);
         }
         else
         {
@@ -100,6 +124,18 @@ public class Program
                 await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Users" ADD COLUMN "LeagueId" TEXT NULL;""")
                     .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync("""
+                    CREATE TABLE IF NOT EXISTS "LeagueLiveIndexes" (
+                        "LeagueId" TEXT NOT NULL CONSTRAINT "PK_LeagueLiveIndexes" PRIMARY KEY,
+                        "LiveMatchCount" INTEGER NOT NULL,
+                        "LiveNetsCount" INTEGER NOT NULL,
+                        "UpdatedAtUtc" TEXT NOT NULL
+                    );
+                    """).ConfigureAwait(false);
             }
             catch { /* already exists */ }
         }

@@ -8,6 +8,7 @@ public partial class LoginViewModel : ObservableObject
 {
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
+    private readonly IAppStartupStatus _startup;
 
     [ObservableProperty]
     private string username = string.Empty;
@@ -27,16 +28,44 @@ public partial class LoginViewModel : ObservableObject
 
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
 
-    public LoginViewModel(IAuthService auth, IAppNavigator navigator)
+    public bool ShowBusyOverlay => IsBusy || _startup.IsBusy;
+    public bool IsFormEnabled => !ShowBusyOverlay;
+    public string BusyOverlayMessage =>
+        IsBusy
+            ? "Signing in…"
+            : string.IsNullOrWhiteSpace(_startup.Message) ? "Please wait…" : _startup.Message;
+
+    private bool CanSubmit => IsFormEnabled;
+
+    public LoginViewModel(IAuthService auth, IAppNavigator navigator, IAppStartupStatus startup)
     {
         _auth = auth;
         _navigator = navigator;
+        _startup = startup;
+        _startup.Changed += OnStartupChanged;
+        NotifyOverlay();
+    }
+
+    public void Detach() => _startup.Changed -= OnStartupChanged;
+
+    private void OnStartupChanged(object? sender, EventArgs e)
+        => MainThread.BeginInvokeOnMainThread(NotifyOverlay);
+
+    partial void OnIsBusyChanged(bool value) => NotifyOverlay();
+
+    private void NotifyOverlay()
+    {
+        OnPropertyChanged(nameof(ShowBusyOverlay));
+        OnPropertyChanged(nameof(IsFormEnabled));
+        OnPropertyChanged(nameof(BusyOverlayMessage));
+        LoginCommand.NotifyCanExecuteChanged();
+        ContinueWithoutLoginCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
     private void TogglePasswordVisibility() => IsPasswordHidden = !IsPasswordHidden;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSubmit))]
     private Task ContinueWithoutLoginAsync()
     {
         Username = "user";
@@ -44,10 +73,10 @@ public partial class LoginViewModel : ObservableObject
         return LoginAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSubmit))]
     private async Task LoginAsync()
     {
-        if (IsBusy)
+        if (!CanSubmit)
             return;
 
         try

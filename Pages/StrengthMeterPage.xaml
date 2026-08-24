@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.StrengthMeterPage"
+             x:Name="ThisPage"
+             x:DataType="vm:StrengthMeterViewModel"
+             Title="Strength Meter"
+             HideSoftInputOnTapped="True">
+
+    <ContentPage.Resources>
+        <DataTemplate x:Key="ChartCardTemplate" x:DataType="ctrl:StrengthChartCard">
+            <Border Stroke="{Binding CardStroke}"
+                    StrokeThickness="1.5"
+                    BackgroundColor="{Binding CardBackground}"
+                    StrokeShape="RoundRectangle 6"
+                    Padding="{OnIdiom Phone=4, Default=6}">
+                <VerticalStackLayout Spacing="0">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="3">
+                        <Label Text="{Binding Title}"
+                               FontAttributes="Bold"
+                               FontSize="{OnIdiom Phone=10, Default=11}"
+                               LineBreakMode="TailTruncation"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Grid.Column="1"
+                               Text="{Binding OverallText}"
+                               FontAttributes="Bold"
+                               FontSize="{OnIdiom Phone=9, Default=10}"
+                               TextColor="{Binding OverallColor}" />
+                    </Grid>
+                    <Label Text="{Binding Subtitle}"
+                           FontSize="{OnIdiom Phone=8, Default=9}"
+                           TextColor="{StaticResource TextSecondary}"
+                           LineBreakMode="TailTruncation" />
+                    <ctrl:StrengthBarChartView Bars="{Binding Bars}"
+                                               HeightRequest="{Binding ChartHeight}" />
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+    </ContentPage.Resources>
+
+    <Grid>
+        <ScrollView VerticalOptions="Fill"
+                    VerticalScrollBarVisibility="Default"
+                    HorizontalScrollBarVisibility="Never">
+            <VerticalStackLayout Padding="{OnIdiom Phone=6, Default=8}" Spacing="{OnIdiom Phone=4, Default=6}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                    <Label Text="Strength Meter"
+                           FontSize="{OnIdiom Phone=14, Default=16}"
+                           FontAttributes="Bold"
+                           VerticalOptions="Center"
+                           TextColor="{StaticResource Primary}" />
+                    <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                        <Button Text="Teams"
+                                Command="{Binding UseTeamModeCommand}"
+                                Padding="10,4"
+                                FontSize="11"
+                                CornerRadius="12"
+                                MinimumHeightRequest="28"
+                                MinimumWidthRequest="64"
+                                BackgroundColor="#E8EEF5"
+                                TextColor="{StaticResource Primary}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsTeamMode}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Text="Players"
+                                Command="{Binding UsePlayersModeCommand}"
+                                Padding="10,4"
+                                FontSize="11"
+                                CornerRadius="12"
+                                MinimumHeightRequest="28"
+                                MinimumWidthRequest="64"
+                                BackgroundColor="#E8EEF5"
+                                TextColor="{StaticResource Primary}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsPlayersMode}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                    </HorizontalStackLayout>
+                </Grid>
+
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="{StaticResource Danger}"
+                       FontSize="11"
+                       IsVisible="{Binding HasError}" />
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="6" IsVisible="{Binding IsTeamMode}">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Team A" FontSize="11" FontAttributes="Bold" TextColor="#1565C0" />
+                        <Picker Title="Select team A"
+                                FontSize="12"
+                                ItemsSource="{Binding TeamOptions}"
+                                ItemDisplayBinding="{Binding Name, x:DataType=svc:TeamListItem}"
+                                SelectedItem="{Binding TeamA}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Grid.Column="1" Spacing="2">
+                        <Label Text="Team B" FontSize="11" FontAttributes="Bold" TextColor="#C62828" />
+                        <Picker Title="Select team B"
+                                FontSize="12"
+                                ItemsSource="{Binding TeamOptions}"
+                                ItemDisplayBinding="{Binding Name, x:DataType=svc:TeamListItem}"
+                                SelectedItem="{Binding TeamB}" />
+                    </VerticalStackLayout>
+                </Grid>
+
+                <VerticalStackLayout Spacing="6" IsVisible="{Binding IsPlayersMode}">
+                    <SearchBar Placeholder="Find a player"
+                               FontSize="12"
+                               Text="{Binding PlayerFilter}"
+                               CancelButtonColor="{StaticResource Primary}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerCandidates}" Spacing="1">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No players left to add" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:StrengthPlayerPick">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Padding="0,1">
+                                    <Label Text="{Binding DisplayName}"
+                                           FontSize="12"
+                                           VerticalOptions="Center"
+                                           LineBreakMode="TailTruncation" />
+                                    <Button Grid.Column="1"
+                                            Text="A"
+                                            Padding="8,2"
+                                            FontSize="11"
+                                            FontAttributes="Bold"
+                                            MinimumHeightRequest="28"
+                                            MinimumWidthRequest="36"
+                                            IsEnabled="{Binding CanAddToA}"
+                                            Command="{Binding BindingContext.AddToListACommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Grid.Column="2"
+                                            Text="B"
+                                            Padding="8,2"
+                                            FontSize="11"
+                                            FontAttributes="Bold"
+                                            MinimumHeightRequest="28"
+                                            MinimumWidthRequest="36"
+                                            IsEnabled="{Binding CanAddToB}"
+                                            Command="{Binding BindingContext.AddToListBCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                        <Border Stroke="{StaticResource Gray200}" StrokeThickness="1" Padding="6" StrokeShape="RoundRectangle 8">
+                            <VerticalStackLayout Spacing="3">
+                                <Label Text="List A" FontSize="11" FontAttributes="Bold" TextColor="#1565C0" />
+                                <Label Text="Tap C — one captain per list"
+                                       FontSize="10"
+                                       TextColor="{StaticResource TextSecondary}" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ListA}" Spacing="2">
+                                    <BindableLayout.EmptyView>
+                                        <Label Text="Empty" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    </BindableLayout.EmptyView>
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:StrengthPlayerPick">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                                                <Label Text="{Binding DisplayName}" FontSize="11" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                                                <Button Grid.Column="1"
+                                                        Text="C"
+                                                        Padding="8,2"
+                                                        FontSize="11"
+                                                        FontAttributes="Bold"
+                                                        MinimumHeightRequest="26"
+                                                        MinimumWidthRequest="32"
+                                                        BackgroundColor="#E8EEF5"
+                                                        TextColor="{StaticResource Primary}"
+                                                        Command="{Binding BindingContext.SetListACaptainCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                        CommandParameter="{Binding .}">
+                                                    <Button.Triggers>
+                                                        <DataTrigger TargetType="Button" Binding="{Binding IsListCaptain}" Value="True">
+                                                            <Setter Property="BackgroundColor" Value="{StaticResource Secondary}" />
+                                                            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                                        </DataTrigger>
+                                                    </Button.Triggers>
+                                                </Button>
+                                                <Button Grid.Column="2"
+                                                        Text="✕"
+                                                        Padding="6,2"
+                                                        FontSize="11"
+                                                        MinimumHeightRequest="26"
+                                                        MinimumWidthRequest="28"
+                                                        Style="{StaticResource GhostButton}"
+                                                        Command="{Binding BindingContext.RemoveFromListACommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                        CommandParameter="{Binding .}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" Stroke="{StaticResource Gray200}" StrokeThickness="1" Padding="6" StrokeShape="RoundRectangle 8">
+                            <VerticalStackLayout Spacing="3">
+                                <Label Text="List B" FontSize="11" FontAttributes="Bold" TextColor="#C62828" />
+                                <Label Text="Tap C — one captain per list"
+                                       FontSize="10"
+                                       TextColor="{StaticResource TextSecondary}" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ListB}" Spacing="2">
+                                    <BindableLayout.EmptyView>
+                                        <Label Text="Empty" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    </BindableLayout.EmptyView>
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:StrengthPlayerPick">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                                                <Label Text="{Binding DisplayName}" FontSize="11" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                                                <Button Grid.Column="1"
+                                                        Text="C"
+                                                        Padding="8,2"
+                                                        FontSize="11"
+                                                        FontAttributes="Bold"
+                                                        MinimumHeightRequest="26"
+                                                        MinimumWidthRequest="32"
+                                                        BackgroundColor="#E8EEF5"
+                                                        TextColor="{StaticResource Primary}"
+                                                        Command="{Binding BindingContext.SetListBCaptainCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                        CommandParameter="{Binding .}">
+                                                    <Button.Triggers>
+                                                        <DataTrigger TargetType="Button" Binding="{Binding IsListCaptain}" Value="True">
+                                                            <Setter Property="BackgroundColor" Value="{StaticResource Secondary}" />
+                                                            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                                        </DataTrigger>
+                                                    </Button.Triggers>
+                                                </Button>
+                                                <Button Grid.Column="2"
+                                                        Text="✕"
+                                                        Padding="6,2"
+                                                        FontSize="11"
+                                                        MinimumHeightRequest="26"
+                                                        MinimumWidthRequest="28"
+                                                        Style="{StaticResource GhostButton}"
+                                                        Command="{Binding BindingContext.RemoveFromListBCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                        CommandParameter="{Binding .}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                </VerticalStackLayout>
+
+                <Button Text="Compare"
+                        Style="{StaticResource GoldButton}"
+                        FontSize="{OnIdiom Phone=12, Default=13}"
+                        Padding="10,4"
+                        MinimumHeightRequest="{OnIdiom Phone=32, Default=36}"
+                        HeightRequest="{OnIdiom Phone=32, Default=36}"
+                        Command="{Binding CompareCommand}"
+                        IsEnabled="{Binding CanCompare}" />
+
+                <VerticalStackLayout Spacing="{OnIdiom Phone=4, Default=6}" IsVisible="{Binding HasResult}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                        <Label Text="{Binding ResultHeadline}"
+                               FontSize="{OnIdiom Phone=12, Default=14}"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Grid.Column="1"
+                               Text="{Binding ResultDetail}"
+                               FontSize="{OnIdiom Phone=10, Default=11}"
+                               VerticalOptions="Center"
+                               TextColor="{StaticResource TextSecondary}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+                        <VerticalStackLayout Spacing="{OnIdiom Phone=3, Default=4}">
+                            <Label Text="{Binding SideATitle}"
+                                   FontSize="{OnIdiom Phone=11, Default=12}"
+                                   FontAttributes="Bold"
+                                   TextColor="#1565C0" />
+                            <Border Stroke="{Binding ResultA.CardStroke}"
+                                    StrokeThickness="2"
+                                    BackgroundColor="{Binding ResultA.CardBackground}"
+                                    StrokeShape="RoundRectangle 6"
+                                    Padding="{OnIdiom Phone=4, Default=6}">
+                                <VerticalStackLayout Spacing="0">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="3">
+                                        <Label Text="{Binding ResultA.Title}"
+                                               FontAttributes="Bold"
+                                               FontSize="{OnIdiom Phone=10, Default=11}"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{StaticResource Primary}" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding ResultA.OverallText}"
+                                               FontAttributes="Bold"
+                                               FontSize="{OnIdiom Phone=9, Default=10}"
+                                               TextColor="{Binding ResultA.OverallColor}" />
+                                    </Grid>
+                                    <Label Text="{Binding ResultA.Subtitle}"
+                                           FontSize="{OnIdiom Phone=8, Default=9}"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           LineBreakMode="TailTruncation" />
+                                    <ctrl:StrengthBarChartView Bars="{Binding ResultA.Bars}"
+                                                               HeightRequest="{Binding ResultA.ChartHeight}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SideACharts}"
+                                                 BindableLayout.ItemTemplate="{StaticResource ChartCardTemplate}"
+                                                 Spacing="{OnIdiom Phone=3, Default=4}" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1" Spacing="{OnIdiom Phone=3, Default=4}">
+                            <Label Text="{Binding SideBTitle}"
+                                   FontSize="{OnIdiom Phone=11, Default=12}"
+                                   FontAttributes="Bold"
+                                   TextColor="#C62828" />
+                            <Border Stroke="{Binding ResultB.CardStroke}"
+                                    StrokeThickness="2"
+                                    BackgroundColor="{Binding ResultB.CardBackground}"
+                                    StrokeShape="RoundRectangle 6"
+                                    Padding="{OnIdiom Phone=4, Default=6}">
+                                <VerticalStackLayout Spacing="0">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="3">
+                                        <Label Text="{Binding ResultB.Title}"
+                                               FontAttributes="Bold"
+                                               FontSize="{OnIdiom Phone=10, Default=11}"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{StaticResource Primary}" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding ResultB.OverallText}"
+                                               FontAttributes="Bold"
+                                               FontSize="{OnIdiom Phone=9, Default=10}"
+                                               TextColor="{Binding ResultB.OverallColor}" />
+                                    </Grid>
+                                    <Label Text="{Binding ResultB.Subtitle}"
+                                           FontSize="{OnIdiom Phone=8, Default=9}"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           LineBreakMode="TailTruncation" />
+                                    <ctrl:StrengthBarChartView Bars="{Binding ResultB.Bars}"
+                                                               HeightRequest="{Binding ResultB.ChartHeight}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SideBCharts}"
+                                                 BindableLayout.ItemTemplate="{StaticResource ChartCardTemplate}"
+                                                 Spacing="{OnIdiom Phone=3, Default=4}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Grid IsVisible="{Binding IsBusy}"
+              BackgroundColor="#99F2F4F7"
+              ZIndex="20">
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               Color="{StaticResource Primary}"
+                               VerticalOptions="Center"
+                               HorizontalOptions="Center" />
+        </Grid>
+    </Grid>
+</ContentPage>

@@ -10,10 +10,16 @@ public partial class App : Application
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
     private readonly ILeagueContext _league;
+    private readonly IAppStartupStatus _startup;
     private int _lifecycleSyncBusy;
     private DateTime _lastLifecycleSyncUtc = DateTime.MinValue;
 
-    public App(IServiceProvider services, IAuthService auth, IAppNavigator navigator, ILeagueContext league)
+    public App(
+        IServiceProvider services,
+        IAuthService auth,
+        IAppNavigator navigator,
+        ILeagueContext league,
+        IAppStartupStatus startup)
     {
         InitializeComponent();
         CrashGuard.Install();
@@ -21,6 +27,7 @@ public partial class App : Application
         _auth = auth;
         _navigator = navigator;
         _league = league;
+        _startup = startup;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
@@ -30,14 +37,16 @@ public partial class App : Application
         // Preferences may hold a token from another database (e.g. JPL → JPLTesting).
         // Always open Login first; promote to Shell only after local DB is ready.
         _auth.RestoreLocalSession();
+        if (_auth.IsAuthenticated)
+            _startup.SetBusy("Restoring session…");
 
         var main = new Window
         {
             Title = "Cric360"
 #if WINDOWS
             ,
-            Width = 1100,
-            Height = 720
+            Width = 1280,
+            Height = 800
 #endif
         };
         _navigator.Attach(main);
@@ -47,11 +56,15 @@ public partial class App : Application
         {
             try
             {
+                if (_auth.IsAuthenticated)
+                    _startup.SetBusy("Preparing…");
+
                 // DB seed only — do NOT wait on network here (was making cold start feel hung).
                 await MauiProgram.WhenReadyAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(true);
 
                 if (_auth.IsAuthenticated)
                 {
+                    _startup.SetBusy("Checking account…");
                     try
                     {
                         // Do not use a short CTS here: cancelling an in-flight HTTPS call
@@ -69,6 +82,7 @@ public partial class App : Application
                 {
                     try
                     {
+                        _startup.SetBusy("Opening…");
                         if (_auth.Current?.NeedsLeaguePicker == true && !_league.HasSelection)
                             await _navigator.ShowLeaguePickerAsync().ConfigureAwait(true);
                         else
@@ -166,6 +180,7 @@ public partial class App : Application
             try
             {
                 await MauiProgram.WhenReadyAsync().ConfigureAwait(false);
+                _services.GetRequiredService<ILivePublisher>().RequestFlush();
                 await _services.GetRequiredService<ISyncService>().FlushAsync().ConfigureAwait(false);
             }
             catch (SessionExpiredException)

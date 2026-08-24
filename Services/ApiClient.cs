@@ -16,7 +16,9 @@ public sealed record ApiLeagueDto(
     string Name,
     string? ImageBase64,
     bool IsActive,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    int LiveMatchCount = 0,
+    int LiveNetsCount = 0);
 
 public sealed record ApiUserDto(
     Guid Id,
@@ -43,7 +45,8 @@ public sealed record ApiTeamDto(
     long Version,
     DateTime UpdatedAtUtc,
     bool IsDeleted,
-    bool IsActive);
+    bool IsActive,
+    IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
 public sealed record ApiMatchSummaryDto(
     Guid Id,
@@ -65,7 +68,10 @@ public sealed record ApiMatchSummaryDto(
     Guid? WinnerTeamId,
     Guid? PlayerOfTheMatchPlayerId = null,
     string? PlayerOfTheMatchName = null,
-    byte OversMode = 0);
+    byte OversMode = 0,
+    Guid? TournamentId = null,
+    Guid? SeriesId = null,
+    string? LiveStreamUrl = null);
 
 public sealed record ApiNetSessionSummaryDto(
     Guid Id,
@@ -358,10 +364,12 @@ public interface IApiClient
 
     /// <summary>Completed matches from server (ongoing stays local).</summary>
     Task<IReadOnlyList<ApiMatchSummaryDto>> GetCompletedMatchesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<ApiMatchSummaryDto>> GetLiveMatchesAsync(CancellationToken ct = default);
     Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default);
 
     /// <summary>Completed nets sessions from server (live scoring stays local until complete + outbox sync).</summary>
     Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetCompletedNetSessionsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetLiveNetSessionsAsync(CancellationToken ct = default);
     Task<NetSessionScorecard?> GetNetSessionScorecardAsync(Guid sessionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<PlayerCareerSummary>> GetStatsLeaderboardAsync(
@@ -374,6 +382,10 @@ public interface IApiClient
     Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        CancellationToken ct = default);
     Task<HallOfFameBundle> GetHallOfFameAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiAuctionDto>> GetAuctionsAsync(CancellationToken ct = default);
@@ -586,6 +598,16 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiMatchSummaryDto>)(list ?? new List<ApiMatchSummaryDto>());
         }, ct);
 
+    public Task<IReadOnlyList<ApiMatchSummaryDto>> GetLiveMatchesAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/live/matches", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<ApiMatchSummaryDto>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<ApiMatchSummaryDto>)(list ?? new List<ApiMatchSummaryDto>());
+        }, ct);
+
     public Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -600,6 +622,16 @@ public sealed class ApiClient : IApiClient
         => RunAsync(async http =>
         {
             using var response = await http.GetAsync("api/netsessions", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<ApiNetSessionSummaryDto>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<ApiNetSessionSummaryDto>)(list ?? new List<ApiNetSessionSummaryDto>());
+        }, ct);
+
+    public Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetLiveNetSessionsAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/live/nets", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             var list = await response.Content.ReadFromJsonAsync<List<ApiNetSessionSummaryDto>>(JsonOptions, ct)
                 .ConfigureAwait(false);
@@ -697,6 +729,27 @@ public sealed class ApiClient : IApiClient
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             var dto = await response.Content.ReadFromJsonAsync<RankingsBundle>(JsonOptions, ct).ConfigureAwait(false);
             return dto ?? new RankingsBundle();
+        }, ct);
+
+    public Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            var query = new List<string>();
+            if (fromUtc is DateTime from)
+                query.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
+            if (toExclusiveUtc is DateTime to)
+                query.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+            var url = "api/stats/team-rankings" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (IReadOnlyList<RankingRow>)Array.Empty<RankingRow>();
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<RankingRow>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<RankingRow>)(list ?? new List<RankingRow>());
         }, ct);
 
     public Task<HallOfFameBundle> GetHallOfFameAsync(CancellationToken ct = default)

@@ -90,6 +90,14 @@ public sealed class Match : ILeagueScoped
     /// </summary>
     public string? SquadRosterJson { get; set; }
 
+    /// <summary>Optional YouTube/Facebook/https live telecast URL. Viewers watch in an iframe with the live score.</summary>
+    public string? LiveStreamUrl { get; set; }
+
+    /// <summary>Admin who started scoring. Only this account may continue/edit on the original device.</summary>
+    public Guid? StartedByUserId { get; set; }
+    /// <summary>App-install id of the device where scoring started.</summary>
+    public Guid? StartedOnDeviceId { get; set; }
+
     public ICollection<Innings> Innings { get; set; } = new List<Innings>();
 }
 

@@ -296,11 +296,11 @@ public sealed class SeriesController : ControllerBase
                 .ConfigureAwait(false);
         var matchById = matches.ToDictionary(m => m.Id);
 
-        var completedIds = matches.Where(m => m.Status == MatchStatus.Completed).Select(m => m.Id).ToList();
-        var innsByMatch = completedIds.Count == 0
+        var scoredIds = matches.Where(m => m.Status is MatchStatus.Completed or MatchStatus.InProgress).Select(m => m.Id).ToList();
+        var innsByMatch = scoredIds.Count == 0
             ? new Dictionary<Guid, List<Innings>>()
             : (await _db.Innings.AsNoTracking()
-                    .Where(i => completedIds.Contains(i.MatchId))
+                    .Where(i => scoredIds.Contains(i.MatchId))
                     .Include(i => i.Deliveries)
                     .ToListAsync(ct)
                     .ConfigureAwait(false))
@@ -379,8 +379,15 @@ public sealed class SeriesController : ControllerBase
                         names.GetValueOrDefault(match.TeamAId, teamAName),
                         names.GetValueOrDefault(match.TeamBId, teamBName),
                         aRuns, aWkts, bRuns, bWkts, firstBat,
-                        squadCounts.GetValueOrDefault(match.TeamAId),
-                        squadCounts.GetValueOrDefault(match.TeamBId));
+                        MatchSquadSnapshot.SizeFor(match.SquadRosterJson, match.TeamAId, true, squadCounts.GetValueOrDefault(match.TeamAId)),
+                        MatchSquadSnapshot.SizeFor(match.SquadRosterJson, match.TeamBId, false, squadCounts.GetValueOrDefault(match.TeamBId)));
+                }
+                else if (match is { Status: MatchStatus.InProgress }
+                         && innsByMatch.TryGetValue(match.Id, out var liveInns))
+                {
+                    var (aRuns, aWkts) = TeamTotals(liveInns, match.TeamAId);
+                    var (bRuns, bWkts) = TeamTotals(liveInns, match.TeamBId);
+                    resultText = $"LIVE · {aRuns}/{aWkts} vs {bRuns}/{bWkts}";
                 }
                 else if (match is { Status: MatchStatus.Abandoned })
                 {
@@ -409,9 +416,8 @@ public sealed class SeriesController : ControllerBase
                     ResultText = resultText,
                     CanStart = f.MatchId is null
                                && (s.Status is SeriesStatus.Scheduled or SeriesStatus.InProgress),
-                    CanResume = (ms is MatchStatus.Setup or MatchStatus.InProgress)
-                                && s.Status is not SeriesStatus.Draft,
-                    CanOpenScorecard = ms == MatchStatus.Completed
+                    CanResume = false,
+                    CanOpenScorecard = ms is MatchStatus.Completed or MatchStatus.InProgress or MatchStatus.Setup
                 };
             }).ToList()
         };

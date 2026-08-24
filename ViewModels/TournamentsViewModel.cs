@@ -90,7 +90,7 @@ public partial class TournamentsViewModel : ObservableObject
                 Id = t.Id,
                 Name = t.Name,
                 MetaLine = t.MetaLine,
-                StatusText = t.StatusText,
+                StatusText = t.Status == 2 ? "LIVE" : t.StatusText,
                 WinnerLine = t.WinnerLine,
                 IsDraft = draft,
                 CanEdit = CanWrite && draft,

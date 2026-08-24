@@ -64,6 +64,10 @@ public sealed class TournamentFixtureItem
     public bool CanOpenScorecard { get; set; }
     public string VsLine => $"{TeamAName}  vs  {TeamBName}";
     public bool HasResult => !string.IsNullOrWhiteSpace(ResultText);
+    public string ScorecardLabel =>
+        string.Equals(MatchStatusText, "Live", StringComparison.OrdinalIgnoreCase)
+            ? "Main Score"
+            : "Scorecard";
 }
 
 public sealed class TournamentStandingItem
@@ -331,8 +335,8 @@ public sealed class TournamentService : ITournamentService
             MatchStatusText = f.MatchStatusText,
             ResultText = f.ResultText ?? string.Empty,
             CanStart = f.CanStart,
-            CanResume = f.CanResume,
-            CanOpenScorecard = f.CanOpenScorecard
+            CanResume = false,
+            CanOpenScorecard = f.MatchId is Guid
         }).ToList(),
         Standings = dto.Standings.Select(s => new TournamentStandingItem
         {
@@ -361,14 +365,15 @@ public sealed class TournamentService : ITournamentService
             .Where(m => m.TournamentId == detail.Id)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        if (localMatches.Count == 0)
-            return;
 
         var byId = localMatches.ToDictionary(m => m.Id);
         var byFixture = localMatches
             .Where(m => m.TournamentFixtureId is Guid)
             .GroupBy(m => m.TournamentFixtureId!.Value)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.UpdatedAtUtc).First());
+
+        if (localMatches.Count > 0)
+        {
 
         var matchIds = localMatches.Select(m => m.Id).ToList();
         var innings = await db.Innings.AsNoTracking()
@@ -388,7 +393,6 @@ public sealed class TournamentService : ITournamentService
         var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
 
         // First pass: attach local match state
-        var draftOrLocked = detail.Status == 0;
         foreach (var f in detail.Fixtures)
         {
             Match? local = null;
@@ -419,13 +423,43 @@ public sealed class TournamentService : ITournamentService
                 f.ResultText = LocalResultText(
                     local, f.TeamAName, f.TeamBName, aRuns, aWkts, bRuns, bWkts, firstBat);
             }
+            else if (local.Status == MatchStatus.InProgress
+                     && innsByMatch.TryGetValue(local.Id, out var liveInns))
+            {
+                var (aRuns, aWkts) = LocalTeamTotals(liveInns, local.TeamAId, delsByInn);
+                var (bRuns, bWkts) = LocalTeamTotals(liveInns, local.TeamBId, delsByInn);
+                f.ResultText = $"LIVE · {aRuns}/{aWkts} vs {bRuns}/{bWkts}";
+            }
         }
 
         ApplyLocalKnockoutTeams(detail, byId, innsByMatch, delsByInn);
         ApplyLocalStandings(detail, byId, innsByMatch, delsByInn);
         ApplyKnockoutTiebreakResultText(detail);
 
-        // One live match per league on this device — other leagues' local matches do not block.
+        // Local champion (before API sync)
+        if (detail.WinnerTeamId is null)
+        {
+            var winnerId = TryLocalChampion(detail, byId, innsByMatch, delsByInn);
+            if (winnerId is Guid wid)
+            {
+                detail.WinnerTeamId = wid;
+                detail.WinnerTeamName = detail.Teams.FirstOrDefault(t => t.TeamId == wid)?.TeamName
+                                        ?? detail.Fixtures.SelectMany(f => new[]
+                                        {
+                                            (f.TeamAId, f.TeamAName),
+                                            (f.TeamBId, f.TeamBName)
+                                        }).FirstOrDefault(x => x.Item1 == wid).Item2;
+                if (detail.Status != 3)
+                {
+                    detail.Status = 3;
+                    detail.StatusText = "Completed";
+                }
+            }
+        }
+        }
+
+        // Resume only for the match this phone is scoring. Other live matches stay Main Score.
+        var draftOrLocked = detail.Status == 0;
         var leagueActiveId = (await db.Matches.AsNoTracking()
                 .Where(m => m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress)
                 .ToListAsync(ct)
@@ -450,31 +484,11 @@ public sealed class TournamentService : ITournamentService
             f.CanResume = local is not null
                           && (local.Status is MatchStatus.Setup or MatchStatus.InProgress)
                           && !draftOrLocked
-                          && leagueActiveId == local.Id;
-            f.CanOpenScorecard = local is { Status: MatchStatus.Completed };
+                          && leagueActiveId == local.Id
+                          && ScoringOwnership.IsOwner(local, _auth);
+            f.CanOpenScorecard = f.MatchId is Guid && !f.CanResume;
             if (f.CanResume || f.CanOpenScorecard)
                 f.CanStart = false;
-        }
-
-        // Local champion (before API sync)
-        if (detail.WinnerTeamId is null)
-        {
-            var winnerId = TryLocalChampion(detail, byId, innsByMatch, delsByInn);
-            if (winnerId is Guid wid)
-            {
-                detail.WinnerTeamId = wid;
-                detail.WinnerTeamName = detail.Teams.FirstOrDefault(t => t.TeamId == wid)?.TeamName
-                                        ?? detail.Fixtures.SelectMany(f => new[]
-                                        {
-                                            (f.TeamAId, f.TeamAName),
-                                            (f.TeamBId, f.TeamBName)
-                                        }).FirstOrDefault(x => x.Item1 == wid).Item2;
-                if (detail.Status != 3)
-                {
-                    detail.Status = 3;
-                    detail.StatusText = "Completed";
-                }
-            }
         }
     }
 

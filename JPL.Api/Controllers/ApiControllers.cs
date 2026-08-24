@@ -18,6 +18,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Api",
+        version = "1.5",
         time = DateTime.Now
     });
 }
@@ -80,11 +81,13 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
 [Route("api/users")]
 public sealed class UsersController : ControllerBase, IAsyncDisposable
 {
+    private readonly IApiDbFactory _dbs;
     private readonly MasterDbContext _db;
     private readonly PasswordHasher<AppUser> _hasher = new();
 
     public UsersController(IApiDbFactory dbs)
     {
+        _dbs = dbs;
         _db = dbs.CreateMaster();
     }
 
@@ -194,6 +197,16 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
         var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
         if (user is null || user.Role == AppRole.SuperAdmin)
             return NotFound();
+
+        if (user.LeagueId is Guid leagueId)
+        {
+            await using var leagueDb = _dbs.CreateForLeague(leagueId);
+            var hasBookings = await leagueDb.VenueBookings
+                .AnyAsync(b => !b.IsDeleted && b.CreatedByUserId == id, ct)
+                .ConfigureAwait(false);
+            if (hasBookings)
+                return BadRequest("Cannot delete this user because they have venue bookings.");
+        }
 
         _db.Users.Remove(user);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -424,21 +437,13 @@ public sealed class PlayersController : ControllerBase
         if (player is null || player.IsDeleted)
             return NoContent();
 
+        var block = await DeleteConstraints.PlayerAsync(_db, id, ct).ConfigureAwait(false);
+        if (block is not null)
+            return BadRequest(block);
+
         player.IsDeleted = true;
         player.UpdatedAtUtc = DateTime.Now;
         player.Version++;
-
-        var memberships = await _db.TeamPlayers.Where(tp => tp.PlayerId == id).ToListAsync(ct).ConfigureAwait(false);
-        _db.TeamPlayers.RemoveRange(memberships);
-
-        var captained = await _db.Teams.Where(t => t.CaptainPlayerId == id).ToListAsync(ct).ConfigureAwait(false);
-        foreach (var team in captained)
-        {
-            team.CaptainPlayerId = null;
-            team.UpdatedAtUtc = DateTime.Now;
-            team.Version++;
-        }
-
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return NoContent();
     }
@@ -489,13 +494,8 @@ public sealed class TeamsController : ControllerBase
         if (!TryValidateTeamName(request.Name, out var name, out var nameError))
             return BadRequest(nameError);
 
-        var playerIds = (request.PlayerIds ?? Array.Empty<Guid>()).Where(x => x != Guid.Empty).Distinct().ToList();
-        if (playerIds.Count == 0)
-            return BadRequest("Add at least one player to the squad.");
-        if (request.CaptainPlayerId is not Guid cid || cid == Guid.Empty)
-            return BadRequest("Captain is required.");
-        if (!playerIds.Contains(cid))
-            return BadRequest("Captain must be one of the team players.");
+        if (!TryValidateRoster(request, out var playerIds, out var playingSet, out var rosterError))
+            return BadRequest(rosterError);
 
         if (await TeamNameTakenAsync(name, excludeId: null, ct).ConfigureAwait(false))
             return BadRequest($"Team name \"{name}\" already exists.");
@@ -514,7 +514,7 @@ public sealed class TeamsController : ControllerBase
         {
             Id = request.Id is { } id && id != Guid.Empty ? id : Guid.NewGuid(),
             Name = name,
-            CaptainPlayerId = cid,
+            CaptainPlayerId = request.CaptainPlayerId,
             IsActive = request.IsActive,
             Version = 1,
             CreatedAtUtc = now,
@@ -523,7 +523,12 @@ public sealed class TeamsController : ControllerBase
 
         _db.Teams.Add(team);
         foreach (var pid in playerIds)
-            _db.TeamPlayers.Add(new TeamPlayer { TeamId = team.Id, PlayerId = pid });
+            _db.TeamPlayers.Add(new TeamPlayer
+            {
+                TeamId = team.Id,
+                PlayerId = pid,
+                IsPlaying = playingSet.Contains(pid)
+            });
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -540,13 +545,8 @@ public sealed class TeamsController : ControllerBase
         if (!TryValidateTeamName(request.Name, out var name, out var nameError))
             return BadRequest(nameError);
 
-        var playerIds = (request.PlayerIds ?? Array.Empty<Guid>()).Where(x => x != Guid.Empty).Distinct().ToList();
-        if (playerIds.Count == 0)
-            return BadRequest("Add at least one player to the squad.");
-        if (request.CaptainPlayerId is not Guid cid || cid == Guid.Empty)
-            return BadRequest("Captain is required.");
-        if (!playerIds.Contains(cid))
-            return BadRequest("Captain must be one of the team players.");
+        if (!TryValidateRoster(request, out var playerIds, out var playingSet, out var rosterError))
+            return BadRequest(rosterError);
 
         if (await TeamNameTakenAsync(name, excludeId: id, ct).ConfigureAwait(false))
             return BadRequest($"Team name \"{name}\" already exists.");
@@ -567,18 +567,12 @@ public sealed class TeamsController : ControllerBase
             return NotFound();
 
         team.Name = name;
-        team.CaptainPlayerId = cid;
+        team.CaptainPlayerId = request.CaptainPlayerId;
         team.IsActive = request.IsActive;
         team.UpdatedAtUtc = DateTime.Now;
         team.Version++;
 
-        var desired = playerIds.ToHashSet();
-        foreach (var remove in team.TeamPlayers.Where(tp => !desired.Contains(tp.PlayerId)).ToList())
-            _db.TeamPlayers.Remove(remove);
-
-        var have = team.TeamPlayers.Select(tp => tp.PlayerId).ToHashSet();
-        foreach (var add in desired.Where(pid => !have.Contains(pid)))
-            _db.TeamPlayers.Add(new TeamPlayer { TeamId = id, PlayerId = add });
+        ApplySquad(team, id, playerIds, playingSet);
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -596,13 +590,74 @@ public sealed class TeamsController : ControllerBase
         if (team is null || team.IsDeleted)
             return NoContent();
 
+        var block = await DeleteConstraints.TeamAsync(_db, id, ct).ConfigureAwait(false);
+        if (block is not null)
+            return BadRequest(block);
+
         team.IsDeleted = true;
         team.IsActive = false;
-        team.CaptainPlayerId = null;
         team.UpdatedAtUtc = DateTime.Now;
         team.Version++;
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return NoContent();
+    }
+
+    private static bool TryValidateRoster(
+        TeamUpsertRequest request,
+        out List<Guid> playerIds,
+        out HashSet<Guid> playingSet,
+        out string error)
+    {
+        playerIds = TeamRoster.Distinct(request.PlayerIds);
+        playingSet = new HashSet<Guid>();
+        error = string.Empty;
+
+        if (playerIds.Count == 0)
+        {
+            error = "Add at least one player to the squad.";
+            return false;
+        }
+
+        if (request.CaptainPlayerId is not Guid cid || cid == Guid.Empty)
+        {
+            error = "Captain is required.";
+            return false;
+        }
+
+        if (!playerIds.Contains(cid))
+        {
+            error = "Captain must be one of the team players.";
+            return false;
+        }
+
+        if (!TeamRoster.TryResolvePlaying(playerIds, request.PlayingPlayerIds, out playingSet, out var playingError))
+        {
+            error = playingError ?? "Playing list is invalid.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ApplySquad(Team team, Guid teamId, IReadOnlyList<Guid> playerIds, HashSet<Guid> playingSet)
+    {
+        var desired = playerIds.ToHashSet();
+        foreach (var remove in team.TeamPlayers.Where(tp => !desired.Contains(tp.PlayerId)).ToList())
+            _db.TeamPlayers.Remove(remove);
+
+        foreach (var tp in team.TeamPlayers)
+            tp.IsPlaying = playingSet.Contains(tp.PlayerId);
+
+        var have = team.TeamPlayers.Select(tp => tp.PlayerId).ToHashSet();
+        foreach (var add in desired.Where(pid => !have.Contains(pid)))
+        {
+            _db.TeamPlayers.Add(new TeamPlayer
+            {
+                TeamId = teamId,
+                PlayerId = add,
+                IsPlaying = playingSet.Contains(add)
+            });
+        }
     }
 
     private async Task EnsurePlayersExistAsync(IReadOnlyList<Guid> playerIds, CancellationToken ct)
@@ -648,7 +703,8 @@ public sealed class TeamsController : ControllerBase
     private static TeamDto ToDto(Team t) => new(
         t.Id, t.Name, t.CaptainPlayerId,
         t.TeamPlayers.Select(tp => tp.PlayerId).ToList(),
-        t.Version, t.UpdatedAtUtc, t.IsDeleted, t.IsActive);
+        t.Version, t.UpdatedAtUtc, t.IsDeleted, t.IsActive,
+        t.TeamPlayers.Where(tp => tp.IsPlaying).Select(tp => tp.PlayerId).ToList());
 }
 
 [ApiController]
@@ -717,8 +773,8 @@ public sealed class MatchesController : ControllerBase
             var firstBat = matchInns.OrderBy(i => i.InningsNumber).FirstOrDefault()?.BattingTeamId;
             var (result, winnerId) = BuildResult(
                 m, teamA, teamB, aRuns, aWkts, bRuns, bWkts, firstBat,
-                squadCounts.GetValueOrDefault(m.TeamAId),
-                squadCounts.GetValueOrDefault(m.TeamBId));
+                MatchSquadSnapshot.SizeFor(m.SquadRosterJson, m.TeamAId, true, squadCounts.GetValueOrDefault(m.TeamAId)),
+                MatchSquadSnapshot.SizeFor(m.SquadRosterJson, m.TeamBId, false, squadCounts.GetValueOrDefault(m.TeamBId)));
             string? potmName = null;
             if (m.PlayerOfTheMatchPlayerId is Guid potmId)
                 potmName = potmNames.GetValueOrDefault(potmId);
@@ -743,7 +799,10 @@ public sealed class MatchesController : ControllerBase
                 winnerId,
                 m.PlayerOfTheMatchPlayerId,
                 potmName,
-                (byte)m.OversMode);
+                (byte)m.OversMode,
+                m.TournamentId,
+                m.SeriesId,
+                m.LiveStreamUrl);
         }).ToList();
 
         return Ok(list);
@@ -777,32 +836,23 @@ public sealed class MatchesController : ControllerBase
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        MatchSquadSnapshot? squadSnap = null;
-        if (!string.IsNullOrWhiteSpace(match.SquadRosterJson))
-        {
-            try
-            {
-                squadSnap = System.Text.Json.JsonSerializer.Deserialize<MatchSquadSnapshot>(
-                    match.SquadRosterJson,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch
-            {
-                squadSnap = null;
-            }
-        }
+        MatchSquadSnapshot? squadSnap = MatchSquadSnapshot.TryParse(match.SquadRosterJson);
 
         var playerIds = innings
             .SelectMany(i => i.Deliveries)
             .SelectMany(d => new[] { d.BatterId, d.BowlerId, d.DismissedPlayerId ?? Guid.Empty, d.FielderId ?? Guid.Empty })
             .Concat(squadRows.Select(tp => tp.PlayerId))
-            .Concat(squadSnap?.TeamAPlayerIds ?? [])
-            .Concat(squadSnap?.TeamBPlayerIds ?? [])
+            .Concat(squadSnap?.PlayersOfTeamA() ?? [])
+            .Concat(squadSnap?.PlayersOfTeamB() ?? [])
             .Where(pid => pid != Guid.Empty)
             .Distinct()
             .ToList();
         if (match.PlayerOfTheMatchPlayerId is Guid potmInclude)
             playerIds.Add(potmInclude);
+        if (match.TeamACaptainId is Guid capA)
+            playerIds.Add(capA);
+        if (match.TeamBCaptainId is Guid capB)
+            playerIds.Add(capB);
 
         var names = await _db.Players.AsNoTracking()
             .Where(p => playerIds.Contains(p.Id))
@@ -826,13 +876,19 @@ public sealed class MatchesController : ControllerBase
             IEnumerable<Guid> ids;
             if (squadSnap is not null)
             {
-                ids = teamId == match.TeamAId ? squadSnap.TeamAPlayerIds
-                    : teamId == match.TeamBId ? squadSnap.TeamBPlayerIds
+                ids = teamId == match.TeamAId ? squadSnap.PlayersOfTeamA()
+                    : teamId == match.TeamBId ? squadSnap.PlayersOfTeamB()
                     : [];
+                if (!ids.Any())
+                    ids = squadRows.Where(tp => tp.TeamId == teamId && tp.IsPlaying).Select(tp => tp.PlayerId);
+                if (!ids.Any())
+                    ids = squadRows.Where(tp => tp.TeamId == teamId).Select(tp => tp.PlayerId);
             }
             else
             {
-                ids = squadRows.Where(tp => tp.TeamId == teamId).Select(tp => tp.PlayerId);
+                ids = squadRows.Where(tp => tp.TeamId == teamId && tp.IsPlaying).Select(tp => tp.PlayerId);
+                if (!ids.Any())
+                    ids = squadRows.Where(tp => tp.TeamId == teamId).Select(tp => tp.PlayerId);
             }
 
             return ids
@@ -859,10 +915,20 @@ public sealed class MatchesController : ControllerBase
         var (aRuns, aWkts) = TeamTotals(innings, match.TeamAId);
         var (bRuns, bWkts) = TeamTotals(innings, match.TeamBId);
         var firstBat = innings.OrderBy(i => i.InningsNumber).FirstOrDefault()?.BattingTeamId;
-        var (result, winnerId) = BuildResult(
-            match, teamA, teamB, aRuns, aWkts, bRuns, bWkts, firstBat,
-            squadRows.Count(tp => tp.TeamId == match.TeamAId),
-            squadRows.Count(tp => tp.TeamId == match.TeamBId));
+        string result;
+        Guid? winnerId;
+        if (match.Status == MatchStatus.Completed)
+        {
+            (result, winnerId) = BuildResult(
+                match, teamA, teamB, aRuns, aWkts, bRuns, bWkts, firstBat,
+                MatchSquadSnapshot.SizeFor(match.SquadRosterJson, match.TeamAId, true, squadRows.Count(tp => tp.TeamId == match.TeamAId && tp.IsPlaying)),
+                MatchSquadSnapshot.SizeFor(match.SquadRosterJson, match.TeamBId, false, squadRows.Count(tp => tp.TeamId == match.TeamBId && tp.IsPlaying)));
+        }
+        else
+        {
+            result = match.Status == MatchStatus.InProgress ? "LIVE" : "Upcoming";
+            winnerId = null;
+        }
 
         var formatText = match.Format == MatchFormat.DoubleInnings ? "Double innings" : "Single inning";
         var meta = $"{formatText} · {OversRules.ShortLabel(match.OversMode, match.OversLimit)} · {match.MatchDateUtc:dd MMM yyyy}";
@@ -882,6 +948,50 @@ public sealed class MatchesController : ControllerBase
         if (match.PlayerOfTheMatchPlayerId is Guid potmId)
             potmName = names.GetValueOrDefault(potmId);
 
+        var liveInn = innings.LastOrDefault(i => !i.IsCompleted) ?? innings.LastOrDefault();
+        var liveSection = liveInn is null
+            ? null
+            : sections.FirstOrDefault(s => s.InningsNumber == liveInn.InningsNumber);
+        var liveBalls = liveInn?.Deliveries.OrderBy(d => d.Sequence).ToList() ?? new List<Delivery>();
+        var lastBall = liveBalls.LastOrDefault();
+        var legal = liveBalls.Count(d => d.IsLegalDelivery);
+
+        string BatterLine()
+        {
+            if (lastBall is null || liveSection is null)
+                return "—";
+            var row = liveSection.Batting.FirstOrDefault(b => b.PlayerId == lastBall.BatterId);
+            return row is null ? "—" : $"{row.Name}  {row.Runs}({row.Balls})";
+        }
+
+        string BowlerLine()
+        {
+            if (lastBall is null || liveSection is null)
+                return "—";
+            var row = liveSection.Bowling.FirstOrDefault(b => b.PlayerId == lastBall.BowlerId);
+            if (row is null)
+                return "—";
+            var o = row.BallsBowled / 6;
+            var b = row.BallsBowled % 6;
+            return $"{row.Name}  {o}.{b}-{row.Maidens}-{row.RunsConceded}-{row.Wickets}";
+        }
+
+        string NonStrikerLine()
+        {
+            if (lastBall is null || liveSection is null)
+                return "—";
+            var row = liveSection.Batting.FirstOrDefault(b =>
+                b.PlayerId == lastBall.NonStrikerId && b.PlayerId != lastBall.BatterId);
+            return row is null ? "—" : $"{row.Name}  {row.Runs}({row.Balls})";
+        }
+
+        var overNo = lastBall?.OverNumber;
+        var thisOver = overNo is int on
+            ? liveBalls.Where(d => d.OverNumber == on).Select(ToOverBallDto).ToList()
+            : new List<OverBallMarkDto>();
+
+        var (isChase, chaseNeed, rrr) = ComputeChase(match, innings);
+
         return Ok(new MatchScorecardDto
         {
             MatchId = match.Id,
@@ -900,8 +1010,142 @@ public sealed class MatchesController : ControllerBase
             WinnerTeamId = winnerId,
             PlayerOfTheMatchPlayerId = match.PlayerOfTheMatchPlayerId,
             PlayerOfTheMatchName = potmName,
+            LiveStreamUrl = match.LiveStreamUrl,
+            CurrentBatter = BatterLine(),
+            CurrentBowler = BowlerLine(),
+            CurrentOver = $"{legal / 6}.{legal % 6}",
+            TotalOvers = match.OversMode == Models.OversMode.Unlimited
+                ? "Unlimited"
+                : match.OversLimit.ToString(),
+            CurrentNonStriker = NonStrikerLine(),
+            BugTeamScore = liveSection is null ? "—" : $"{liveSection.BattingTeamName} {liveSection.TotalRuns}/{liveSection.Wickets}",
+            CurrentRunRate = legal == 0 || liveSection is null
+                ? "-"
+                : Math.Round(liveSection.TotalRuns * 6.0 / legal, 2).ToString("0.00"),
+            ThisOver = thisOver,
+            Status = (byte)match.Status,
+            IsChase = isChase,
+            ChaseNeedText = chaseNeed,
+            RequiredRunRate = rrr,
+            TeamACaptainName = match.TeamACaptainId is Guid ac ? NameOf(ac) : null,
+            TeamBCaptainName = match.TeamBCaptainId is Guid bc ? NameOf(bc) : null,
             Innings = sections
         });
+    }
+
+    private static (bool IsChase, string ChaseNeed, string RequiredRunRate) ComputeChase(
+        Match match, IReadOnlyList<Innings> innings)
+    {
+        if (match.Status != MatchStatus.InProgress)
+            return (false, string.Empty, "-");
+
+        var liveInn = innings.LastOrDefault(i => !i.IsCompleted);
+        if (liveInn is null)
+            return (false, string.Empty, "-");
+
+        var currentRuns = liveInn.Deliveries.Sum(d => d.RunsOffBat + d.ExtraRuns);
+        var legal = liveInn.Deliveries.Count(d => d.IsLegalDelivery);
+        var matchLegal = innings.Sum(i => i.Deliveries.Count(d => d.IsLegalDelivery));
+        var remaining = OversRules.BallsRemaining(match.OversMode, match.OversLimit, legal, matchLegal);
+
+        int InnRuns(Innings inn) => inn.Deliveries.Sum(d => d.RunsOffBat + d.ExtraRuns);
+        int CompletedTeamRuns(Guid teamId) => innings
+            .Where(i => i.BattingTeamId == teamId && i.Id != liveInn.Id)
+            .Sum(InnRuns);
+
+        static string NeedText(int target, int need, int? ballsRemaining, Models.OversMode mode)
+        {
+            if (need == 0)
+                return $"Target {target} achieved";
+            if (mode == Models.OversMode.Unlimited || ballsRemaining is null)
+                return $"Need {need} runs  ·  Target {target}";
+            var oversLeft = $"{ballsRemaining.Value / 6}.{ballsRemaining.Value % 6}";
+            return $"Need {need} from {ballsRemaining} balls ({oversLeft} ov)  ·  Target {target}";
+        }
+
+        static string Rate(int need, int? ballsRemaining)
+        {
+            if (need == 0)
+                return "0.00";
+            if (ballsRemaining is not int left || left <= 0)
+                return "-";
+            return Math.Round(need * 6.0 / left, 2).ToString("0.00");
+        }
+
+        if (match.Format == MatchFormat.SingleInning && liveInn.InningsNumber == 2)
+        {
+            var first = innings.FirstOrDefault(i => i.InningsNumber == 1);
+            var target = (first is null ? 0 : InnRuns(first)) + 1;
+            var need = Math.Max(0, target - currentRuns);
+            return (true, NeedText(target, need, remaining, match.OversMode), Rate(need, remaining));
+        }
+
+        if (match.Format == MatchFormat.DoubleInnings && liveInn.InningsNumber >= 4)
+        {
+            var inningsTarget = CompletedTeamRuns(liveInn.BowlingTeamId) - CompletedTeamRuns(liveInn.BattingTeamId) + 1;
+            if (inningsTarget < 1)
+                inningsTarget = 1;
+            var need = Math.Max(0, inningsTarget - currentRuns);
+            return (true, NeedText(inningsTarget, need, remaining, match.OversMode), Rate(need, remaining));
+        }
+
+        return (false, string.Empty, "-");
+    }
+
+    private static OverBallMarkDto ToOverBallDto(Delivery d)
+    {
+        if (d.IsWicket)
+            return new OverBallMarkDto { Text = "W", Kind = "wicket" };
+        if (d.ExtraType == ExtraType.Wide)
+            return new OverBallMarkDto { Text = "wd", Kind = "extra" };
+        if (d.ExtraType == ExtraType.NoBall)
+            return new OverBallMarkDto { Text = "nb", Kind = "extra" };
+        var runs = d.RunsOffBat + (d.ExtraType is ExtraType.Bye or ExtraType.LegBye ? d.ExtraRuns : 0);
+        if (runs >= 6)
+            return new OverBallMarkDto { Text = "6", Kind = "six" };
+        if (runs == 4)
+            return new OverBallMarkDto { Text = "4", Kind = "four" };
+        if (runs == 0)
+            return new OverBallMarkDto { Text = "•", Kind = "dot" };
+        return new OverBallMarkDto { Text = runs.ToString(), Kind = "run" };
+    }
+
+    private static string FormatExtrasBreakdown(IReadOnlyList<Delivery> balls)
+    {
+        var total = balls.Sum(d => d.ExtraRuns);
+        if (total == 0)
+            return "Extras 0";
+        var wd = balls.Where(d => d.ExtraType == ExtraType.Wide).Sum(d => d.ExtraRuns);
+        var nb = balls.Where(d => d.ExtraType == ExtraType.NoBall).Sum(d => d.ExtraRuns);
+        var b = balls.Where(d => d.ExtraType == ExtraType.Bye).Sum(d => d.ExtraRuns);
+        var lb = balls.Where(d => d.ExtraType == ExtraType.LegBye).Sum(d => d.ExtraRuns);
+        var bits = new List<string>();
+        if (wd > 0) bits.Add($"wd {wd}");
+        if (nb > 0) bits.Add($"nb {nb}");
+        if (b > 0) bits.Add($"b {b}");
+        if (lb > 0) bits.Add($"lb {lb}");
+        return bits.Count == 0 ? $"Extras {total}" : $"Extras {total} ({string.Join(", ", bits)})";
+    }
+
+    private static string FormatFallOfWickets(IReadOnlyList<Delivery> balls, Func<Guid, string> nameOf)
+    {
+        var runs = 0;
+        var wkts = 0;
+        var legal = 0;
+        var parts = new List<string>();
+        foreach (var d in balls)
+        {
+            runs += d.RunsOffBat + d.ExtraRuns;
+            if (d.IsLegalDelivery)
+                legal++;
+            if (!d.IsWicket)
+                continue;
+            wkts++;
+            var whoId = d.DismissedPlayerId is Guid id && id != Guid.Empty ? id : d.BatterId;
+            parts.Add($"{runs}/{wkts} ({nameOf(whoId)}, {legal / 6}.{legal % 6})");
+        }
+
+        return parts.Count == 0 ? string.Empty : $"FOW: {string.Join(" · ", parts)}";
     }
 
     private static InningsScorecardDto BuildInningsDto(
@@ -986,7 +1230,10 @@ public sealed class MatchesController : ControllerBase
             Batting = batting,
             Bowling = bowling,
             DidNotBatText = FormatDidNotLine("Did not bat", battingSquad, battingOrder),
-            DidNotBowlText = FormatDidNotLine("Did not bowl", bowlingSquad, bowlingOrder)
+            DidNotBowlText = FormatDidNotLine("Did not bowl", bowlingSquad, bowlingOrder),
+            OversFaced = $"{deliveries.Count(d => d.IsLegalDelivery) / 6}.{deliveries.Count(d => d.IsLegalDelivery) % 6}",
+            ExtrasText = FormatExtrasBreakdown(deliveries),
+            FallOfWicketsText = FormatFallOfWickets(deliveries, rawNameOf)
         };
     }
 
@@ -1282,16 +1529,19 @@ public sealed class NetSessionsController : ControllerBase
             /* roster optional */
         }
 
-        var missing = deliveries
-            .SelectMany(d => new[] { d.BatterId, d.BowlerId, d.DismissedPlayerId ?? Guid.Empty, d.FielderId ?? Guid.Empty })
-            .Where(id => id != Guid.Empty && !names.ContainsKey(id))
+        var ids = names.Keys
+            .Concat(deliveries.SelectMany(d => new[]
+            {
+                d.BatterId, d.BowlerId, d.DismissedPlayerId ?? Guid.Empty, d.FielderId ?? Guid.Empty
+            }))
+            .Where(id => id != Guid.Empty)
             .Distinct()
             .ToList();
-        if (missing.Count == 0)
+        if (ids.Count == 0)
             return names;
 
         var fromDb = await _db.Players.AsNoTracking()
-            .Where(p => missing.Contains(p.Id))
+            .Where(p => ids.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
             .ConfigureAwait(false);
         foreach (var kv in fromDb)
@@ -1389,8 +1639,13 @@ public sealed class SyncController : ControllerBase
     };
 
     private readonly ApiDbContext _db;
+    private readonly ILiveFeed _live;
 
-    public SyncController(ApiDbContext db) => _db = db;
+    public SyncController(ApiDbContext db, ILiveFeed live)
+    {
+        _db = db;
+        _live = live;
+    }
 
     [HttpPost]
     public async Task<ActionResult<SyncPushResponse>> Push([FromBody] SyncPushRequest request, CancellationToken ct)
@@ -1398,11 +1653,17 @@ public sealed class SyncController : ControllerBase
         if (request.IdempotencyKey == Guid.Empty || string.IsNullOrWhiteSpace(request.EntityType))
             return BadRequest(new SyncPushResponse(false, "Invalid sync payload."));
 
+        var isLive = string.Equals(Request.Headers["X-Jpl-Live"].ToString(), "1", StringComparison.Ordinal);
+
         // Idempotent: same key = already applied.
         var exists = await _db.SyncReceipts.AnyAsync(x => x.IdempotencyKey == request.IdempotencyKey, ct)
             .ConfigureAwait(false);
         if (exists)
+        {
+            if (isLive)
+                await _live.NotifyAfterApplyAsync(request, ct).ConfigureAwait(false);
             return Ok(new SyncPushResponse(true, "Duplicate ignored."));
+        }
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
@@ -1442,6 +1703,9 @@ public sealed class SyncController : ControllerBase
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
+
+        if (isLive)
+            await _live.NotifyAfterApplyAsync(request, ct).ConfigureAwait(false);
 
         return Ok(new SyncPushResponse(true, "Applied."));
     }
@@ -1522,6 +1786,18 @@ public sealed class SyncController : ControllerBase
                 playerIds.Add(item.GetGuid());
         }
 
+        List<Guid>? playingIds = null;
+        if (root.TryGetProperty("playingPlayerIds", out var playingArr) && playingArr.ValueKind == JsonValueKind.Array)
+        {
+            playingIds = new List<Guid>();
+            foreach (var item in playingArr.EnumerateArray())
+                playingIds.Add(item.GetGuid());
+        }
+
+        playerIds = TeamRoster.Distinct(playerIds);
+        if (!TeamRoster.TryResolvePlaying(playerIds, playingIds, out var playingSet, out _))
+            playingSet = playerIds.ToHashSet();
+
         var existing = await _db.Teams.Include(t => t.TeamPlayers)
             .FirstOrDefaultAsync(t => t.Id == id, ct)
             .ConfigureAwait(false);
@@ -1540,9 +1816,14 @@ public sealed class SyncController : ControllerBase
                 CreatedAtUtc = DateTime.Now
             };
             _db.Teams.Add(team);
-            foreach (var pid in playerIds.Distinct())
+            foreach (var pid in playerIds)
             {
-                _db.TeamPlayers.Add(new TeamPlayer { TeamId = id, PlayerId = pid });
+                _db.TeamPlayers.Add(new TeamPlayer
+                {
+                    TeamId = id,
+                    PlayerId = pid,
+                    IsPlaying = playingSet.Contains(pid)
+                });
             }
             return;
         }
@@ -1561,9 +1842,17 @@ public sealed class SyncController : ControllerBase
         foreach (var remove in existing.TeamPlayers.Where(tp => !desired.Contains(tp.PlayerId)).ToList())
             _db.TeamPlayers.Remove(remove);
 
+        foreach (var tp in existing.TeamPlayers)
+            tp.IsPlaying = playingSet.Contains(tp.PlayerId);
+
         var have = existing.TeamPlayers.Select(tp => tp.PlayerId).ToHashSet();
         foreach (var add in desired.Where(pid => !have.Contains(pid)))
-            _db.TeamPlayers.Add(new TeamPlayer { TeamId = id, PlayerId = add });
+            _db.TeamPlayers.Add(new TeamPlayer
+            {
+                TeamId = id,
+                PlayerId = add,
+                IsPlaying = playingSet.Contains(add)
+            });
     }
 
     private async Task ApplyMatchAsync(SyncPushRequest request, CancellationToken ct)
@@ -1573,6 +1862,10 @@ public sealed class SyncController : ControllerBase
             var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == request.EntityId, ct).ConfigureAwait(false);
             if (match is not null)
             {
+                if (match.StartedByUserId is Guid deleteOwner
+                    && TryGetSyncCaller(out var deleteCaller)
+                    && deleteOwner != deleteCaller)
+                    throw new InvalidOperationException("Only the admin who started this match can delete it.");
                 match.IsDeleted = true;
                 match.UpdatedAtUtc = DateTime.Now;
                 match.Version++;
@@ -1588,6 +1881,12 @@ public sealed class SyncController : ControllerBase
         if (existing is null)
         {
             dto.Innings = new List<Innings>();
+            if (TryGetSyncCaller(out var creatorId))
+            {
+                dto.StartedByUserId ??= creatorId;
+                if (dto.StartedByUserId != creatorId)
+                    throw new InvalidOperationException("Only the signed-in admin can publish a new match.");
+            }
             _db.Matches.Add(dto);
             if (dto.TournamentFixtureId is Guid newFixtureId)
             {
@@ -1608,6 +1907,16 @@ public sealed class SyncController : ControllerBase
 
         if (dto.Version < existing.Version)
             return;
+
+        if (existing.StartedByUserId is Guid ownerId
+            && TryGetSyncCaller(out var callerId)
+            && ownerId != callerId)
+            throw new InvalidOperationException("Only the admin who started this match can update it.");
+
+        if (existing.StartedOnDeviceId is Guid deviceId
+            && dto.StartedOnDeviceId is Guid incomingDevice
+            && incomingDevice != deviceId)
+            throw new InvalidOperationException("This match can only be updated from the device that started it.");
 
         existing.Title = dto.Title;
         existing.TeamAId = dto.TeamAId;
@@ -1632,6 +1941,12 @@ public sealed class SyncController : ControllerBase
         existing.Version = dto.Version;
         existing.UpdatedAtUtc = dto.UpdatedAtUtc;
         existing.IsDeleted = dto.IsDeleted;
+        if (!string.IsNullOrWhiteSpace(dto.SquadRosterJson))
+            existing.SquadRosterJson = dto.SquadRosterJson;
+        if (HasJsonProperty(request.PayloadJson, "liveStreamUrl"))
+            existing.LiveStreamUrl = dto.LiveStreamUrl;
+        existing.StartedByUserId ??= dto.StartedByUserId;
+        existing.StartedOnDeviceId ??= dto.StartedOnDeviceId;
 
         if (dto.TournamentFixtureId is Guid fixtureId && dto.Status == MatchStatus.Completed)
         {
@@ -1650,11 +1965,55 @@ public sealed class SyncController : ControllerBase
         }
     }
 
+    private static bool HasJsonProperty(string json, string name)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        return false;
+    }
+
+    private bool TryGetSyncCaller(out Guid userId)
+    {
+        userId = Guid.Empty;
+        if (HttpContext.Items.TryGetValue("JplUserId", out var idObj) && idObj is Guid g && g != Guid.Empty)
+        {
+            userId = g;
+            return true;
+        }
+
+        var idText = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(idText, out userId) && userId != Guid.Empty;
+    }
+
+    private async Task EnsureMatchScoringCallerAsync(Guid matchId, CancellationToken ct)
+    {
+        if (!TryGetSyncCaller(out var callerId))
+            return;
+        var match = await _db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId && !m.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (match?.StartedByUserId is Guid ownerId && ownerId != callerId)
+            throw new InvalidOperationException("Only the admin who started this match can update it.");
+    }
+
     private async Task ApplyInningsAsync(SyncPushRequest request, CancellationToken ct)
     {
         var dto = JsonSerializer.Deserialize<Innings>(request.PayloadJson, JsonOptions)
                   ?? throw new InvalidOperationException("Invalid innings payload.");
 
+        await EnsureMatchScoringCallerAsync(dto.MatchId, ct).ConfigureAwait(false);
         await EnsureMatchPlaceholderAsync(dto.MatchId, ct).ConfigureAwait(false);
 
         var existing = await _db.Innings.FirstOrDefaultAsync(i => i.Id == dto.Id, ct).ConfigureAwait(false);
@@ -1681,13 +2040,17 @@ public sealed class SyncController : ControllerBase
         {
             var row = await _db.Deliveries.FirstOrDefaultAsync(d => d.Id == request.EntityId, ct).ConfigureAwait(false);
             if (row is not null)
+            {
+                await EnsureMatchScoringCallerAsync(row.MatchId, ct).ConfigureAwait(false);
                 _db.Deliveries.Remove(row);
+            }
             return;
         }
 
         var dto = JsonSerializer.Deserialize<Delivery>(request.PayloadJson, JsonOptions)
                   ?? throw new InvalidOperationException("Invalid delivery payload.");
 
+        await EnsureMatchScoringCallerAsync(dto.MatchId, ct).ConfigureAwait(false);
         // Isolate by MatchId + Delivery.Id — concurrent matches on other phones are untouched.
         await EnsureMatchPlaceholderAsync(dto.MatchId, ct).ConfigureAwait(false);
         await EnsureInningsPlaceholderAsync(dto.MatchId, dto.InningsId, ct).ConfigureAwait(false);
@@ -1695,7 +2058,15 @@ public sealed class SyncController : ControllerBase
         var existing = await _db.Deliveries.FirstOrDefaultAsync(d => d.Id == dto.Id, ct).ConfigureAwait(false);
         if (existing is null)
         {
-            // Guard: same innings+sequence from same device is unique; different matches have different innings ids.
+            // Undo then a new ball reuses the same innings sequence with a new Id.
+            // If the delete is still in flight, drop the old row so unique(sequence) cannot 500.
+            var clash = await _db.Deliveries.FirstOrDefaultAsync(
+                    d => d.InningsId == dto.InningsId && d.Sequence == dto.Sequence && d.Id != dto.Id,
+                    ct)
+                .ConfigureAwait(false);
+            if (clash is not null)
+                _db.Deliveries.Remove(clash);
+
             dto.Innings = null!;
             _db.Deliveries.Add(dto);
             return;
@@ -1780,6 +2151,13 @@ public sealed class SyncController : ControllerBase
         var existing = await _db.NetDeliveries.FirstOrDefaultAsync(d => d.Id == dto.Id, ct).ConfigureAwait(false);
         if (existing is null)
         {
+            var clash = await _db.NetDeliveries.FirstOrDefaultAsync(
+                    d => d.SessionId == dto.SessionId && d.Sequence == dto.Sequence && d.Id != dto.Id,
+                    ct)
+                .ConfigureAwait(false);
+            if (clash is not null)
+                _db.NetDeliveries.Remove(clash);
+
             dto.Session = null!;
             _db.NetDeliveries.Add(dto);
             return;
@@ -1887,10 +2265,31 @@ public sealed class StatsController : ControllerBase
             .ConfigureAwait(false));
     }
 
-    /// <summary>Batting / Bowling / All-rounder / Fielder rankings from server DB.</summary>
+    /// <summary>Batting / Bowling / All-rounder / Fielder / Captain / Team rankings from server DB.</summary>
     [HttpGet("rankings")]
-    public async Task<ActionResult<RankingsDto>> Rankings(CancellationToken ct)
-        => Ok(await StatsCalculator.BuildRankingsAsync(_db, ct).ConfigureAwait(false));
+    public async Task<ActionResult<RankingsDto>> Rankings(
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toExclusiveUtc,
+        CancellationToken ct)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        return Ok(await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>Team table from all completed matches. Win 2 · Tie 1 · then NRR.</summary>
+    [HttpGet("team-rankings")]
+    public async Task<ActionResult<IReadOnlyList<RankingRowDto>>> TeamRankings(
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toExclusiveUtc,
+        CancellationToken ct)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        return Ok(await StatsCalculator.BuildTeamRankingsAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false));
+    }
 
     [HttpGet("players/{playerId:guid}")]
     public async Task<ActionResult<PlayerCareerDto>> Player(
@@ -2467,11 +2866,9 @@ public sealed class VenuesController : ControllerBase
             .ConfigureAwait(false);
         if (entity is null) return NotFound();
 
-        var inUse = await _db.VenueBookings.AsNoTracking()
-            .AnyAsync(b => !b.IsDeleted && b.VenueId == id, ct)
-            .ConfigureAwait(false);
-        if (inUse)
-            return BadRequest(new { message = "Venue is used by venue bookings and cannot be deleted." });
+        var block = await DeleteConstraints.VenueAsync(_db, id, ct).ConfigureAwait(false);
+        if (block is not null)
+            return BadRequest(block);
 
         entity.IsDeleted = true;
         entity.UpdatedAtUtc = DateTime.Now;
@@ -3054,14 +3451,14 @@ public sealed class TournamentsController : ControllerBase
                 .ConfigureAwait(false);
         var matchById = matches.ToDictionary(m => m.Id);
 
-        var completedIds = matches
-            .Where(m => m.Status == MatchStatus.Completed)
+        var scoredIds = matches
+            .Where(m => m.Status is MatchStatus.Completed or MatchStatus.InProgress)
             .Select(m => m.Id)
             .ToList();
-        var innsByMatch = completedIds.Count == 0
+        var innsByMatch = scoredIds.Count == 0
             ? new Dictionary<Guid, List<Innings>>()
             : (await _db.Innings.AsNoTracking()
-                    .Where(i => completedIds.Contains(i.MatchId))
+                    .Where(i => scoredIds.Contains(i.MatchId))
                     .Include(i => i.Deliveries)
                     .ToListAsync(ct)
                     .ConfigureAwait(false))
@@ -3146,8 +3543,8 @@ public sealed class TournamentsController : ControllerBase
                     var bName = names.GetValueOrDefault(match.TeamBId, teamBName);
                     (resultText, _) = FixtureBuildResult(
                         match, aName, bName, aRuns, aWkts, bRuns, bWkts, firstBat,
-                        squadCounts.GetValueOrDefault(match.TeamAId),
-                        squadCounts.GetValueOrDefault(match.TeamBId));
+                        MatchSquadSnapshot.SizeFor(match.SquadRosterJson, match.TeamAId, true, squadCounts.GetValueOrDefault(match.TeamAId)),
+                        MatchSquadSnapshot.SizeFor(match.SquadRosterJson, match.TeamBId, false, squadCounts.GetValueOrDefault(match.TeamBId)));
                     if (string.Equals(resultText, "Match tied — both teams level", StringComparison.Ordinal)
                         && f.Stage != TournamentFixtureStage.Group)
                     {
@@ -3159,6 +3556,13 @@ public sealed class TournamentsController : ControllerBase
                             resultText = $"Match tied — {advName} advances (group Pts/NRR)";
                         }
                     }
+                }
+                else if (match is { Status: MatchStatus.InProgress }
+                         && innsByMatch.TryGetValue(match.Id, out var liveInns))
+                {
+                    var (aRuns, aWkts) = FixtureTeamTotals(liveInns, match.TeamAId);
+                    var (bRuns, bWkts) = FixtureTeamTotals(liveInns, match.TeamBId);
+                    resultText = $"LIVE · {aRuns}/{aWkts} vs {bRuns}/{bWkts}";
                 }
 
                 var teamsReady = f.TeamAId is Guid && f.TeamBId is Guid;
@@ -3190,9 +3594,8 @@ public sealed class TournamentsController : ControllerBase
                     CanStart = teamsReady
                                && f.MatchId is null
                                && (t.Status is TournamentStatus.Scheduled or TournamentStatus.InProgress),
-                    CanResume = (ms is MatchStatus.Setup or MatchStatus.InProgress)
-                                && t.Status is not TournamentStatus.Draft,
-                    CanOpenScorecard = ms == MatchStatus.Completed
+                    CanResume = false,
+                    CanOpenScorecard = ms is MatchStatus.Completed or MatchStatus.InProgress or MatchStatus.Setup
                 };
             }).ToList(),
             Standings = standingDtos

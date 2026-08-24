@@ -62,6 +62,8 @@ public sealed class TeamPlayer
     public Guid PlayerId { get; set; }
     public Player Player { get; set; } = null!;
     public DateTime JoinedAtUtc { get; set; } = DateTime.Now;
+    /// <summary>True = in the current playing list for the next match. False = squad/bench only.</summary>
+    public bool IsPlaying { get; set; } = true;
 }
 
 public sealed class SyncReceipt
@@ -110,6 +112,10 @@ public sealed class Match
     public bool IsDeleted { get; set; }
     /// <summary>Optional playing XI snapshot for this match. When set, scorecard Did-not-bat uses it instead of the live team roster.</summary>
     public string? SquadRosterJson { get; set; }
+    /// <summary>Optional YouTube/Facebook/https live telecast URL shown in an iframe with the live score.</summary>
+    public string? LiveStreamUrl { get; set; }
+    public Guid? StartedByUserId { get; set; }
+    public Guid? StartedOnDeviceId { get; set; }
     public ICollection<Innings> Innings { get; set; } = new List<Innings>();
 }
 

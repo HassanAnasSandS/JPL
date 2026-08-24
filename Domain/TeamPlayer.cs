@@ -12,4 +12,7 @@ public sealed class TeamPlayer
     public Player Player { get; set; } = null!;
 
     public DateTime JoinedAtUtc { get; set; } = DateTime.Now;
+
+    /// <summary>True = in the current playing list for the next match. False = squad/bench only.</summary>
+    public bool IsPlaying { get; set; } = true;
 }

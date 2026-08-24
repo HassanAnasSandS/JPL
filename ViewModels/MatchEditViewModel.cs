@@ -61,6 +61,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     [ObservableProperty] private bool isSeriesMatch;
     [ObservableProperty] private bool lockMatchSettings;
     [ObservableProperty] private string pageTitle = "New match";
+    [ObservableProperty] private string liveStreamUrl = string.Empty;
 
     public bool CanChangeTeams => !IsTournamentMatch && !IsSeriesMatch;
     public bool CanEditMatchSettings => !LockMatchSettings;
@@ -71,6 +72,11 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         : OversAreMatchTotal
             ? OversMode.MatchTotal
             : OversMode.PerInnings;
+
+    public string TeamAPlayingHint => PlayingHint(TeamA);
+    public string TeamBPlayingHint => PlayingHint(TeamB);
+    public bool HasTeamAPlayingHint => !string.IsNullOrEmpty(TeamAPlayingHint);
+    public bool HasTeamBPlayingHint => !string.IsNullOrEmpty(TeamBPlayingHint);
 
     /// <summary>True when the coin landed on Heads.</summary>
     public bool LastCoinWasHeads { get; private set; } = true;
@@ -159,6 +165,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         ClearToss();
         RefreshTossAvailability();
         NotifyCallSides();
+        OnPropertyChanged(nameof(TeamAPlayingHint));
+        OnPropertyChanged(nameof(HasTeamAPlayingHint));
     }
 
     partial void OnTeamBChanged(TeamListItem? value)
@@ -166,6 +174,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         ClearToss();
         RefreshTossAvailability();
         NotifyCallSides();
+        OnPropertyChanged(nameof(TeamBPlayingHint));
+        OnPropertyChanged(nameof(HasTeamBPlayingHint));
     }
 
     partial void OnTeamAIsHeadsChanged(bool value)
@@ -379,6 +389,17 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null)
         {
+            if (!active.IsScoringOwner)
+            {
+                await Shell.Current.DisplayAlert(
+                    "View only",
+                    ScoringOwnership.OtherAccountMessage,
+                    "OK").ConfigureAwait(true);
+                await Shell.Current.GoToAsync("..").ConfigureAwait(true);
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}").ConfigureAwait(true);
+                return;
+            }
+
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time in this league on this device. Finish or complete \"{active.Title}\" first.",
@@ -581,7 +602,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
                 _tournamentFixtureId,
                 _seriesId,
                 _seriesFixtureId,
-                CurrentOversMode)).ConfigureAwait(true);
+                CurrentOversMode,
+                LiveStreamUrl)).ConfigureAwait(true);
 
             if (_tournamentId is Guid tid && _tournamentFixtureId is Guid fid)
             {
@@ -637,7 +659,25 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
             .ToList();
 
         if (shared.Count == 0)
+        {
+            var playingA = (detailA.PlayingPlayerIds ?? Array.Empty<Guid>()).Count;
+            var playingB = (detailB.PlayingPlayerIds ?? Array.Empty<Guid>()).Count;
+            if (playingA == 0)
+            {
+                ErrorMessage = $"{teamA.Name} has no playing players. Edit the team and set the playing list.";
+                await Shell.Current.DisplayAlert("Playing list required", ErrorMessage, "OK").ConfigureAwait(true);
+                return false;
+            }
+
+            if (playingB == 0)
+            {
+                ErrorMessage = $"{teamB.Name} has no playing players. Edit the team and set the playing list.";
+                await Shell.Current.DisplayAlert("Playing list required", ErrorMessage, "OK").ConfigureAwait(true);
+                return false;
+            }
+
             return true;
+        }
 
         var names = string.Join("\n• ", shared);
         await Shell.Current.DisplayAlert(
@@ -649,5 +689,16 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
 
         ErrorMessage = "Both teams have the same player(s). Fix squads before starting.";
         return false;
+    }
+
+    private static string PlayingHint(TeamListItem? team)
+    {
+        if (team is null)
+            return string.Empty;
+        if (team.PlayingCount > 0 && team.PlayingCount != team.PlayerCount)
+            return $"{team.PlayingCount} playing from {team.PlayerCount} squad. Edit the team to change this for the next match.";
+        if (team.PlayerCount > 0)
+            return $"{team.PlayerCount} playing. Edit the team to set a smaller playing list for the next match.";
+        return "This team has no players.";
     }
 }

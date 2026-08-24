@@ -12,11 +12,13 @@ public interface IAppNavigator
 public sealed class AppNavigator : IAppNavigator
 {
     private readonly IServiceProvider _services;
+    private readonly IAppStartupStatus _startup;
     private Window? _window;
 
-    public AppNavigator(IServiceProvider services)
+    public AppNavigator(IServiceProvider services, IAppStartupStatus startup)
     {
         _services = services;
+        _startup = startup;
     }
 
     public void Attach(Window window) => _window = window;
@@ -27,6 +29,7 @@ public sealed class AppNavigator : IAppNavigator
             return Task.CompletedTask;
 
         // Fresh login page + view-model after logout (clear any stuck busy/error state).
+        _startup.Clear();
         _window.Page = _services.GetRequiredService<Pages.LoginPage>();
         return Task.CompletedTask;
     }
@@ -91,7 +94,7 @@ public sealed class AppNavigator : IAppNavigator
 
             var matches = _services.GetRequiredService<IMatchService>();
             var active = await matches.GetActiveMatchAsync().ConfigureAwait(true);
-            if (active is null)
+            if (active is null || !active.IsScoringOwner)
                 return;
 
             if (Shell.Current is null)

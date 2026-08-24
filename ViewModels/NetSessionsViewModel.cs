@@ -73,7 +73,7 @@ public partial class NetSessionsViewModel : ObservableObject
             AddButtonText = HasActiveSession ? "Continue" : "+ Add";
             ActiveSessionHint = _active is null
                 ? null
-                : $"Live session: {_active.Name}. Finish or complete it before starting another.";
+                : $"In progress: {_active.Name}. Saved on this phone until Complete + Sync.";
             ApplyFilters();
         }
         catch (Exception ex)
@@ -127,7 +127,7 @@ public partial class NetSessionsViewModel : ObservableObject
         if (session is null)
             return;
 
-        if (!session.IsActive || !CanWrite)
+        if (!session.CanScore)
         {
             await Shell.Current.GoToAsync($"{nameof(Pages.NetSessionScorecardPage)}?id={session.Id}")
                 .ConfigureAwait(true);

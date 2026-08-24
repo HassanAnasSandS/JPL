@@ -156,14 +156,21 @@ public sealed class RankingsDto
     public IReadOnlyList<RankingRowDto> AllRounder { get; set; } = Array.Empty<RankingRowDto>();
     public IReadOnlyList<RankingRowDto> Fielder { get; set; } = Array.Empty<RankingRowDto>();
     public IReadOnlyList<RankingRowDto> Captain { get; set; } = Array.Empty<RankingRowDto>();
+    public IReadOnlyList<RankingRowDto> Team { get; set; } = Array.Empty<RankingRowDto>();
 }
 
 public static class StatsCalculator
 {
-    public static async Task<RankingsDto> BuildRankingsAsync(ApiDbContext db, CancellationToken ct)
+    public static async Task<RankingsDto> BuildRankingsAsync(
+        ApiDbContext db,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        CancellationToken ct = default)
     {
-        var board = await BuildLeaderboardAsync(db, ct: ct).ConfigureAwait(false);
-        return BuildRankingsFromBoard(board);
+        var board = await BuildLeaderboardAsync(db, fromUtc, toExclusiveUtc, ct: ct).ConfigureAwait(false);
+        var dto = BuildRankingsFromBoard(board);
+        dto.Team = await BuildTeamRankingsAsync(db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false);
+        return dto;
     }
 
     public static RankingsDto BuildRankingsFromBoard(IReadOnlyList<PlayerCareerDto> board)
@@ -188,58 +195,53 @@ public static class StatsCalculator
         static double BatPts(PlayerCareerDto p)
         {
             if (p.BallsFaced <= 0 && p.Runs <= 0) return 0;
-            var innings = Math.Max(p.InningsBatted, p.BallsFaced > 0 || p.Runs > 0 ? 1 : 0);
-            var avg = BatAvg(p);
-            var sr = BatSr(p);
-            // ICC T20 batting is 0–1000 from average, strike-rate and volume, damped until enough innings.
-            // Elite T20 reference: Avg 40, SR 140. Full rating after 20 innings (ICC T20I-style).
-            var avgF = Math.Min(avg / 40.0, 1.25);
-            var srF = Math.Min(sr / 140.0, 1.25);
-            var volF = Math.Min(p.Runs / 300.0, 1.0);
-            var index = avgF * 0.45 + srF * 0.40 + volF * 0.15;
-            var qualify = Math.Min(1.0, innings / 20.0);
-            return Math.Round(Math.Clamp(1000.0 * index * qualify, 0, 1000));
+            double pts = p.Runs + p.Twos * 0.5 + p.Threes + p.Fours + p.Fives + p.Sixes * 2
+                         + p.Fifties * 12 + p.Hundreds * 25 + p.NotOuts * 3 + p.HighestScore * 0.2;
+            if (p.BallsFaced >= 6)
+                pts += (BatSr(p) - 100) * p.BallsFaced / 200.0;
+            if (p.InningsBatted >= 2)
+                pts += (BatAvg(p) - 20) * Math.Min(p.InningsBatted, 15) * 0.35;
+            pts += p.Dots * -0.4 + p.Ducks * -6 + p.GoldenDucks * -4
+                   + p.RunOut * -3 + p.StumpedOut * -3 + p.HitWicketOut * -2
+                   + p.BowledOut * -1 + p.LbwOut * -1 + p.CaughtOut * -0.5;
+            return Math.Round(pts);
         }
 
         static double BowlPts(PlayerCareerDto p)
         {
             if (p.Wickets <= 0 && p.OversBowledBalls <= 0) return 0;
-            var avg = BowlAvg(p);
-            var econ = BowlEcon(p);
             var overs = p.OversBowledBalls / 6.0;
-            var bowlSr = p.Wickets == 0 ? double.MaxValue : p.OversBowledBalls / (double)p.Wickets;
-            // Elite T20 reference: Avg 20, Econ 7.5, SR 16 balls/wkt. Full after 15 wkts or 15 overs.
-            var avgF = avg >= double.MaxValue / 2 ? 0 : Math.Min(20.0 / Math.Max(avg, 8.0), 1.25);
-            var econF = econ >= double.MaxValue / 2 ? 0 : Math.Min(7.5 / Math.Max(econ, 4.5), 1.25);
-            var srF = p.Wickets <= 0 ? 0 : Math.Min(16.0 / Math.Max(bowlSr, 8.0), 1.25);
-            var wktsF = Math.Min(p.Wickets / 20.0, 1.0);
-            var index = avgF * 0.35 + econF * 0.35 + srF * 0.20 + wktsF * 0.10;
-            var qualify = Math.Min(1.0, Math.Max(overs / 15.0, p.Wickets / 15.0));
-            return Math.Round(Math.Clamp(1000.0 * index * qualify, 0, 1000));
+            double pts = p.Wickets * 25 + p.BowledWkts * 3 + p.LbwWkts * 2 + p.StumpedWkts * 2
+                         + p.HitWicketWkts * 2 + p.Maidens * 8 + p.DotBallsBowled * 0.35
+                         + p.HatTricks * 20 + p.BestBowlingWickets * 2;
+            if (p.OversBowledBalls >= 6)
+                pts += (8.0 - BowlEcon(p)) * overs;
+            if (p.Wickets > 0 && p.OversBowledBalls >= 6)
+                pts += (18.0 - p.OversBowledBalls / (double)p.Wickets) * p.Wickets * 0.3;
+            else if (p.Wickets == 0 && p.OversBowledBalls >= 6)
+                pts -= overs;
+            pts += p.WidesBowled * -1.5 + p.NoBallsBowled * -2 + p.ByesConceded * -0.2 + p.LegByesConceded * -0.2;
+            return Math.Round(pts);
         }
 
         static bool HasBatted(PlayerCareerDto p) => p.BallsFaced > 0 || p.Runs > 0;
         static bool HasBowled(PlayerCareerDto p) => p.OversBowledBalls > 0 || p.Wickets > 0;
 
         static double ArPts(PlayerCareerDto p)
-        {
-            if (!HasBatted(p) || !HasBowled(p)) return 0;
-            // Official ICC all-rounder rating: geometric mean of batting and bowling ratings.
-            return Math.Round(Math.Clamp(Math.Sqrt(BatPts(p) * BowlPts(p)), 0, 1000));
-        }
+            => !HasBatted(p) || !HasBowled(p) ? 0 : BatPts(p) + BowlPts(p);
 
         static double FieldPts(PlayerCareerDto p)
         {
-            if (FieldActions(p) <= 0) return 0;
-            var matches = Math.Max(p.Matches, 1);
-            var dpm = FieldActions(p) / (double)matches;
-            // ICC has no fielder table. Same 0–1000 scale: dismissals per match + volume (St weighted).
-            var rateF = Math.Min(dpm / 0.7, 1.25);
-            var volF = Math.Min(FieldActions(p) / 20.0, 1.0);
-            var stF = Math.Min(p.Stumpings / 8.0, 1.0);
-            var index = rateF * 0.60 + volF * 0.25 + stF * 0.15;
-            var qualify = Math.Min(1.0, matches / 15.0);
-            return Math.Round(Math.Clamp(1000.0 * index * qualify, 0, 1000));
+            var actions = FieldActions(p);
+            if (actions <= 0) return 0;
+            double pts = p.Catches * 10 + p.RunOutsEffected * 12 + p.Stumpings * 15;
+            if (p.Matches >= 4)
+            {
+                var expected = p.Matches * 0.25;
+                if (actions < expected)
+                    pts += (actions - expected) * 4;
+            }
+            return Math.Round(pts);
         }
 
         static double CapWinPct(PlayerCareerDto p)
@@ -249,13 +251,7 @@ public static class StatsCalculator
         static double CapPts(PlayerCareerDto p)
         {
             if (p.CaptainMatches <= 0) return 0;
-            // ICC has no captain table. Win% (tie = ½, like ICC points) + wins + games, 0–1000.
-            var winF = CapWinPct(p);
-            var winsF = Math.Min(p.CaptainWon / 15.0, 1.0);
-            var gamesF = Math.Min(p.CaptainMatches / 15.0, 1.0);
-            var index = winF * 0.70 + winsF * 0.20 + gamesF * 0.10;
-            var qualify = Math.Min(1.0, p.CaptainMatches / 10.0);
-            return Math.Round(Math.Clamp(1000.0 * index * qualify, 0, 1000));
+            return Math.Round(p.CaptainWon * 4.0 + p.CaptainTied - p.CaptainLoss * 2.0);
         }
 
         var batting = board
@@ -272,7 +268,7 @@ public static class StatsCalculator
                 PrimaryValue = BatPts(p).ToString("0"),
                 SecondaryLabel = "Avg",
                 SecondaryValue = BatAvgText(p),
-                Detail = $"Runs {p.Runs} · HS {p.HighestScoreText} · Balls {p.BallsFaced} · Avg {BatAvgText(p)} · SR {BatSr(p):0.#} · 50s {p.Fifties} · 100s {p.Hundreds} · 4s {p.Fours} · 6s {p.Sixes}",
+                Detail = $"Runs {p.Runs} · Balls {p.BallsFaced} · Avg {BatAvgText(p)} · SR {BatSr(p):0.#}",
                 SortScore = BatPts(p)
             })
             .ToList();
@@ -280,7 +276,7 @@ public static class StatsCalculator
         var bowling = board
             .Where(p => p.Wickets > 0 || p.OversBowledBalls > 0)
             .OrderByDescending(BowlPts)
-            .ThenBy(BowlAvg)
+            .ThenBy(BowlEcon)
             .ThenByDescending(p => p.Wickets)
             .Select((p, i) => new RankingRowDto
             {
@@ -289,9 +285,9 @@ public static class StatsCalculator
                 PlayerName = p.PlayerName,
                 PrimaryLabel = "Pts",
                 PrimaryValue = BowlPts(p).ToString("0"),
-                SecondaryLabel = "Avg",
-                SecondaryValue = BowlAvgText(p),
-                Detail = $"Wkts {p.Wickets} · Best {p.BestBowlingText} · Overs {OversText(p)} · Runs {p.RunsConceded} · Avg {BowlAvgText(p)} · SR {BowlSrText(p)} · Econ {EconText(p)} · Maidens {p.Maidens} · Dots {p.DotBallsBowled}",
+                SecondaryLabel = "Econ",
+                SecondaryValue = EconText(p),
+                Detail = $"Wkts {p.Wickets} · Overs {OversText(p)} · Balls {p.OversBowledBalls} · Runs {p.RunsConceded} · Econ {EconText(p)} · SR {BowlSrText(p)} · Avg {BowlAvgText(p)}",
                 SortScore = BowlPts(p)
             })
             .ToList();
@@ -310,7 +306,7 @@ public static class StatsCalculator
                 PrimaryValue = ArPts(p).ToString("0"),
                 SecondaryLabel = "B/Bowl",
                 SecondaryValue = $"{BatPts(p):0}/{BowlPts(p):0}",
-                Detail = $"ICC √(Bat×Bowl) · Bat {BatPts(p):0} · Bowl {BowlPts(p):0} · Runs {p.Runs} · Wkts {p.Wickets} · Overs {OversText(p)}",
+                Detail = $"Bat {BatPts(p):0} + Bowl {BowlPts(p):0} · Runs {p.Runs} · Wkts {p.Wickets} · Overs {OversText(p)}",
                 SortScore = ArPts(p)
             })
             .ToList();
@@ -362,6 +358,157 @@ public static class StatsCalculator
             Fielder = fielder,
             Captain = captain
         };
+    }
+
+    /// <summary>League table across all completed matches (standalone, tournament, series). Win 2 · Tie 1.</summary>
+    public static async Task<IReadOnlyList<RankingRowDto>> BuildTeamRankingsAsync(
+        ApiDbContext db,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        CancellationToken ct = default)
+    {
+        var matchQuery = db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted);
+        if (fromUtc is DateTime from)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc >= from);
+        if (toExclusiveUtc is DateTime to)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc < to);
+
+        var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
+        if (matches.Count == 0)
+            return Array.Empty<RankingRowDto>();
+
+        var matchIds = matches.Select(m => m.Id).ToList();
+        var innings = await db.Innings.AsNoTracking()
+            .Where(i => matchIds.Contains(i.MatchId))
+            .Include(i => i.Deliveries)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
+        var names = await db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+
+        var rows = new Dictionary<Guid, TeamAccum>();
+        foreach (var match in matches)
+        {
+            innsByMatch.TryGetValue(match.Id, out var inns);
+            inns ??= new List<Innings>();
+
+            var a = GetOrAdd(rows, match.TeamAId, names);
+            var b = GetOrAdd(rows, match.TeamBId, names);
+            var (aRuns, aBalls) = TeamMatchTotals(inns, match.TeamAId);
+            var (bRuns, bBalls) = TeamMatchTotals(inns, match.TeamBId);
+
+            a.Played++;
+            b.Played++;
+            a.RunsFor += aRuns;
+            a.RunsAgainst += bRuns;
+            a.BallsFor += aBalls;
+            a.BallsAgainst += bBalls;
+            b.RunsFor += bRuns;
+            b.RunsAgainst += aRuns;
+            b.BallsFor += bBalls;
+            b.BallsAgainst += aBalls;
+
+            var (winner, tied) = ResolveResult(match, inns);
+            if (tied)
+            {
+                a.Tied++;
+                b.Tied++;
+                a.Points += 1;
+                b.Points += 1;
+            }
+            else if (winner == match.TeamAId)
+            {
+                a.Won++;
+                b.Lost++;
+                a.Points += 2;
+            }
+            else if (winner == match.TeamBId)
+            {
+                b.Won++;
+                a.Lost++;
+                b.Points += 2;
+            }
+        }
+
+        static double Nrr(TeamAccum t)
+        {
+            var of = t.BallsFor <= 0 ? 0 : t.RunsFor / (t.BallsFor / 6.0);
+            var oa = t.BallsAgainst <= 0 ? 0 : t.RunsAgainst / (t.BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+
+        static string NrrText(TeamAccum t) => Nrr(t).ToString("+0.000;-0.000;0.000");
+        static string WinPctText(TeamAccum t)
+            => t.Played == 0 ? "-" : (((t.Won + t.Tied * 0.5) / t.Played) * 100).ToString("0.#") + "%";
+
+        return rows.Values
+            .Where(t => t.Played > 0)
+            .Select(t =>
+            {
+                var nrr = Nrr(t);
+                var pts = t.Won * 2 + t.Tied - t.Lost + (int)Math.Round(nrr * 10);
+                return (t, nrr, pts);
+            })
+            .OrderByDescending(x => x.pts)
+            .ThenByDescending(x => x.nrr)
+            .ThenByDescending(x => x.t.Won)
+            .ThenByDescending(x => x.t.RunsFor)
+            .ThenBy(x => x.t.Name, StringComparer.OrdinalIgnoreCase)
+            .Select((x, i) => new RankingRowDto
+            {
+                Rank = i + 1,
+                PlayerId = x.t.TeamId,
+                PlayerName = x.t.Name,
+                PrimaryLabel = "Pts",
+                PrimaryValue = x.pts.ToString(),
+                SecondaryLabel = "NRR",
+                SecondaryValue = NrrText(x.t),
+                Detail = $"P {x.t.Played} · W {x.t.Won} · L {x.t.Lost} · T {x.t.Tied} · Win% {WinPctText(x.t)} · NRR {NrrText(x.t)}",
+                SortScore = x.pts
+            })
+            .ToList();
+    }
+
+    private sealed class TeamAccum
+    {
+        public Guid TeamId { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public int Played { get; set; }
+        public int Won { get; set; }
+        public int Lost { get; set; }
+        public int Tied { get; set; }
+        public int Points { get; set; }
+        public int RunsFor { get; set; }
+        public int RunsAgainst { get; set; }
+        public int BallsFor { get; set; }
+        public int BallsAgainst { get; set; }
+    }
+
+    private static TeamAccum GetOrAdd(Dictionary<Guid, TeamAccum> rows, Guid teamId, Dictionary<Guid, string> names)
+    {
+        if (rows.TryGetValue(teamId, out var existing))
+            return existing;
+        var created = new TeamAccum
+        {
+            TeamId = teamId,
+            Name = names.GetValueOrDefault(teamId, "?")
+        };
+        rows[teamId] = created;
+        return created;
+    }
+
+    private static (int Runs, int Balls) TeamMatchTotals(List<Innings> inns, Guid teamId)
+    {
+        var teamInns = inns.Where(i => i.BattingTeamId == teamId).ToList();
+        var runs = teamInns.Sum(i => i.Deliveries.Sum(d => d.RunsOffBat + d.ExtraRuns));
+        var balls = teamInns.Sum(i => i.Deliveries.Count(d => d.IsLegalDelivery));
+        return (runs, balls);
     }
 
     public static async Task<IReadOnlyList<PlayerCareerDto>> BuildLeaderboardAsync(

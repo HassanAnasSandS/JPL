@@ -26,10 +26,12 @@
 
                     <VerticalStackLayout Spacing="12" IsVisible="{Binding HasScorecard}">
                         <VerticalStackLayout Spacing="2">
-                            <Label Text="{Binding Title}"
-                                   FontSize="22"
-                                   FontAttributes="Bold"
-                                   TextColor="{StaticResource Primary}" />
+                            <HorizontalStackLayout Spacing="8">
+                                <Label Text="{Binding Title}"
+                                       FontSize="22"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Primary}" />
+                            </HorizontalStackLayout>
                             <Label Text="{Binding MetaLine}" Style="{StaticResource MutedLabel}" />
                         </VerticalStackLayout>
 

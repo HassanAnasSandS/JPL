@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace JPL.Domain;
 
 public interface ILeagueScoped
@@ -18,4 +20,13 @@ public sealed class League
     public byte[]? ImageBytes { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
+
+    [NotMapped]
+    public int LiveMatchCount { get; set; }
+
+    [NotMapped]
+    public int LiveNetsCount { get; set; }
+
+    [NotMapped]
+    public bool HasLive => LiveMatchCount > 0;
 }

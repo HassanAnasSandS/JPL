@@ -83,10 +83,24 @@ public sealed class StatsService : IStatsService
         CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
-        // Always derive rankings on the client so UI formulas/details stay current
-        // even when the API process is an older build.
-        var board = await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId: null, source: "matches", ct: ct).ConfigureAwait(false);
-        return RankingsBuilder.FromLeaderboard(board);
+        // Always derive player rankings on the client so UI formulas/details stay current
+        // even when the API process is an older build. Team table needs match results from API.
+        var board = await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId: null, source: "matches", ct: ct)
+            .ConfigureAwait(false);
+        var bundle = RankingsBuilder.FromLeaderboard(board);
+        try
+        {
+            bundle.Team = await _api.GetTeamRankingsAsync(fromUtc, toExclusiveUtc, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            bundle.Team = Array.Empty<RankingRow>();
+        }
+        return bundle;
     }
 
     private Task FlushCompletedMatchesAsync(CancellationToken ct)
@@ -105,7 +119,7 @@ public sealed class StatsService : IStatsService
         if (matchId is Guid mid)
         {
             q = q.Where(d => d.MatchId == mid);
-            var squad = _squadCache.TryGet(mid) ?? await _squadCache.WarmAsync(mid, ct).ConfigureAwait(false);
+            var squad = await _squadCache.WarmAsync(mid, ct).ConfigureAwait(false);
             batterName = squad.NameOf(batterId);
             bowlerName = squad.NameOf(bowlerId);
         }

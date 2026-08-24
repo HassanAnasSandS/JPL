@@ -58,6 +58,10 @@ public sealed class SeriesFixtureItem
     public bool CanOpenScorecard { get; set; }
     public string VsLine => $"{TeamAName}  vs  {TeamBName}";
     public bool HasResult => !string.IsNullOrWhiteSpace(ResultText);
+    public string ScorecardLabel =>
+        string.Equals(MatchStatusText, "Live", StringComparison.OrdinalIgnoreCase)
+            ? "Main Score"
+            : "Scorecard";
 }
 
 public sealed class SeriesStandingItem
@@ -297,8 +301,8 @@ public sealed class SeriesService : ISeriesService
                 MatchStatusText = f.MatchStatusText,
                 ResultText = f.ResultText ?? string.Empty,
                 CanStart = f.CanStart,
-                CanResume = f.CanResume,
-                CanOpenScorecard = f.CanOpenScorecard
+                CanResume = false,
+                CanOpenScorecard = f.MatchId is Guid
             }).ToList(),
             Standings = dto.Standings.Select(s => new SeriesStandingItem
             {
@@ -322,8 +326,6 @@ public sealed class SeriesService : ISeriesService
             .Where(m => m.SeriesId == detail.Id)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        if (localMatches.Count == 0)
-            return;
 
         var byId = localMatches.ToDictionary(m => m.Id);
         var byFixture = localMatches
@@ -331,6 +333,8 @@ public sealed class SeriesService : ISeriesService
             .GroupBy(m => m.SeriesFixtureId!.Value)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.UpdatedAtUtc).First());
 
+        if (localMatches.Count > 0)
+        {
         var matchIds = localMatches.Select(m => m.Id).ToList();
         var innings = await db.Innings.AsNoTracking()
             .Where(i => matchIds.Contains(i.MatchId))
@@ -348,7 +352,6 @@ public sealed class SeriesService : ISeriesService
                 g => g.Select(x => (x.RunsOffBat, x.ExtraRuns, x.IsWicket, x.IsLegalDelivery)).ToList());
         var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
 
-        var draft = detail.Status == 0;
         foreach (var f in detail.Fixtures)
         {
             Match? local = null;
@@ -376,6 +379,13 @@ public sealed class SeriesService : ISeriesService
                 f.ResultText = LocalResultText(
                     local, f.TeamAName, f.TeamBName, aRuns, aWkts, bRuns, bWkts, firstBat);
             }
+            else if (local.Status == MatchStatus.InProgress
+                     && innsByMatch.TryGetValue(local.Id, out var liveInns))
+            {
+                var (aRuns, aWkts) = LocalTeamTotals(liveInns, local.TeamAId, delsByInn);
+                var (bRuns, bWkts) = LocalTeamTotals(liveInns, local.TeamBId, delsByInn);
+                f.ResultText = $"LIVE · {aRuns}/{aWkts} vs {bRuns}/{bWkts}";
+            }
             else if (local.Status == MatchStatus.Abandoned)
             {
                 f.ResultText = "No result";
@@ -384,6 +394,37 @@ public sealed class SeriesService : ISeriesService
 
         ApplyLocalStandings(detail, byId, innsByMatch, delsByInn);
 
+        var allDecided = detail.Fixtures.Count > 0 && detail.Fixtures.All(f =>
+            string.Equals(f.MatchStatusText, "Completed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(f.MatchStatusText, "Abandoned", StringComparison.OrdinalIgnoreCase));
+        if (allDecided)
+        {
+            var aWins = detail.Standings.FirstOrDefault(s => s.TeamId == detail.TeamAId)?.Won ?? 0;
+            var bWins = detail.Standings.FirstOrDefault(s => s.TeamId == detail.TeamBId)?.Won ?? 0;
+            detail.ScoreLine = $"{aWins}–{bWins}";
+            if (aWins == bWins)
+            {
+                detail.IsTied = true;
+                detail.WinnerTeamId = null;
+                detail.WinnerTeamName = "Series tied";
+                detail.ScoreLine = $"Series tied {aWins}–{bWins}";
+            }
+            else
+            {
+                detail.IsTied = false;
+                detail.WinnerTeamId = aWins > bWins ? detail.TeamAId : detail.TeamBId;
+                detail.WinnerTeamName = aWins > bWins ? detail.TeamAName : detail.TeamBName;
+            }
+
+            if (detail.Status != 3)
+            {
+                detail.Status = 3;
+                detail.StatusText = "Completed";
+            }
+        }
+        }
+
+        var draft = detail.Status == 0;
         var liveId = (await db.Matches.AsNoTracking()
                 .Where(m => m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress)
                 .ToListAsync(ct)
@@ -407,39 +448,11 @@ public sealed class SeriesService : ISeriesService
             f.CanResume = local is not null
                           && (local.Status is MatchStatus.Setup or MatchStatus.InProgress)
                           && !draft
-                          && liveId == local.Id;
-            f.CanOpenScorecard = local is { Status: MatchStatus.Completed };
+                          && liveId == local.Id
+                          && ScoringOwnership.IsOwner(local, _auth);
+            f.CanOpenScorecard = f.MatchId is Guid && !f.CanResume;
             if (f.CanResume || f.CanOpenScorecard)
                 f.CanStart = false;
-        }
-
-        var allDecided = detail.Fixtures.Count > 0 && detail.Fixtures.All(f =>
-            string.Equals(f.MatchStatusText, "Completed", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(f.MatchStatusText, "Abandoned", StringComparison.OrdinalIgnoreCase));
-        if (!allDecided)
-            return;
-
-        var aWins = detail.Standings.FirstOrDefault(s => s.TeamId == detail.TeamAId)?.Won ?? 0;
-        var bWins = detail.Standings.FirstOrDefault(s => s.TeamId == detail.TeamBId)?.Won ?? 0;
-        detail.ScoreLine = $"{aWins}–{bWins}";
-        if (aWins == bWins)
-        {
-            detail.IsTied = true;
-            detail.WinnerTeamId = null;
-            detail.WinnerTeamName = "Series tied";
-            detail.ScoreLine = $"Series tied {aWins}–{bWins}";
-        }
-        else
-        {
-            detail.IsTied = false;
-            detail.WinnerTeamId = aWins > bWins ? detail.TeamAId : detail.TeamBId;
-            detail.WinnerTeamName = aWins > bWins ? detail.TeamAName : detail.TeamBName;
-        }
-
-        if (detail.Status != 3)
-        {
-            detail.Status = 3;
-            detail.StatusText = "Completed";
         }
     }
 

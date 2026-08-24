@@ -57,6 +57,7 @@ public sealed class ApiDbContext : DbContext
             e.HasKey(x => new { x.TeamId, x.PlayerId });
             e.HasOne(x => x.Team).WithMany(t => t.TeamPlayers).HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Player).WithMany(p => p.TeamPlayers).HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.IsPlaying).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<SyncReceipt>(e =>
@@ -70,6 +71,7 @@ public sealed class ApiDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Title).HasMaxLength(160).IsRequired();
+            e.Property(x => x.LiveStreamUrl).HasMaxLength(1000);
         });
 
         modelBuilder.Entity<Innings>(e =>

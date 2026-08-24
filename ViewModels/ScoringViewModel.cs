@@ -26,6 +26,7 @@ public partial class ScoringViewModel : ObservableObject
     public ObservableCollection<SquadPlayer> Fielders { get; } = new();
     /// <summary>Striker / non-striker only — run-out "who is out" picker.</summary>
     public ObservableCollection<SquadPlayer> CreaseBatters { get; } = new();
+    public ObservableCollection<SquadPlayer> PlayerPickOptions { get; } = new();
     public ObservableCollection<BattingCardRow> BattingCard { get; } = new();
     public ObservableCollection<BowlingCardRow> BowlingCard { get; } = new();
     public ObservableCollection<SelectOption<ExtraType>> ExtraOptions { get; } = new();
@@ -60,8 +61,8 @@ public partial class ScoringViewModel : ObservableObject
     [ObservableProperty] private bool isChase;
     [ObservableProperty] private bool showRatePanel;
     [ObservableProperty] private string? errorMessage;
-    [ObservableProperty] private string syncHint = "Balls save locally; Sync pushes match data only. Players/teams use direct API.";
-    [ObservableProperty] private string completeMatchButtonText = "Complete match + Sync";
+    [ObservableProperty] private string syncHint = "Balls save locally and go live to the server. Offline balls auto-send when internet returns.";
+    [ObservableProperty] private string completeMatchButtonText = "Complete match";
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool isWicket;
@@ -73,19 +74,43 @@ public partial class ScoringViewModel : ObservableObject
     [ObservableProperty] private bool isLastBatsmanAlone;
     [ObservableProperty] private string lastBatsmanHint = string.Empty;
     [ObservableProperty] private bool isTargetAchieved;
+    [ObservableProperty] private string liveStreamUrl = string.Empty;
+    [ObservableProperty] private string liveStreamDraftUrl = string.Empty;
+    [ObservableProperty] private string? liveStreamHint;
+    [ObservableProperty] private bool isLiveStreamModalVisible;
+    [ObservableProperty] private bool isPlayerPickModalVisible;
+    [ObservableProperty] private string playerPickTitle = string.Empty;
+    [ObservableProperty] private string playerPickHint = string.Empty;
+
+    public bool HasLiveStreamHint => !string.IsNullOrWhiteSpace(LiveStreamHint);
+    public bool HasLiveStreamLink => !string.IsNullOrWhiteSpace(LiveStreamUrl);
+    public string LiveStreamButtonText => HasLiveStreamLink ? "Change Livelink" : "Add Livelink";
+    public string LiveStreamStatusText => HasLiveStreamLink ? "Live link is set" : "No live link yet";
 
     public bool ShowNonStrikerPicker => !IsLastBatsmanAlone;
-    public bool CanScoreBalls => CanWrite && !IsTargetAchieved && !IsBusy;
+    public bool CanScoreBalls => CanWrite && !IsTargetAchieved && !IsBusy && !IsPlayerPickModalVisible;
     public bool HasDidNotBat => !string.IsNullOrWhiteSpace(DidNotBatText);
     public bool HasDidNotBowl => !string.IsNullOrWhiteSpace(DidNotBowlText);
 
     private Guid _matchId;
     private bool _isTournamentMatch;
+    private bool _streamLoaded;
     /// <summary>OnAppearing re-inits the page; skip while a ball is being scored so wicket/over popups are not cancelled.</summary>
     private bool _isScoringBall;
+    private TaskCompletionSource<SquadPlayer?>? _playerPickTcs;
 
     partial void OnDidNotBatTextChanged(string value)
         => OnPropertyChanged(nameof(HasDidNotBat));
+
+    partial void OnLiveStreamHintChanged(string? value)
+        => OnPropertyChanged(nameof(HasLiveStreamHint));
+
+    partial void OnLiveStreamUrlChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasLiveStreamLink));
+        OnPropertyChanged(nameof(LiveStreamButtonText));
+        OnPropertyChanged(nameof(LiveStreamStatusText));
+    }
 
     partial void OnDidNotBowlTextChanged(string value)
         => OnPropertyChanged(nameof(HasDidNotBowl));
@@ -104,13 +129,17 @@ public partial class ScoringViewModel : ObservableObject
         ScoreCommand.NotifyCanExecuteChanged();
         if (value)
         {
-            ErrorMessage = _isTournamentMatch
-                ? "Target achieved — scoring stopped. Choose End innings or Complete match."
-                : "Target achieved — scoring stopped. Choose End innings or Complete match + Sync.";
+            ErrorMessage = "Target achieved — scoring stopped. Choose End innings or Complete match.";
         }
     }
 
     partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanScoreBalls));
+        ScoreCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsPlayerPickModalVisibleChanged(bool value)
     {
         OnPropertyChanged(nameof(CanScoreBalls));
         ScoreCommand.NotifyCanExecuteChanged();
@@ -143,7 +172,7 @@ public partial class ScoringViewModel : ObservableObject
 
     public async Task InitializeAsync(bool force)
     {
-        if (_isScoringBall && !force)
+        if ((_isScoringBall || IsPlayerPickModalVisible) && !force)
             return;
 
         if (!Guid.TryParse(MatchId, out _matchId))
@@ -159,9 +188,21 @@ public partial class ScoringViewModel : ObservableObject
             return;
         }
 
+        if (!await _matches.IsScoredOnThisDeviceAsync(_matchId).ConfigureAwait(true))
+        {
+            await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={_matchId}").ConfigureAwait(true);
+            return;
+        }
+
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null && active.Id != _matchId)
         {
+            if (!active.IsScoringOwner)
+            {
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}").ConfigureAwait(true);
+                return;
+            }
+
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time in this league on this device. Finish or complete \"{active.Title}\" first.",
@@ -185,10 +226,16 @@ public partial class ScoringViewModel : ObservableObject
         }
 
         _isTournamentMatch = ctx.IsTournamentMatch;
-        CompleteMatchButtonText = _isTournamentMatch ? "Complete match" : "Complete match + Sync";
+        CompleteMatchButtonText = "Complete match";
         SyncHint = _isTournamentMatch
-            ? "Tournament match — sync from Tournaments list after the tournament is finished."
-            : "Balls save locally; Sync pushes match data only. Players/teams use direct API.";
+            ? "Live to the server as you score. Tournament Sync on the list is only after the tournament is finished."
+            : "Live to the server as you score. If internet drops, balls stay on this phone and auto-send when it returns.";
+
+        if (!_streamLoaded)
+        {
+            LiveStreamUrl = ctx.LiveStreamUrl ?? string.Empty;
+            _streamLoaded = true;
+        }
 
         var keepStrikerId = Striker?.Id;
         var keepNonStrikerId = NonStriker?.Id;
@@ -539,7 +586,7 @@ public partial class ScoringViewModel : ObservableObject
 
             var snap = await _matches.GetLiveSnapshotAsync(_matchId).ConfigureAwait(true);
 
-            // Target chased — stop the game and offer End innings / Complete + Sync.
+            // Target chased — stop the game and offer End innings / Complete match.
             ApplyTargetAchievedFromSnapshot(snap);
             if (IsTargetAchieved)
             {
@@ -600,7 +647,7 @@ public partial class ScoringViewModel : ObservableObject
         if (!CanWrite) return;
 
         var title = string.IsNullOrWhiteSpace(ChaseNeedText) ? "Target achieved" : ChaseNeedText;
-        var completeLabel = _isTournamentMatch ? "Complete match" : "Complete match + Sync";
+        var completeLabel = "Complete match";
         var pick = await Shell.Current.DisplayActionSheet(
                 title,
                 "Later",
@@ -619,7 +666,7 @@ public partial class ScoringViewModel : ObservableObject
             await CompleteMatchAndShowScorecardAsync(askConfirm: false).ConfigureAwait(true);
     }
 
-    /// <summary>After a wicket, force selection of the incoming batsman via action sheet.</summary>
+    /// <summary>After a wicket, force selection of the incoming batsman via in-page modal.</summary>
     private async Task PromptNextBatsmanAsync(bool fillStrikerEnd)
     {
         var partnerId = fillStrikerEnd ? NonStriker?.Id : Striker?.Id;
@@ -636,34 +683,19 @@ public partial class ScoringViewModel : ObservableObject
         }
 
         var endLabel = fillStrikerEnd ? "striker" : "non-striker";
-        var labels = candidates.Select(b => b.DisplayName).ToArray();
-        var pick = await Shell.Current.DisplayActionSheet(
+        var selected = await ShowPlayerPickAsync(
                 $"Wicket — select new {endLabel}",
-                "Cancel",
-                null,
-                labels)
+                "Pick the incoming batsman. Scoring stays paused until you choose.",
+                candidates)
             .ConfigureAwait(true);
-
-        if (string.IsNullOrWhiteSpace(pick) || string.Equals(pick, "Cancel", StringComparison.Ordinal))
-        {
-            if (fillStrikerEnd) Striker = null;
-            else NonStriker = null;
-            ErrorMessage = "Select the new batsman to continue.";
-            RebuildCreaseBatters();
-            await RefreshDuelAsync().ConfigureAwait(true);
-            return;
-        }
-
-        var selected = candidates.FirstOrDefault(b =>
-                            string.Equals(b.DisplayName, pick, StringComparison.Ordinal))
-                        ?? Batters.FirstOrDefault(b =>
-                            string.Equals(b.DisplayName, pick, StringComparison.Ordinal));
 
         if (selected is null)
         {
             if (fillStrikerEnd) Striker = null;
             else NonStriker = null;
             ErrorMessage = "Select the new batsman to continue.";
+            RebuildCreaseBatters();
+            await RefreshDuelAsync().ConfigureAwait(true);
             return;
         }
 
@@ -678,7 +710,7 @@ public partial class ScoringViewModel : ObservableObject
         await RefreshScorecardAsync().ConfigureAwait(true);
     }
 
-    /// <summary>After a completed over, force selection of the next bowler via action sheet.</summary>
+    /// <summary>After a completed over, force selection of the next bowler via in-page modal.</summary>
     private async Task PromptNextBowlerAsync(Guid previousBowlerId)
     {
         if (Bowlers.Count == 0)
@@ -688,44 +720,69 @@ public partial class ScoringViewModel : ObservableObject
             return;
         }
 
-        // Prefer a different bowler for the next over (standard consecutive-overs rule).
         var candidates = Bowlers.Where(b => b.Id != previousBowlerId).ToList();
         if (candidates.Count == 0)
             candidates = Bowlers.ToList();
 
-        var labels = candidates.Select(b => b.DisplayName).ToArray();
-        var oversText = ScoreText;
-        var pick = await Shell.Current.DisplayActionSheet(
-                $"Over complete ({oversText}) — select next bowler",
-                "Cancel",
-                null,
-                labels)
+        var selected = await ShowPlayerPickAsync(
+                $"Over complete ({ScoreText}) — select next bowler",
+                "Previous bowler is hidden when another bowler is available. Scoring stays paused until you choose.",
+                candidates)
             .ConfigureAwait(true);
 
-        if (string.IsNullOrWhiteSpace(pick) || string.Equals(pick, "Cancel", StringComparison.Ordinal))
+        if (selected is null)
         {
-            // Clear so the next ball cannot be scored until a bowler is chosen.
             Bowler = null;
             ErrorMessage = "Select the next bowler to continue.";
             await RefreshDuelAsync().ConfigureAwait(true);
             return;
         }
 
-        var selected = candidates.FirstOrDefault(b =>
-                            string.Equals(b.DisplayName, pick, StringComparison.Ordinal))
-                        ?? Bowlers.FirstOrDefault(b =>
-                            string.Equals(b.DisplayName, pick, StringComparison.Ordinal));
-
-        if (selected is null)
-        {
-            Bowler = null;
-            ErrorMessage = "Select the next bowler to continue.";
-            return;
-        }
-
         Bowler = selected;
         ErrorMessage = null;
         await RefreshDuelAsync().ConfigureAwait(true);
+    }
+
+    private async Task<SquadPlayer?> ShowPlayerPickAsync(
+        string title,
+        string hint,
+        IReadOnlyList<SquadPlayer> options)
+    {
+        if (options.Count == 0)
+            return null;
+
+        _playerPickTcs?.TrySetResult(null);
+        PlayerPickTitle = title;
+        PlayerPickHint = hint;
+        PlayerPickOptions.Clear();
+        foreach (var p in options)
+            PlayerPickOptions.Add(p);
+
+        var tcs = new TaskCompletionSource<SquadPlayer?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _playerPickTcs = tcs;
+
+        // Windows DisplayActionSheet was auto-dismissing. This overlay stays until a name is tapped.
+        IsBusy = false;
+        await Task.Delay(50).ConfigureAwait(true);
+        IsPlayerPickModalVisible = true;
+
+        var picked = await tcs.Task.ConfigureAwait(true);
+        if (ReferenceEquals(_playerPickTcs, tcs))
+        {
+            IsPlayerPickModalVisible = false;
+            _playerPickTcs = null;
+            PlayerPickOptions.Clear();
+        }
+
+        return picked;
+    }
+
+    [RelayCommand]
+    private void PickPlayer(SquadPlayer? player)
+    {
+        if (player is null)
+            return;
+        _playerPickTcs?.TrySetResult(player);
     }
 
     [RelayCommand(CanExecute = nameof(CanWrite))]
@@ -873,6 +930,43 @@ public partial class ScoringViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void OpenLiveStreamModal()
+    {
+        if (!CanWrite)
+            return;
+        LiveStreamDraftUrl = LiveStreamUrl;
+        LiveStreamHint = null;
+        IsLiveStreamModalVisible = true;
+    }
+
+    [RelayCommand]
+    private void CloseLiveStreamModal()
+        => IsLiveStreamModalVisible = false;
+
+    [RelayCommand(CanExecute = nameof(CanWrite))]
+    private async Task SaveLiveStreamAsync()
+    {
+        if (!CanWrite || _matchId == Guid.Empty)
+            return;
+
+        try
+        {
+            ErrorMessage = null;
+            LiveStreamHint = null;
+            await _matches.SetLiveStreamUrlAsync(_matchId, LiveStreamDraftUrl).ConfigureAwait(true);
+            LiveStreamUrl = LiveStreamDraftUrl?.Trim() ?? string.Empty;
+            IsLiveStreamModalVisible = false;
+            LiveStreamHint = string.IsNullOrWhiteSpace(LiveStreamUrl)
+                ? "Live stream link cleared."
+                : "Live stream saved. Viewers see video + live score on the scorecard.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanWrite))]
     private Task CompleteAsync() => CompleteMatchAndShowScorecardAsync(askConfirm: true);
 
@@ -883,7 +977,7 @@ public partial class ScoringViewModel : ObservableObject
         {
             var ok = await Shell.Current.DisplayAlert(
                 "Complete match",
-                "Mark completed and sync this match to server? You will see the full scorecard next.",
+                "Mark this match completed? You will see the full scorecard next.",
                 "Yes",
                 "No").ConfigureAwait(true);
             if (!ok) return;

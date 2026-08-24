@@ -25,7 +25,64 @@ public static class MauiProgram
             })
             .ConfigureMauiHandlers(handlers =>
             {
+#if ANDROID
+                Microsoft.Maui.Handlers.ToolbarHandler.Mapper.AppendToMapping(
+                    "JplToolbarTitlePad",
+                    static (handler, _) =>
+                    {
+                        if (handler.PlatformView is not AndroidX.AppCompat.Widget.Toolbar bar)
+                            return;
+                        var density = bar.Resources?.DisplayMetrics?.Density ?? 1f;
+                        var start = (int)Math.Round(56 * density);
+                        bar.SetContentInsetsRelative(Math.Max(bar.ContentInsetStartWithNavigation, start), bar.ContentInsetEnd);
+                        bar.TitleMarginStart = (int)Math.Round(8 * density);
+                    });
+                Microsoft.Maui.Handlers.WebViewHandler.Mapper.AppendToMapping(
+                    "JplLiveStream",
+                    static (handler, _) =>
+                    {
+                        handler.PlatformView.Settings.JavaScriptEnabled = true;
+                        handler.PlatformView.Settings.DomStorageEnabled = true;
+                        handler.PlatformView.Settings.MediaPlaybackRequiresUserGesture = false;
+                        handler.PlatformView.Settings.SetSupportMultipleWindows(false);
+                        Android.Webkit.CookieManager.Instance?.SetAcceptCookie(true);
+                        Android.Webkit.CookieManager.Instance?.SetAcceptThirdPartyCookies(handler.PlatformView, true);
+                    });
+#endif
+#if IOS
+                Microsoft.Maui.Handlers.WebViewHandler.Mapper.AppendToMapping(
+                    "JplLiveStream",
+                    static (handler, _) =>
+                    {
+                        handler.PlatformView.Configuration.AllowsInlineMediaPlayback = true;
+                        handler.PlatformView.Configuration.MediaTypesRequiringUserActionForPlayback =
+                            WebKit.WKAudiovisualMediaTypes.None;
+                    });
+#endif
 #if WINDOWS
+                Microsoft.Maui.Handlers.WebViewHandler.Mapper.AppendToMapping(
+                    "JplLiveStream",
+                    static (handler, _) =>
+                    {
+                        var webView = handler.PlatformView;
+                        void Apply(Microsoft.Web.WebView2.Core.CoreWebView2 core)
+                        {
+                            core.Settings.IsWebMessageEnabled = true;
+                            core.Settings.AreDefaultScriptDialogsEnabled = true;
+                            core.Settings.UserAgent =
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+                        }
+
+                        if (webView.CoreWebView2 is not null)
+                            Apply(webView.CoreWebView2);
+                        else
+                            webView.CoreWebView2Initialized += (s, _) =>
+                            {
+                                if (s is Microsoft.UI.Xaml.Controls.WebView2 ready && ready.CoreWebView2 is not null)
+                                    Apply(ready.CoreWebView2);
+                            };
+                    });
+
                 // Ensure CollectionView / list pages can scroll with mouse wheel & touch.
                 Microsoft.Maui.Controls.Handlers.Items.CollectionViewHandler.Mapper.AppendToMapping(
                     "JplEnableScroll",
@@ -74,6 +131,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<AuthTokenStore>();
         builder.Services.AddSingleton<IAuthService, AuthService>();
         builder.Services.AddSingleton<IAuthForcedLogout, AuthForcedLogout>();
+        builder.Services.AddSingleton<IAppStartupStatus, AppStartupStatus>();
         builder.Services.AddSingleton<IAppNavigator, AppNavigator>();
         builder.Services.AddSingleton<MasterDataCache>();
 
@@ -98,6 +156,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISqlServerSyncClient, HttpSyncClient>();
 
         builder.Services.AddSingleton<IOutboxWriter, OutboxWriter>();
+        builder.Services.AddSingleton<LivePublisher>();
+        builder.Services.AddSingleton<ILivePublisher>(sp => sp.GetRequiredService<LivePublisher>());
+        builder.Services.AddSingleton<ILiveHubClient, LiveHubClient>();
         builder.Services.AddSingleton<SyncService>();
         builder.Services.AddSingleton<ISyncService>(sp => sp.GetRequiredService<SyncService>());
         builder.Services.AddSingleton<ISyncTrigger>(sp => sp.GetRequiredService<SyncService>());
@@ -137,6 +198,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<StatsViewModel>();
         builder.Services.AddSingleton<RankingsViewModel>();
         builder.Services.AddSingleton<HallOfFameViewModel>();
+        builder.Services.AddSingleton<StrengthMeterViewModel>();
         builder.Services.AddTransient<MatchScorecardViewModel>();
         builder.Services.AddSingleton<AuctionsViewModel>();
         builder.Services.AddTransient<AuctionEditViewModel>();
@@ -173,6 +235,7 @@ public static class MauiProgram
         builder.Services.AddTransient<StatsPage>();
         builder.Services.AddTransient<RankingsPage>();
         builder.Services.AddTransient<HallOfFamePage>();
+        builder.Services.AddTransient<StrengthMeterPage>();
         builder.Services.AddTransient<AuctionsPage>();
         builder.Services.AddTransient<AuctionEditPage>();
         builder.Services.AddTransient<AuctionReportPage>();
@@ -222,6 +285,7 @@ public static class MauiProgram
                     try
                     {
                         await DbBootstrap.EnsureNetSessionTablesAsync(db).ConfigureAwait(false);
+                        await DbBootstrap.EnsureLiveOutboxTableAsync(db).ConfigureAwait(false);
                     }
                     catch
                     {
@@ -231,6 +295,14 @@ public static class MauiProgram
 
                 var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
                 await auth.InitializeAsync().ConfigureAwait(false);
+                try
+                {
+                    scope.ServiceProvider.GetRequiredService<ILivePublisher>().RequestFlush();
+                }
+                catch
+                {
+                    /* live queue is best-effort */
+                }
             }
             catch
             {

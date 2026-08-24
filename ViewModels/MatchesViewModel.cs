@@ -78,10 +78,13 @@ public partial class MatchesViewModel : ObservableObject
 
             _activeMatch = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
             HasActiveMatch = _activeMatch is not null;
-            AddButtonText = HasActiveMatch ? "Continue" : "+ Add";
+            var owned = _activeMatch?.IsScoringOwner == true;
+            AddButtonText = owned ? "Continue" : "+ Add";
             ActiveMatchHint = _activeMatch is null
                 ? null
-                : $"In progress: {_activeMatch.Title}. Saved on this phone until Complete + Sync. App update keeps it — uninstall/reinstall will lose it.";
+                : owned
+                    ? $"LIVE on this device: {_activeMatch.Title}. Score goes to the server as you play. If internet drops, balls stay here and auto-send when it returns."
+                    : $"LIVE on this device: {_activeMatch.Title}. Another admin started this match — view only. You cannot continue or edit.";
         }
         catch (Exception ex)
         {
@@ -143,6 +146,16 @@ public partial class MatchesViewModel : ObservableObject
         var active = _activeMatch ?? await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null)
         {
+            if (!active.IsScoringOwner)
+            {
+                await Shell.Current.DisplayAlert(
+                    "View only",
+                    ScoringOwnership.OtherAccountMessage,
+                    "OK").ConfigureAwait(true);
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}").ConfigureAwait(true);
+                return;
+            }
+
             await Shell.Current.GoToAsync($"{nameof(Pages.ScoringPage)}?id={active.Id}").ConfigureAwait(true);
             return;
         }
@@ -155,7 +168,7 @@ public partial class MatchesViewModel : ObservableObject
     {
         if (match is null) return;
 
-        if (!match.IsActive || !CanWrite)
+        if (!match.CanScore)
         {
             await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={match.Id}").ConfigureAwait(true);
             return;
@@ -164,6 +177,16 @@ public partial class MatchesViewModel : ObservableObject
         var active = _activeMatch ?? await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null && active.Id != match.Id)
         {
+            if (!active.IsScoringOwner)
+            {
+                await Shell.Current.DisplayAlert(
+                    "View only",
+                    ScoringOwnership.OtherAccountMessage,
+                    "OK").ConfigureAwait(true);
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}").ConfigureAwait(true);
+                return;
+            }
+
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time in this league on this device. Finish or complete \"{active.Title}\" first.",

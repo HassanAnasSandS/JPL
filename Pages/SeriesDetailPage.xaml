@@ -115,6 +115,11 @@
                             <DataTemplate x:DataType="svc:SeriesFixtureItem">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Padding="0,12">
                                     <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                        <VerticalStackLayout.GestureRecognizers>
+                                            <TapGestureRecognizer
+                                                Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                CommandParameter="{Binding .}" />
+                                        </VerticalStackLayout.GestureRecognizers>
                                         <Label Text="{Binding Label}" FontSize="11" Style="{StaticResource MutedLabel}" />
                                         <Label Text="{Binding VsLine}" FontSize="14" FontAttributes="Bold"
                                                TextColor="{StaticResource Primary}" />
@@ -133,7 +138,7 @@
                                                 MinimumHeightRequest="34"
                                                 Command="{Binding BindingContext.ResumeFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                                 CommandParameter="{Binding .}" />
-                                        <Button Text="Scorecard" IsVisible="{Binding CanOpenScorecard}"
+                                        <Button Text="{Binding ScorecardLabel}" IsVisible="{Binding CanOpenScorecard}"
                                                 Style="{StaticResource GhostButton}" Padding="12,6" FontSize="11"
                                                 MinimumHeightRequest="34"
                                                 Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"

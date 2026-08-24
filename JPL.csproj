@@ -28,8 +28,8 @@
 		<ApplicationId>com.jpl.cricketscorer</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>2.19</ApplicationDisplayVersion>
-		<ApplicationVersion>30</ApplicationVersion>
+		<ApplicationDisplayVersion>1.8</ApplicationDisplayVersion>
+		<ApplicationVersion>40</ApplicationVersion>
 
 		<!-- Unpackaged desktop exe — avoids MSIX packaging issues for local debug. -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -87,6 +87,7 @@
 		  <PrivateAssets>all</PrivateAssets>
 		</PackageReference>
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="9.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Identity.Core" Version="9.0.8" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />

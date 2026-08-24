@@ -3,29 +3,41 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.RankingsPage"
              x:Name="ThisPage"
              x:DataType="vm:RankingsViewModel"
              Title="Rankings"
              HideSoftInputOnTapped="True">
 
-    <Grid Padding="14" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10">
+    <ContentPage.Resources>
+        <Style x:Key="RankTab" TargetType="Button">
+            <Setter Property="FontSize" Value="{OnIdiom Phone=11, Default=12}" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="MinimumHeightRequest" Value="{OnIdiom Phone=30, Default=36}" />
+            <Setter Property="BackgroundColor" Value="#E8EEF5" />
+            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+            <Setter Property="Padding">
+                <Setter.Value>
+                    <OnIdiom x:TypeArguments="Thickness" Phone="8,4" Default="12,6" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ContentPage.Resources>
+
+    <Grid>
+    <Grid Padding="{OnIdiom Phone=8, Default=14}" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="{OnIdiom Phone=6, Default=10}">
         <Label Text="Rankings"
-               FontSize="22"
+               FontSize="{OnIdiom Phone=18, Default=22}"
                FontAttributes="Bold"
                TextColor="{StaticResource Primary}" />
 
         <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
-            <HorizontalStackLayout Spacing="8">
+            <HorizontalStackLayout Spacing="6">
                 <Button Text="Batting"
+                        Style="{StaticResource RankTab}"
                         Command="{Binding SelectCategoryCommand}"
-                        CommandParameter="batting"
-                        Padding="14,8"
-                        FontSize="13"
-                        CornerRadius="18"
-                        MinimumHeightRequest="40"
-                        BackgroundColor="#E8EEF5"
-                        TextColor="{StaticResource Primary}">
+                        CommandParameter="batting">
                     <Button.Triggers>
                         <DataTrigger TargetType="Button" Binding="{Binding IsBatting}" Value="True">
                             <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
@@ -34,14 +46,9 @@
                     </Button.Triggers>
                 </Button>
                 <Button Text="Bowling"
+                        Style="{StaticResource RankTab}"
                         Command="{Binding SelectCategoryCommand}"
-                        CommandParameter="bowling"
-                        Padding="14,8"
-                        FontSize="13"
-                        CornerRadius="18"
-                        MinimumHeightRequest="40"
-                        BackgroundColor="#E8EEF5"
-                        TextColor="{StaticResource Primary}">
+                        CommandParameter="bowling">
                     <Button.Triggers>
                         <DataTrigger TargetType="Button" Binding="{Binding IsBowling}" Value="True">
                             <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
@@ -50,14 +57,9 @@
                     </Button.Triggers>
                 </Button>
                 <Button Text="All-Rounder"
+                        Style="{StaticResource RankTab}"
                         Command="{Binding SelectCategoryCommand}"
-                        CommandParameter="allrounder"
-                        Padding="14,8"
-                        FontSize="13"
-                        CornerRadius="18"
-                        MinimumHeightRequest="40"
-                        BackgroundColor="#E8EEF5"
-                        TextColor="{StaticResource Primary}">
+                        CommandParameter="allrounder">
                     <Button.Triggers>
                         <DataTrigger TargetType="Button" Binding="{Binding IsAllRounder}" Value="True">
                             <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
@@ -66,14 +68,9 @@
                     </Button.Triggers>
                 </Button>
                 <Button Text="Fielder"
+                        Style="{StaticResource RankTab}"
                         Command="{Binding SelectCategoryCommand}"
-                        CommandParameter="fielder"
-                        Padding="14,8"
-                        FontSize="13"
-                        CornerRadius="18"
-                        MinimumHeightRequest="40"
-                        BackgroundColor="#E8EEF5"
-                        TextColor="{StaticResource Primary}">
+                        CommandParameter="fielder">
                     <Button.Triggers>
                         <DataTrigger TargetType="Button" Binding="{Binding IsFielder}" Value="True">
                             <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
@@ -82,16 +79,22 @@
                     </Button.Triggers>
                 </Button>
                 <Button Text="Captain"
+                        Style="{StaticResource RankTab}"
                         Command="{Binding SelectCategoryCommand}"
-                        CommandParameter="captain"
-                        Padding="14,8"
-                        FontSize="13"
-                        CornerRadius="18"
-                        MinimumHeightRequest="40"
-                        BackgroundColor="#E8EEF5"
-                        TextColor="{StaticResource Primary}">
+                        CommandParameter="captain">
                     <Button.Triggers>
                         <DataTrigger TargetType="Button" Binding="{Binding IsCaptain}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Team"
+                        Style="{StaticResource RankTab}"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="team">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsTeam}" Value="True">
                             <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
                             <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                         </DataTrigger>
@@ -102,10 +105,10 @@
 
         <Border Grid.Row="2"
                 Style="{StaticResource CardBorder}"
-                Padding="10">
-            <VerticalStackLayout Spacing="8">
+                Padding="{OnIdiom Phone=6, Default=10}">
+            <VerticalStackLayout Spacing="{OnIdiom Phone=4, Default=8}">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <SearchBar Placeholder="Filter by player name"
+                    <SearchBar Placeholder="{Binding SearchPlaceholder}"
                                Text="{Binding NameFilter}"
                                CancelButtonColor="{StaticResource Primary}" />
                     <Button Grid.Column="1"
@@ -142,15 +145,8 @@
         <VerticalStackLayout Grid.Row="3" Spacing="2">
             <Label Text="{Binding CategoryTitle}"
                    FontAttributes="Bold"
-                   FontSize="16"
+                   FontSize="{OnIdiom Phone=13, Default=16}"
                    TextColor="{StaticResource TextPrimary}" />
-            <Label Text="{Binding CategoryHint}"
-                   Style="{StaticResource MutedLabel}"
-                   FontSize="12" />
-            <Label Text="{Binding DateRangeText}"
-                   FontAttributes="Bold"
-                   TextColor="{StaticResource Secondary}"
-                   FontSize="11" />
             <Label Text="{Binding ErrorMessage}"
                    IsVisible="{Binding HasError}"
                    TextColor="{StaticResource Danger}"
@@ -178,27 +174,31 @@
                     </VerticalStackLayout>
                 </CollectionView.EmptyView>
                 <CollectionView.ItemsLayout>
-                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="10" />
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="{OnIdiom Phone=5, Default=8}" />
                 </CollectionView.ItemsLayout>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="svc:RankingRow">
-                        <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <Border Style="{StaticResource CardBorder}" Padding="{OnIdiom Phone=8, Default=10}">
                             <Border.GestureRecognizers>
                                 <TapGestureRecognizer
-                                    Command="{Binding BindingContext.OpenPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                    Command="{Binding BindingContext.OpenBreakdownCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                     CommandParameter="{Binding .}" />
                             </Border.GestureRecognizers>
-                            <Grid ColumnDefinitions="48,*,Auto" ColumnSpacing="12">
-                                <Border StrokeThickness="0"
+                            <Grid ColumnDefinitions="40,*,Auto"
+                                  RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="{OnIdiom Phone=8, Default=10}"
+                                  RowSpacing="4">
+                                <Border Grid.RowSpan="2"
+                                        StrokeThickness="0"
                                         BackgroundColor="{StaticResource Primary}"
-                                        StrokeShape="RoundRectangle 10"
-                                        WidthRequest="44"
-                                        HeightRequest="44"
+                                        StrokeShape="RoundRectangle 8"
+                                        WidthRequest="{OnIdiom Phone=32, Default=40}"
+                                        HeightRequest="{OnIdiom Phone=32, Default=40}"
                                         VerticalOptions="Center"
                                         HorizontalOptions="Center">
                                     <Label Text="{Binding RankText}"
                                            FontAttributes="Bold"
-                                           FontSize="14"
+                                           FontSize="{OnIdiom Phone=11, Default=13}"
                                            TextColor="{StaticResource Secondary}"
                                            HorizontalOptions="Center"
                                            VerticalOptions="Center" />
@@ -207,23 +207,191 @@
                                 <Label Grid.Column="1"
                                        Text="{Binding PlayerName}"
                                        FontAttributes="Bold"
-                                       FontSize="16"
+                                       FontSize="{OnIdiom Phone=13, Default=15}"
                                        LineBreakMode="TailTruncation"
                                        VerticalOptions="Center"
                                        TextColor="#1565C0" />
 
                                 <Label Grid.Column="2"
+                                       Grid.RowSpan="2"
                                        Text="{Binding PrimaryLine}"
                                        FontAttributes="Bold"
-                                       FontSize="14"
+                                       FontSize="{OnIdiom Phone=12, Default=14}"
                                        VerticalOptions="Center"
                                        HorizontalTextAlignment="End"
                                        TextColor="{StaticResource Primary}" />
+
+                                <ctrl:RankBarView Grid.Row="1"
+                                                  Grid.Column="1"
+                                                  Ratio="{Binding BarRatio}"
+                                                  FillColor="{Binding BarColor}"
+                                                  HorizontalOptions="Fill"
+                                                  VerticalOptions="Center" />
                             </Grid>
                         </Border>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
             </CollectionView>
         </RefreshView>
+    </Grid>
+
+        <Grid IsVisible="{Binding IsBreakdownVisible}"
+              InputTransparent="False"
+              ZIndex="40">
+            <BoxView Color="#99000000"
+                     InputTransparent="False"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding CloseBreakdownCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark=#1B2838}"
+                    StrokeShape="RoundRectangle 18"
+                    Padding="16"
+                    Margin="18"
+                    VerticalOptions="Center"
+                    MaximumWidthRequest="460"
+                    MaximumHeightRequest="640"
+                    HorizontalOptions="Center">
+                <Grid RowDefinitions="Auto,* ,Auto" RowSpacing="10">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{Binding BreakdownRank}"
+                               FontSize="11"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}" />
+                        <Label Text="{Binding BreakdownName}"
+                               FontSize="18"
+                               FontAttributes="Bold"
+                               LineBreakMode="WordWrap"
+                               TextColor="{StaticResource TextPrimary}" />
+                        <Label Text="{Binding Breakdown.Title}"
+                               FontSize="13"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding Breakdown.NetText}"
+                               FontSize="22"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding Breakdown.Formula}"
+                               FontSize="11"
+                               LineBreakMode="WordWrap"
+                               TextColor="{StaticResource TextSecondary}" />
+                    </VerticalStackLayout>
+
+                    <ScrollView Grid.Row="1"
+                                VerticalScrollBarVisibility="Default">
+                        <VerticalStackLayout Spacing="10">
+                            <VerticalStackLayout Spacing="6"
+                                                 IsVisible="{Binding HasPositiveFactors}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Earned"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#15803D" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Breakdown.PositiveTotalText}"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#15803D" />
+                                </Grid>
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Breakdown.Positive}"
+                                                     Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:RankingFactorLine">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="#EAF7EE"
+                                                    Padding="10,8"
+                                                    StrokeShape="RoundRectangle 10">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <VerticalStackLayout Spacing="1">
+                                                        <Label Text="{Binding Label}"
+                                                               FontSize="12"
+                                                               FontAttributes="Bold"
+                                                               TextColor="{StaticResource TextPrimary}" />
+                                                        <Label Text="{Binding Stat}"
+                                                               FontSize="11"
+                                                               LineBreakMode="WordWrap"
+                                                               TextColor="{StaticResource TextSecondary}" />
+                                                    </VerticalStackLayout>
+                                                    <Label Grid.Column="1"
+                                                           Text="{Binding PointsText}"
+                                                           FontSize="13"
+                                                           FontAttributes="Bold"
+                                                           VerticalOptions="Center"
+                                                           TextColor="{Binding PointsColor}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+
+                            <VerticalStackLayout Spacing="6"
+                                                 IsVisible="{Binding HasNegativeFactors}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Negative / shortfall"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#C62828" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Breakdown.NegativeTotalText}"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#C62828" />
+                                </Grid>
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Breakdown.Negative}"
+                                                     Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:RankingFactorLine">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="#FDECEC"
+                                                    Padding="10,8"
+                                                    StrokeShape="RoundRectangle 10">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <VerticalStackLayout Spacing="1">
+                                                        <Label Text="{Binding Label}"
+                                                               FontSize="12"
+                                                               FontAttributes="Bold"
+                                                               TextColor="{StaticResource TextPrimary}" />
+                                                        <Label Text="{Binding Stat}"
+                                                               FontSize="11"
+                                                               LineBreakMode="WordWrap"
+                                                               TextColor="{StaticResource TextSecondary}" />
+                                                    </VerticalStackLayout>
+                                                    <Label Grid.Column="1"
+                                                           Text="{Binding PointsText}"
+                                                           FontSize="13"
+                                                           FontAttributes="Bold"
+                                                           VerticalOptions="Center"
+                                                           TextColor="{Binding PointsColor}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+
+                            <Label Text="{Binding Breakdown.Note}"
+                                   FontSize="11"
+                                   LineBreakMode="WordWrap"
+                                   IsVisible="{Binding HasBreakdownNote}"
+                                   TextColor="{StaticResource TextSecondary}" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+
+                    <VerticalStackLayout Grid.Row="2" Spacing="8">
+                        <Button Text="{Binding BreakdownCareerLabel}"
+                                Style="{StaticResource GoldButton}"
+                                IsVisible="{Binding CanOpenCareer}"
+                                Command="{Binding OpenCareerCommand}" />
+                        <Button Text="Close"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding CloseBreakdownCommand}" />
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </ContentPage>

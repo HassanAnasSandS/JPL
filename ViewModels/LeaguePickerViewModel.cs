@@ -11,6 +11,8 @@ public sealed class LeaguePickRow
     public Guid Id { get; init; }
     public string Name { get; init; } = string.Empty;
     public ImageSource Image { get; init; } = "cric360_logo.png";
+    public string LiveTag { get; init; } = string.Empty;
+    public bool HasLive => !string.IsNullOrWhiteSpace(LiveTag);
 }
 
 public partial class LeaguePickerViewModel : ObservableObject
@@ -52,8 +54,6 @@ public partial class LeaguePickerViewModel : ObservableObject
     [RelayCommand]
     public async Task LoadAsync()
     {
-        if (IsBusy)
-            return;
         try
         {
             IsBusy = true;
@@ -68,7 +68,8 @@ public partial class LeaguePickerViewModel : ObservableObject
                 {
                     Id = l.Id,
                     Name = l.Name,
-                    Image = LeagueImages.ToImageSource(l.ImageBytes)
+                    Image = LeagueImages.ToImageSource(l.ImageBytes),
+                    LiveTag = LiveTagFor(l)
                 });
             }
 
@@ -85,6 +86,16 @@ public partial class LeaguePickerViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private static string LiveTagFor(League l)
+    {
+        if (!l.HasLive)
+            return string.Empty;
+        var parts = new List<string>();
+        if (l.LiveMatchCount > 0)
+            parts.Add(l.LiveMatchCount == 1 ? "1 match" : $"{l.LiveMatchCount} matches");
+        return "LIVE · " + string.Join(" · ", parts);
     }
 
     [RelayCommand]

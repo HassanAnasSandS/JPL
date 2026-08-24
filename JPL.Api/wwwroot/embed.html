@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <title>JPL Live</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #0d1b2a;
+      --line: #243447;
+      --gold: #d4af37;
+      --red: #c62828;
+      --text: #f4f7fb;
+      --muted: #8fa3b8;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font-family: Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .wrap { display: flex; flex-direction: column; min-height: 100vh; }
+    .score {
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px 12px;
+    }
+    .livechip {
+      display: inline-block; background: var(--red); color: #fff;
+      font-size: 11px; font-weight: 800; letter-spacing: .08em;
+      padding: 3px 8px; border-radius: 8px; margin-bottom: 8px;
+    }
+    .title { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+    .teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+    .team { min-width: 0; }
+    .team.right { text-align: right; }
+    .name { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .runs { font-size: 28px; font-weight: 800; color: var(--gold); line-height: 1.1; }
+    .vs {
+      background: #243447; color: var(--gold); font-size: 11px; font-weight: 800;
+      padding: 6px 10px; border-radius: 16px;
+    }
+    .status { text-align: center; margin-top: 8px; font-size: 13px; font-weight: 700; }
+    .ticker {
+      margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+      font-size: 12px; color: var(--muted);
+    }
+    .ticker b { color: var(--text); }
+    .video {
+      position: relative; width: 100%; background: #000;
+      aspect-ratio: 16 / 9;
+    }
+    html.video-only, html.video-only body { height: 100%; overflow: hidden; background: #000; }
+    html.video-only .score { display: none !important; }
+    html.video-only .wrap { display: block; min-height: 100%; }
+    html.video-only .video {
+      position: fixed; inset: 0; aspect-ratio: auto; min-height: 100%;
+    }
+    .video iframe, .video .empty {
+      position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+    }
+    .empty {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px; padding: 16px; text-align: center;
+    }
+    @media (min-width: 860px) {
+      .wrap { flex-direction: row; min-height: 100vh; }
+      .video { flex: 1.6; aspect-ratio: auto; min-height: 100vh; }
+      .score { flex: 1; border-bottom: 0; border-left: 1px solid var(--line); padding: 18px; }
+      .runs { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="video" id="video">
+      <div class="empty" id="videoEmpty">Waiting for live stream link…</div>
+    </div>
+    <aside class="score">
+      <div class="livechip" id="chip">LIVE</div>
+      <p class="title" id="title">Loading match…</p>
+      <div class="teams">
+        <div class="team">
+          <div class="name" id="aName">Team A</div>
+          <div class="runs" id="aScore">0/0</div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="team right">
+          <div class="name" id="bName">Team B</div>
+          <div class="runs" id="bScore">0/0</div>
+        </div>
+      </div>
+      <div class="status" id="result">LIVE</div>
+      <div class="ticker" id="ticker"></div>
+    </aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+  <script>
+    const leagueId = "{{LEAGUE_ID}}";
+    const matchId = "{{MATCH_ID}}";
+    let lastEmbed = "";
+    let iframeEl = null;
+    if (new URLSearchParams(location.search).get("video") === "1")
+      document.documentElement.classList.add("video-only");
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value || "";
+    }
+
+    function render(d) {
+      setText("title", d.title);
+      setText("aName", d.teamAName);
+      setText("bName", d.teamBName);
+      setText("aScore", d.teamAScore);
+      setText("bScore", d.teamBScore);
+      setText("result", d.resultText || "LIVE");
+      const chip = document.getElementById("chip");
+      chip.style.display = d.status === 1 ? "inline-block" : "none";
+      chip.textContent = d.hasStream ? "LIVE · STREAM + SCORE" : "LIVE · SCORE";
+
+      const bits = [];
+      if (d.battingTeamName && d.inningsScore)
+        bits.push("<b>" + d.battingTeamName + "</b> " + d.inningsScore + (d.oversText ? " (" + d.oversText + " ov)" : ""));
+      if (d.strikerText) bits.push(d.strikerText);
+      if (d.nonStrikerText) bits.push(d.nonStrikerText);
+      if (d.bowlerText) bits.push("Bowling: " + d.bowlerText);
+      document.getElementById("ticker").innerHTML = bits.join(" · ");
+
+      if (d.embedSrc && d.embedSrc !== lastEmbed) {
+        lastEmbed = d.embedSrc;
+        const box = document.getElementById("video");
+        box.innerHTML = "";
+        iframeEl = document.createElement("iframe");
+        iframeEl.src = withYouTubeOrigin(d.embedSrc);
+        iframeEl.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+        iframeEl.referrerPolicy = "strict-origin-when-cross-origin";
+        iframeEl.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen");
+        iframeEl.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen";
+        iframeEl.allowFullscreen = true;
+        iframeEl.setAttribute("allowfullscreen", "");
+        iframeEl.setAttribute("frameborder", "0");
+        box.appendChild(iframeEl);
+      }
+    }
+
+    function withYouTubeOrigin(src) {
+      try {
+        const u = new URL(src, location.href);
+        if (!/youtube\.com|youtu\.be/i.test(u.hostname))
+          return src;
+        u.searchParams.set("origin", location.origin);
+        u.searchParams.set("widget_referrer", location.origin);
+        u.searchParams.set("enablejsapi", "1");
+        u.searchParams.set("mute", "0");
+        u.searchParams.set("autoplay", "1");
+        return u.toString();
+      } catch {
+        return src;
+      }
+    }
+
+    async function load() {
+      try {
+        const r = await fetch("/api/public/leagues/" + leagueId + "/matches/" + matchId, { cache: "no-store" });
+        if (!r.ok) throw new Error("not found");
+        render(await r.json());
+      } catch (e) {
+        setText("title", "Live score unavailable");
+      }
+    }
+
+    async function connectHub() {
+      try {
+        const conn = new signalR.HubConnectionBuilder()
+          .withUrl("/hubs/live")
+          .withAutomaticReconnect()
+          .build();
+        conn.on("matchUpdated", () => load());
+        await conn.start();
+        await conn.invoke("JoinMatch", matchId);
+      } catch (e) {
+        /* REST poll below */
+      }
+    }
+
+    load();
+    connectHub();
+    setInterval(load, 2000);
+  </script>
+</body>
+</html>

@@ -21,6 +21,7 @@ public sealed class JplDbContext : DbContext
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamPlayer> TeamPlayers => Set<TeamPlayer>();
     public DbSet<SyncOutboxItem> SyncOutbox => Set<SyncOutboxItem>();
+    public DbSet<LiveOutboxItem> LiveOutbox => Set<LiveOutboxItem>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<Innings> Innings => Set<Innings>();
@@ -117,6 +118,7 @@ public sealed class JplDbContext : DbContext
                 .WithMany(p => p.TeamPlayers)
                 .HasForeignKey(x => x.PlayerId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.IsPlaying).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<SyncOutboxItem>(e =>
@@ -128,12 +130,21 @@ public sealed class JplDbContext : DbContext
             e.Property(x => x.Operation).HasMaxLength(32).IsRequired();
         });
 
+        modelBuilder.Entity<LiveOutboxItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.Status, x.CreatedAtUtc, x.SortId });
+            e.Property(x => x.EntityType).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Operation).HasMaxLength(32).IsRequired();
+        });
+
         modelBuilder.Entity<Match>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Title).HasMaxLength(160).IsRequired();
             e.Property(x => x.Venue).HasMaxLength(120);
             e.Property(x => x.SquadRosterJson);
+            e.Property(x => x.LiveStreamUrl).HasMaxLength(1000);
             e.HasIndex(x => x.MatchDateUtc);
             e.HasIndex(x => x.LeagueId);
             e.HasQueryFilter(x => !x.IsDeleted && x.LeagueId == CurrentLeagueId);

@@ -15,12 +15,20 @@ public sealed partial class SelectablePlayer : ObservableObject
     private bool isSelected;
 
     [ObservableProperty]
+    private bool isPlaying;
+
+    [ObservableProperty]
     private bool isCaptain;
 
     public string DisplayName => IsCaptain ? $"{FullName} (C)" : FullName;
 
+    public string PlayingLabel => IsPlaying ? "Playing" : "Bench";
+
     partial void OnIsCaptainChanged(bool value)
         => OnPropertyChanged(nameof(DisplayName));
+
+    partial void OnIsPlayingChanged(bool value)
+        => OnPropertyChanged(nameof(PlayingLabel));
 }
 
 [QueryProperty(nameof(TeamId), "id")]
@@ -36,6 +44,8 @@ public partial class TeamEditViewModel : ObservableObject
     public string? Mode { get; set; }
 
     public ObservableCollection<SelectablePlayer> RosterCandidates { get; } = new();
+
+    public ObservableCollection<SelectablePlayer> PlayingCandidates { get; } = new();
 
     public ObservableCollection<SelectablePlayer> CaptainOptions { get; } = new();
 
@@ -68,6 +78,14 @@ public partial class TeamEditViewModel : ObservableObject
 
     [ObservableProperty]
     private bool isActive = true;
+
+    [ObservableProperty]
+    private string squadHint = "Select the full squad, then pick who will play the next match.";
+
+    [ObservableProperty]
+    private string playingHint = "Only playing players appear in the next match. Update this before each match.";
+
+    public bool HasPlayingCandidates => PlayingCandidates.Count > 0;
 
     private Guid? _existingId;
 
@@ -102,6 +120,7 @@ public partial class TeamEditViewModel : ObservableObject
         }
 
         HashSet<Guid> selected = new();
+        HashSet<Guid> playing = new();
         Guid? captainId = null;
 
         if (Guid.TryParse(TeamId, out var id))
@@ -119,13 +138,24 @@ public partial class TeamEditViewModel : ObservableObject
             IsActive = detail.IsActive;
             captainId = detail.CaptainPlayerId;
             selected = detail.Players.Select(p => p.Id).ToHashSet();
+            playing = (detail.PlayingPlayerIds ?? Array.Empty<Guid>()).ToHashSet();
+            if (playing.Count == 0)
+                playing = selected;
 
             // View mode: only show current squad members (incl. inactive ones on the team).
             if (IsViewMode)
             {
                 RosterCandidates.Clear();
                 foreach (var p in detail.Players.OrderBy(x => x.FullName))
-                    RosterCandidates.Add(new SelectablePlayer { Id = p.Id, FullName = p.FullName, IsSelected = true });
+                {
+                    RosterCandidates.Add(new SelectablePlayer
+                    {
+                        Id = p.Id,
+                        FullName = p.FullName,
+                        IsSelected = true,
+                        IsPlaying = playing.Contains(p.Id)
+                    });
+                }
             }
         }
         else if (IsViewMode)
@@ -137,10 +167,15 @@ public partial class TeamEditViewModel : ObservableObject
         if (!IsViewMode)
         {
             foreach (var row in RosterCandidates)
+            {
                 row.IsSelected = selected.Contains(row.Id);
+                row.IsPlaying = playing.Contains(row.Id);
+            }
         }
 
         RebuildCaptainOptions(captainId);
+        RebuildPlayingOptions();
+        RefreshHints();
     }
 
     partial void OnSelectedCaptainChanged(SelectablePlayer? value)
@@ -153,12 +188,28 @@ public partial class TeamEditViewModel : ObservableObject
             return;
 
         player.IsSelected = !player.IsSelected;
+        if (player.IsSelected)
+            player.IsPlaying = true;
+        else
+            player.IsPlaying = false;
 
         // If captain was deselected from team, clear captain.
         if (!player.IsSelected && SelectedCaptain?.Id == player.Id)
             SelectedCaptain = null;
 
         RebuildCaptainOptions(SelectedCaptain?.Id);
+        RebuildPlayingOptions();
+        RefreshHints();
+    }
+
+    [RelayCommand]
+    private void TogglePlaying(SelectablePlayer? player)
+    {
+        if (!CanEdit || player is null || !player.IsSelected)
+            return;
+
+        player.IsPlaying = !player.IsPlaying;
+        RefreshHints();
     }
 
     [RelayCommand]
@@ -182,12 +233,16 @@ public partial class TeamEditViewModel : ObservableObject
             if (playerIds.Count == 0)
                 throw new InvalidOperationException("Add at least one player to the squad.");
 
+            var playingIds = RosterCandidates.Where(p => p.IsSelected && p.IsPlaying).Select(p => p.Id).ToList();
+            if (playingIds.Count == 0)
+                throw new InvalidOperationException("Select at least one playing player from the squad.");
+
             if (SelectedCaptain is null || SelectedCaptain.Id == Guid.Empty)
                 throw new InvalidOperationException("Captain is required. Select a captain from the squad.");
             if (!playerIds.Contains(SelectedCaptain.Id))
                 throw new InvalidOperationException("Captain must be one of the selected squad players.");
 
-            var draft = new TeamDraft(name, SelectedCaptain.Id, playerIds, IsActive);
+            var draft = new TeamDraft(name, SelectedCaptain.Id, playerIds, IsActive, playingIds);
 
             if (_existingId is Guid id)
                 await _teams.UpdateAsync(id, draft).ConfigureAwait(true);
@@ -219,6 +274,26 @@ public partial class TeamEditViewModel : ObservableObject
             SelectedCaptain = CaptainOptions.FirstOrDefault();
 
         RefreshCaptainFlags();
+    }
+
+    private void RebuildPlayingOptions()
+    {
+        PlayingCandidates.Clear();
+        foreach (var p in RosterCandidates.Where(x => x.IsSelected).OrderBy(x => x.FullName))
+            PlayingCandidates.Add(p);
+        OnPropertyChanged(nameof(HasPlayingCandidates));
+    }
+
+    private void RefreshHints()
+    {
+        var squad = RosterCandidates.Count(p => p.IsSelected);
+        var playing = RosterCandidates.Count(p => p.IsSelected && p.IsPlaying);
+        SquadHint = squad == 0
+            ? "Select the full squad, then pick who will play the next match."
+            : $"Squad: {squad} player{(squad == 1 ? "" : "s")}";
+        PlayingHint = playing == 0
+            ? "Only playing players appear in the next match. Update this before each match."
+            : $"Playing: {playing} of {squad}. Only these players will be in the next match.";
     }
 
     private void RefreshCaptainFlags()

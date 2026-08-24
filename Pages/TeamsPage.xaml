@@ -298,7 +298,7 @@
 
                                             VerticalOptions="Center">
 
-                                        <Label Text="{Binding PlayerCount, StringFormat='{0} players'}"
+                                        <Label Text="{Binding PlayersLine}"
 
                                                FontSize="11"
 

@@ -37,7 +37,7 @@
             </Grid>
         </Border>
 
-        <RefreshView Grid.Row="2" IsRefreshing="{Binding IsBusy}" Command="{Binding LoadCommand}">
+        <RefreshView Grid.Row="2" IsRefreshing="{Binding IsBusy, Mode=OneWay}" Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
                             EmptyView="No leagues yet.">
                 <CollectionView.ItemTemplate>

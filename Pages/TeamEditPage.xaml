@@ -30,6 +30,9 @@
             <Border Style="{StaticResource CardBorder}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Squad *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="{Binding SquadHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
                     <Label Text="Only active players are listed — select at least one"
                            Style="{StaticResource MutedLabel}"
                            FontSize="12"
@@ -75,6 +78,67 @@
                                             </DataTrigger>
                                         </Button.Triggers>
                                     </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding HasPlayingCandidates}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Playing list *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="{Binding PlayingHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayingCandidates}"
+                                         Spacing="4">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SelectablePlayer">
+                                <Grid ColumnDefinitions="*,Auto" Padding="0,6" ColumnSpacing="8">
+                                    <Label Text="{Binding DisplayName}"
+                                           VerticalOptions="Center"
+                                           Style="{StaticResource BodyLabel}">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
+                                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                                <Setter Property="FontAttributes" Value="Bold" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="12,8"
+                                            IsVisible="{Binding BindingContext.CanEdit, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            Clicked="OnTogglePlayingClicked"
+                                            CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsPlaying}" Value="True">
+                                                <Setter Property="Text" Value="Playing" />
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+                                                <Setter Property="TextColor" Value="White" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsPlaying}" Value="False">
+                                                <Setter Property="Text" Value="Bench" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                    <Label Grid.Column="1"
+                                           Text="{Binding PlayingLabel}"
+                                           VerticalOptions="Center"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           IsVisible="{Binding BindingContext.IsViewMode, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsPlaying}" Value="True">
+                                                <Setter Property="TextColor" Value="{StaticResource Success}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsPlaying}" Value="False">
+                                                <Setter Property="TextColor" Value="{StaticResource TextSecondary}" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
                                 </Grid>
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>

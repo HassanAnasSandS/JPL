@@ -91,7 +91,7 @@ public partial class SeriesListViewModel : ObservableObject
                 Id = s.Id,
                 Name = s.Name,
                 MetaLine = s.MetaLine,
-                StatusText = s.StatusText,
+                StatusText = s.Status == 2 ? "LIVE" : s.StatusText,
                 WinnerLine = s.WinnerLine,
                 IsDraft = draft,
                 CanEdit = CanWrite && draft,

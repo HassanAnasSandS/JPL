@@ -13,6 +13,22 @@ public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Gui
     public bool CanManageLeagues => CanManagePlatform;
     public bool CanManageUsers => CanManagePlatform;
     public bool CanSwitchLeague => LeagueId is null;
+
+    public string RoleLabel => Role switch
+    {
+        AppRole.SuperAdmin => "Super Admin",
+        AppRole.Admin => "Admin",
+        _ => IsPublicUser ? "Public User" : "User"
+    };
+
+    /// <summary>Built-in guest account (user / user123) — not bound to a league.</summary>
+    public bool IsPublicUser =>
+        Role == AppRole.User
+        && LeagueId is null
+        && string.Equals(Username, "user", StringComparison.OrdinalIgnoreCase);
+
+    public string SignedInName => IsPublicUser ? "Public User" : Username;
+    public string SignedInLabel => IsPublicUser ? "Public User" : $"{Username}  ·  {RoleLabel}";
 }
 
 public interface IAuthService

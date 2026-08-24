@@ -15,6 +15,7 @@ public partial class NetSessionScorecardPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        PageSafe.Run(() => _vm.RefreshCommand.ExecuteAsync(null));
+        (Shell.Current as AppShell)?.EnsureDesktopSidebar();
+        PageSafe.Run(() => _vm.LoadCommand.ExecuteAsync(null));
     }
 }

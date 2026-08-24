@@ -193,6 +193,35 @@ public sealed class RankingRow
     public string RankText => $"#{Rank}";
     public string PrimaryLine => $"{PrimaryLabel} {PrimaryValue}";
     public string SecondaryLine => $"{SecondaryLabel} {SecondaryValue}";
+    public RankingBreakdown? Breakdown { get; set; }
+
+    /// <summary>0–1 share of the leader’s |pts| for the horizontal ranking bar.</summary>
+    public double BarRatio { get; set; }
+    public Color BarColor { get; set; } = Color.FromArgb("#1E88E5");
+}
+
+public sealed class RankingFactorLine
+{
+    public string Label { get; init; } = string.Empty;
+    public string Stat { get; init; } = string.Empty;
+    public string PointsText { get; init; } = string.Empty;
+    public bool IsPositive { get; init; }
+    public Color PointsColor => IsPositive ? Color.FromArgb("#15803D") : Color.FromArgb("#C62828");
+}
+
+public sealed class RankingBreakdown
+{
+    public string Title { get; init; } = string.Empty;
+    public string Formula { get; init; } = string.Empty;
+    public string NetText { get; init; } = string.Empty;
+    public string PositiveTotalText { get; init; } = string.Empty;
+    public string NegativeTotalText { get; init; } = string.Empty;
+    public string Note { get; init; } = string.Empty;
+    public IReadOnlyList<RankingFactorLine> Positive { get; init; } = Array.Empty<RankingFactorLine>();
+    public IReadOnlyList<RankingFactorLine> Negative { get; init; } = Array.Empty<RankingFactorLine>();
+    public bool HasPositive => Positive.Count > 0;
+    public bool HasNegative => Negative.Count > 0;
+    public bool HasNote => !string.IsNullOrWhiteSpace(Note);
 }
 
 public sealed class RankingsBundle
@@ -202,4 +231,5 @@ public sealed class RankingsBundle
     public IReadOnlyList<RankingRow> AllRounder { get; set; } = Array.Empty<RankingRow>();
     public IReadOnlyList<RankingRow> Fielder { get; set; } = Array.Empty<RankingRow>();
     public IReadOnlyList<RankingRow> Captain { get; set; } = Array.Empty<RankingRow>();
+    public IReadOnlyList<RankingRow> Team { get; set; } = Array.Empty<RankingRow>();
 }

@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 14;
+    private const int SchemaVersion = 16;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -25,6 +25,7 @@ public static class DbBootstrap
         // have a schema version skip the version-gated block, so nets/series CREATE
         // must run every launch (all statements are IF NOT EXISTS / ADD COLUMN).
         await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
+        await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
 
         var dbVersion = await ReadUserVersionAsync(db, ct).ConfigureAwait(false);
         if (dbVersion < SchemaVersion)
@@ -37,7 +38,15 @@ public static class DbBootstrap
         else
         {
             await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
+            await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
         }
+
+        await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
+            """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "StartedByUserId",
+            """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "StartedOnDeviceId",
+            """ALTER TABLE "Matches" ADD COLUMN "StartedOnDeviceId" TEXT NULL;""", ct).ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);
@@ -179,6 +188,10 @@ public static class DbBootstrap
 
         await EnsureColumnAsync(db, "Matches", "SquadRosterJson",
             """ALTER TABLE "Matches" ADD COLUMN "SquadRosterJson" TEXT NULL;""", ct).ConfigureAwait(false);
+
+        await EnsureColumnAsync(db, "TeamPlayers", "IsPlaying",
+            """ALTER TABLE "TeamPlayers" ADD COLUMN "IsPlaying" INTEGER NOT NULL DEFAULT 1;""", ct)
+            .ConfigureAwait(false);
 
         await EnsureColumnAsync(db, "Matches", "PlayerOfTheMatchPlayerId",
             """ALTER TABLE "Matches" ADD COLUMN "PlayerOfTheMatchPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
@@ -334,6 +347,12 @@ public static class DbBootstrap
             """ALTER TABLE "Matches" ADD COLUMN "SeriesId" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "SeriesFixtureId",
             """ALTER TABLE "Matches" ADD COLUMN "SeriesFixtureId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
+            """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "StartedByUserId",
+            """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "StartedOnDeviceId",
+            """ALTER TABLE "Matches" ADD COLUMN "StartedOnDeviceId" TEXT NULL;""", ct).ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "Tournaments" (
@@ -433,6 +452,31 @@ public static class DbBootstrap
             """, ct).ConfigureAwait(false);
 
         await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
+        await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Live telecast queue — existing phones skip EnsureCreated for new tables.</summary>
+    public static async Task EnsureLiveOutboxTableAsync(JplDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "LiveOutbox" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_LiveOutbox" PRIMARY KEY,
+                "IdempotencyKey" TEXT NOT NULL,
+                "EntityType" TEXT NOT NULL,
+                "EntityId" TEXT NOT NULL,
+                "Operation" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "AttemptCount" INTEGER NOT NULL,
+                "LastError" TEXT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "LastAttemptAtUtc" TEXT NULL,
+                "SortId" INTEGER NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_LiveOutbox_Status_CreatedAtUtc_SortId" ON "LiveOutbox" ("Status", "CreatedAtUtc", "SortId");""",
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>

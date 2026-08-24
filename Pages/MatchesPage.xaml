@@ -4,6 +4,7 @@
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
              x:Class="JPL.Pages.MatchesPage"
+             x:Name="ThisPage"
              x:DataType="vm:MatchesViewModel"
              Title="Matches"
              HideSoftInputOnTapped="True">
@@ -57,12 +58,12 @@
         <Border Grid.Row="2"
                 IsVisible="{Binding HasActiveMatch}"
                 StrokeThickness="0"
-                BackgroundColor="#FFE8EC"
+                BackgroundColor="#C62828"
                 Padding="12,10"
                 StrokeShape="RoundRectangle 10">
             <Label Text="{Binding ActiveMatchHint}"
                    FontSize="12"
-                   TextColor="{StaticResource Danger}" />
+                   TextColor="White" />
         </Border>
 
         <RefreshView Grid.Row="3"
@@ -101,17 +102,32 @@
                                        FontSize="17"
                                        LineBreakMode="TailTruncation"
                                        Style="{StaticResource BodyLabel}" />
-                                <Border Grid.Column="1"
-                                        Padding="10,4"
-                                        StrokeThickness="0"
-                                        BackgroundColor="{StaticResource Primary}"
-                                        StrokeShape="RoundRectangle 12"
-                                        VerticalOptions="Center">
-                                    <Label Text="{Binding StatusText}"
-                                           FontSize="11"
-                                           FontAttributes="Bold"
-                                           TextColor="{StaticResource Secondary}" />
-                                </Border>
+                                <VerticalStackLayout Grid.Column="1"
+                                                     Spacing="4"
+                                                     VerticalOptions="Center"
+                                                     HorizontalOptions="End">
+                                    <Border Padding="10,4"
+                                            StrokeThickness="0"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}"
+                                            StrokeShape="RoundRectangle 12"
+                                            HorizontalOptions="End">
+                                        <Label Text="{Binding StatusText}"
+                                               FontSize="11"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Border>
+                                    <Border Padding="8,3"
+                                            StrokeThickness="0"
+                                            BackgroundColor="#C62828"
+                                            StrokeShape="RoundRectangle 8"
+                                            HorizontalOptions="End"
+                                            IsVisible="{Binding HasLiveStream}">
+                                        <Label Text="STREAM"
+                                               FontSize="9"
+                                               FontAttributes="Bold"
+                                               TextColor="White" />
+                                    </Border>
+                                </VerticalStackLayout>
 
                                 <Border Grid.Row="1"
                                         Grid.ColumnSpan="2"
@@ -119,6 +135,11 @@
                                         BackgroundColor="{StaticResource SurfaceMuted}"
                                         Padding="12"
                                         StrokeShape="RoundRectangle 12">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding BindingContext.OpenCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    </Border.GestureRecognizers>
                                     <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
                                         <VerticalStackLayout Spacing="2" HorizontalOptions="Start">
                                             <Label Text="{Binding TeamAName}"

@@ -4,9 +4,11 @@
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
              x:Class="JPL.Pages.ScoringPage"
+             x:Name="ThisPage"
              x:DataType="vm:ScoringViewModel"
              Title="Live scoring"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <Grid>
     <ScrollView VerticalOptions="Fill"
                 VerticalScrollBarVisibility="Default"
                 HorizontalScrollBarVisibility="Never">
@@ -27,7 +29,7 @@
                            FontSize="11"
                            HorizontalOptions="Center"
                            TextColor="#B8C4D4" />
-                    <Label Text="Saved on this phone. Updating the app keeps the score. Uninstall before Complete + Sync will lose it."
+                    <Label Text="Live to the server as you score. If internet drops, balls stay on this phone and auto-send when it returns."
                            FontSize="10"
                            HorizontalOptions="Center"
                            HorizontalTextAlignment="Center"
@@ -165,6 +167,26 @@
                                    LineBreakMode="TailTruncation" />
                         </VerticalStackLayout>
                     </Border>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}" Padding="12"
+                    IsVisible="{Binding CanWrite}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="LIVE STREAM"
+                           FontSize="11"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Secondary}" />
+                    <Label Text="{Binding LiveStreamStatusText}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <Button Text="{Binding LiveStreamButtonText}"
+                            Style="{StaticResource GoldButton}"
+                            Command="{Binding OpenLiveStreamModalCommand}" />
+                    <Label Text="{Binding LiveStreamHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12"
+                           IsVisible="{Binding HasLiveStreamHint}" />
                 </VerticalStackLayout>
             </Border>
 
@@ -597,4 +619,96 @@
                    FontSize="12" />
         </VerticalStackLayout>
     </ScrollView>
+
+        <Grid IsVisible="{Binding IsLiveStreamModalVisible}"
+              InputTransparent="False"
+              ZIndex="20">
+            <BoxView Color="#E60B1220"
+                     InputTransparent="False"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding CloseLiveStreamModalCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border StrokeThickness="0"
+                    BackgroundColor="#0D1B2A"
+                    StrokeShape="RoundRectangle 20"
+                    Padding="20"
+                    Margin="24"
+                    VerticalOptions="Center"
+                    MaximumWidthRequest="460"
+                    HorizontalOptions="Center">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="LIVE LINK"
+                           FontSize="12"
+                           FontAttributes="Bold"
+                           CharacterSpacing="1.5"
+                           HorizontalTextAlignment="Center"
+                           TextColor="{StaticResource Secondary}" />
+                    <Label Text="Paste a YouTube or Facebook live URL. Viewers see it on the scorecard."
+                           FontSize="12"
+                           HorizontalTextAlignment="Center"
+                           Style="{StaticResource MutedLabel}" />
+                    <Entry Placeholder="https://youtube.com/..."
+                           Text="{Binding LiveStreamDraftUrl}"
+                           Keyboard="Url"
+                           MaxLength="1000" />
+                    <Button Text="Save live link"
+                            Style="{StaticResource GoldButton}"
+                            Command="{Binding SaveLiveStreamCommand}" />
+                    <Button Text="Cancel"
+                            Style="{StaticResource OutlineButton}"
+                            Command="{Binding CloseLiveStreamModalCommand}" />
+                    <Label Text="{Binding ErrorMessage}"
+                           TextColor="{StaticResource Danger}"
+                           FontSize="12" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+        <Grid IsVisible="{Binding IsPlayerPickModalVisible}"
+              InputTransparent="False"
+              ZIndex="30">
+            <BoxView Color="#E60B1220"
+                     InputTransparent="False"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill" />
+            <Border StrokeThickness="0"
+                    BackgroundColor="#0D1B2A"
+                    StrokeShape="RoundRectangle 20"
+                    Padding="20"
+                    Margin="24"
+                    VerticalOptions="Center"
+                    MaximumWidthRequest="460"
+                    MaximumHeightRequest="560"
+                    HorizontalOptions="Center">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="{Binding PlayerPickTitle}"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           HorizontalTextAlignment="Center"
+                           TextColor="{StaticResource Secondary}" />
+                    <Label Text="{Binding PlayerPickHint}"
+                           FontSize="12"
+                           HorizontalTextAlignment="Center"
+                           Style="{StaticResource MutedLabel}" />
+                    <ScrollView VerticalScrollBarVisibility="Default"
+                                MaximumHeightRequest="380">
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerPickOptions}"
+                                             Spacing="8">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:SquadPlayer">
+                                    <Button Text="{Binding DisplayName}"
+                                            Style="{StaticResource GoldButton}"
+                                            Padding="12,10"
+                                            Command="{Binding BindingContext.PickPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+    </Grid>
 </ContentPage>

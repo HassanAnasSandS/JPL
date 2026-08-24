@@ -24,4 +24,11 @@ public partial class TeamEditPage : ContentPage
             return;
         _vm.TogglePlayerCommand.Execute(player);
     }
+
+    private void OnTogglePlayingClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button { CommandParameter: SelectablePlayer player })
+            return;
+        _vm.TogglePlayingCommand.Execute(player);
+    }
 }

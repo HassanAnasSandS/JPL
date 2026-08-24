@@ -61,8 +61,8 @@ public sealed class MatchRosterPayload
             TeamBCaptainId = teamB.CaptainPlayerId,
             TeamACaptainName = CapName(teamA.CaptainPlayerId),
             TeamBCaptainName = CapName(teamB.CaptainPlayerId),
-            TeamAPlayers = Side(teamA.PlayerIds, byId, teamA.CaptainPlayerId),
-            TeamBPlayers = Side(teamB.PlayerIds, byId, teamB.CaptainPlayerId)
+            TeamAPlayers = Side(TeamRoster.PlayingPlayerIds(teamA), byId, teamA.CaptainPlayerId),
+            TeamBPlayers = Side(TeamRoster.PlayingPlayerIds(teamB), byId, teamB.CaptainPlayerId)
         };
     }
 
@@ -88,6 +88,12 @@ public sealed class MatchRosterPayload
         string? CapName(Guid? id)
             => id is Guid c && byId.TryGetValue(c, out var p) ? p.FullName : null;
 
+        static IEnumerable<Guid> PlayingOrSquad(ICollection<TeamPlayer> tps)
+        {
+            var playing = tps.Where(tp => tp.IsPlaying).Select(tp => tp.PlayerId).ToList();
+            return playing.Count > 0 ? playing : tps.Select(tp => tp.PlayerId);
+        }
+
         return new MatchRosterPayload
         {
             TeamAId = teamA.Id,
@@ -98,8 +104,8 @@ public sealed class MatchRosterPayload
             TeamBCaptainId = teamB.CaptainPlayerId,
             TeamACaptainName = CapName(teamA.CaptainPlayerId),
             TeamBCaptainName = CapName(teamB.CaptainPlayerId),
-            TeamAPlayers = Side(teamA.TeamPlayers.Select(tp => tp.PlayerId), byId, teamA.CaptainPlayerId),
-            TeamBPlayers = Side(teamB.TeamPlayers.Select(tp => tp.PlayerId), byId, teamB.CaptainPlayerId)
+            TeamAPlayers = Side(PlayingOrSquad(teamA.TeamPlayers), byId, teamA.CaptainPlayerId),
+            TeamBPlayers = Side(PlayingOrSquad(teamB.TeamPlayers), byId, teamB.CaptainPlayerId)
         };
     }
 
@@ -119,6 +125,125 @@ public sealed class MatchRosterPayload
             return null;
         }
     }
+
+    /// <summary>
+    /// Roster JSON stores who played (IDs). Overlay current Players/Teams names.
+    /// Snapshot names are fallback only when the master row is missing.
+    /// </summary>
+    public void ApplyLiveNames(
+        IReadOnlyDictionary<Guid, string> playerNames,
+        IReadOnlyDictionary<Guid, string> teamNames)
+    {
+        if (teamNames.TryGetValue(TeamAId, out var a) && !string.IsNullOrWhiteSpace(a))
+            TeamAName = a;
+        if (teamNames.TryGetValue(TeamBId, out var b) && !string.IsNullOrWhiteSpace(b))
+            TeamBName = b;
+
+        TeamAPlayers = Relabel(TeamAPlayers, playerNames);
+        TeamBPlayers = Relabel(TeamBPlayers, playerNames);
+
+        if (TeamACaptainId is Guid ca && playerNames.TryGetValue(ca, out var can) && !string.IsNullOrWhiteSpace(can))
+            TeamACaptainName = can;
+        if (TeamBCaptainId is Guid cb && playerNames.TryGetValue(cb, out var cbn) && !string.IsNullOrWhiteSpace(cbn))
+            TeamBCaptainName = cbn;
+    }
+
+    public static List<SquadPlayer> Relabel(
+        IEnumerable<SquadPlayer> players,
+        IReadOnlyDictionary<Guid, string> playerNames)
+        => players.Select(p =>
+        {
+            if (!playerNames.TryGetValue(p.Id, out var n) || string.IsNullOrWhiteSpace(n) || n == p.FullName)
+                return p;
+            return new SquadPlayer { Id = p.Id, FullName = n, IsCaptain = p.IsCaptain };
+        }).ToList();
+}
+
+/// <summary>Current Players/Teams names by ID — API first, local SQLite if offline.</summary>
+public static class LiveMasterNames
+{
+    public static async Task<(Dictionary<Guid, string> Players, Dictionary<Guid, string> Teams)> LoadAsync(
+        IApiClient api,
+        IDbContextFactory<JplDbContext> dbFactory,
+        CancellationToken ct)
+    {
+        var players = new Dictionary<Guid, string>();
+        var teams = new Dictionary<Guid, string>();
+
+        try
+        {
+            var pTask = api.GetPlayersAsync(ct);
+            var tTask = api.GetTeamsAsync(ct);
+            await Task.WhenAll(pTask, tTask).ConfigureAwait(false);
+            foreach (var p in await pTask.ConfigureAwait(false))
+            {
+                if (!p.IsDeleted && !string.IsNullOrWhiteSpace(p.FullName))
+                    players[p.Id] = p.FullName;
+            }
+            foreach (var t in await tTask.ConfigureAwait(false))
+            {
+                if (!t.IsDeleted && !string.IsNullOrWhiteSpace(t.Name))
+                    teams[t.Id] = t.Name;
+            }
+        }
+        catch
+        {
+            /* offline — try SQLite copies */
+        }
+
+        if (players.Count > 0 && teams.Count > 0)
+            return (players, teams);
+
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            if (players.Count == 0)
+            {
+                var rows = await db.Players.AsNoTracking()
+                    .Where(p => !p.IsDeleted)
+                    .Select(p => new { p.Id, p.FullName })
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false);
+                foreach (var p in rows)
+                {
+                    if (!string.IsNullOrWhiteSpace(p.FullName))
+                        players[p.Id] = p.FullName;
+                }
+            }
+
+            if (teams.Count == 0)
+            {
+                var rows = await db.Teams.AsNoTracking()
+                    .Where(t => !t.IsDeleted)
+                    .Select(t => new { t.Id, t.Name })
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false);
+                foreach (var t in rows)
+                {
+                    if (!string.IsNullOrWhiteSpace(t.Name))
+                        teams[t.Id] = t.Name;
+                }
+            }
+        }
+        catch
+        {
+            /* no local master rows */
+        }
+
+        return (players, teams);
+    }
+
+    public static string Lookup(IReadOnlyDictionary<Guid, string> map, Guid id, string fallback)
+        => map.TryGetValue(id, out var n) && !string.IsNullOrWhiteSpace(n) ? n : fallback;
+
+    public static string RefreshVsTitle(string stored, string oldA, string oldB, string newA, string newB)
+    {
+        if (string.IsNullOrWhiteSpace(newA) || string.IsNullOrWhiteSpace(newB))
+            return stored;
+        if (string.Equals(stored.Trim(), $"{oldA} vs {oldB}", StringComparison.OrdinalIgnoreCase))
+            return $"{newA} vs {newB}";
+        return stored;
+    }
 }
 
 public sealed class MatchSquadSnapshot
@@ -126,14 +251,14 @@ public sealed class MatchSquadSnapshot
     public Guid MatchId { get; init; }
     public Guid TeamAId { get; init; }
     public Guid TeamBId { get; init; }
-    public string TeamAName { get; init; } = string.Empty;
-    public string TeamBName { get; init; } = string.Empty;
+    public string TeamAName { get; set; } = string.Empty;
+    public string TeamBName { get; set; } = string.Empty;
     public Guid? TeamACaptainId { get; init; }
     public Guid? TeamBCaptainId { get; init; }
-    public string? TeamACaptainName { get; init; }
-    public string? TeamBCaptainName { get; init; }
-    public IReadOnlyList<SquadPlayer> TeamAPlayers { get; init; } = Array.Empty<SquadPlayer>();
-    public IReadOnlyList<SquadPlayer> TeamBPlayers { get; init; } = Array.Empty<SquadPlayer>();
+    public string? TeamACaptainName { get; set; }
+    public string? TeamBCaptainName { get; set; }
+    public IReadOnlyList<SquadPlayer> TeamAPlayers { get; set; } = Array.Empty<SquadPlayer>();
+    public IReadOnlyList<SquadPlayer> TeamBPlayers { get; set; } = Array.Empty<SquadPlayer>();
     /// <summary>
     /// Tournament matches: every player from every tournament team (fielder dropdown).
     /// Empty for normal matches — fielders fall back to bowling side.
@@ -186,6 +311,7 @@ public interface IMatchSquadCache
     void Put(MatchSquadSnapshot snapshot);
     void SetInningsSides(Guid matchId, Guid battingTeamId, Guid bowlingTeamId);
     void Clear(Guid matchId);
+    void ClearAll();
 }
 
 public sealed class MatchSquadCache : IMatchSquadCache
@@ -194,6 +320,9 @@ public sealed class MatchSquadCache : IMatchSquadCache
     private readonly IApiClient _api;
     private readonly Dictionary<Guid, MatchSquadSnapshot> _cache = new();
     private readonly object _gate = new();
+    private Dictionary<Guid, string> _playerNames = new();
+    private Dictionary<Guid, string> _teamNames = new();
+    private DateTime _namesAtUtc = DateTime.MinValue;
 
     public MatchSquadCache(IDbContextFactory<JplDbContext> dbFactory, IApiClient api)
     {
@@ -215,6 +344,8 @@ public sealed class MatchSquadCache : IMatchSquadCache
 
     public async Task<MatchSquadSnapshot> WarmAsync(Guid matchId, CancellationToken ct = default)
     {
+        await EnsureMasterNamesAsync(ct).ConfigureAwait(false);
+
         MatchSquadSnapshot? existing;
         lock (_gate)
             existing = _cache.TryGetValue(matchId, out var s) ? s : null;
@@ -233,6 +364,8 @@ public sealed class MatchSquadCache : IMatchSquadCache
                         .ConfigureAwait(false);
                 }
             }
+
+            OverlaySnapshot(existing);
             return existing;
         }
 
@@ -243,6 +376,7 @@ public sealed class MatchSquadCache : IMatchSquadCache
             ?? throw new InvalidOperationException("Match not found for squad cache.");
 
         var roster = MatchRosterPayload.TryParse(match.SquadRosterJson);
+        OverlayRoster(roster);
 
         var innings = await db.Innings.AsNoTracking()
             .Where(i => i.MatchId == matchId && !i.IsCompleted)
@@ -283,6 +417,8 @@ public sealed class MatchSquadCache : IMatchSquadCache
                 BowlingTeamId = innings?.BowlingTeamId ?? match.TeamBId,
                 TournamentPlayers = tournamentPlayers
             };
+
+        OverlaySnapshot(snap);
 
         lock (_gate)
             _cache[matchId] = snap;
@@ -328,7 +464,7 @@ public sealed class MatchSquadCache : IMatchSquadCache
         var teamNameByPlayer = new Dictionary<Guid, string>();
         foreach (var team in teamMap)
         {
-            foreach (var pid in team.PlayerIds ?? Array.Empty<Guid>())
+            foreach (var pid in TeamRoster.PlayingPlayerIds(team))
             {
                 if (!teamNameByPlayer.ContainsKey(pid))
                     teamNameByPlayer[pid] = team.Name;
@@ -367,6 +503,73 @@ public sealed class MatchSquadCache : IMatchSquadCache
     {
         lock (_gate)
             _cache.Remove(matchId);
+    }
+
+    public void ClearAll()
+    {
+        lock (_gate)
+        {
+            _cache.Clear();
+            _playerNames = new();
+            _teamNames = new();
+            _namesAtUtc = DateTime.MinValue;
+        }
+    }
+
+    private async Task EnsureMasterNamesAsync(CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if ((DateTime.UtcNow - _namesAtUtc).TotalSeconds < 20
+                && (_playerNames.Count > 0 || _teamNames.Count > 0))
+                return;
+        }
+
+        var loaded = await LiveMasterNames.LoadAsync(_api, _dbFactory, ct).ConfigureAwait(false);
+        lock (_gate)
+        {
+            _playerNames = loaded.Players;
+            _teamNames = loaded.Teams;
+            _namesAtUtc = DateTime.UtcNow;
+        }
+    }
+
+    private void OverlayRoster(MatchRosterPayload? roster)
+    {
+        if (roster is null)
+            return;
+        Dictionary<Guid, string> players;
+        Dictionary<Guid, string> teams;
+        lock (_gate)
+        {
+            players = _playerNames;
+            teams = _teamNames;
+        }
+        roster.ApplyLiveNames(players, teams);
+    }
+
+    private void OverlaySnapshot(MatchSquadSnapshot snap)
+    {
+        Dictionary<Guid, string> players;
+        Dictionary<Guid, string> teams;
+        lock (_gate)
+        {
+            players = _playerNames;
+            teams = _teamNames;
+        }
+
+        if (teams.TryGetValue(snap.TeamAId, out var a) && !string.IsNullOrWhiteSpace(a))
+            snap.TeamAName = a;
+        if (teams.TryGetValue(snap.TeamBId, out var b) && !string.IsNullOrWhiteSpace(b))
+            snap.TeamBName = b;
+
+        snap.TeamAPlayers = MatchRosterPayload.Relabel(snap.TeamAPlayers, players);
+        snap.TeamBPlayers = MatchRosterPayload.Relabel(snap.TeamBPlayers, players);
+
+        if (snap.TeamACaptainId is Guid ca && players.TryGetValue(ca, out var can) && !string.IsNullOrWhiteSpace(can))
+            snap.TeamACaptainName = can;
+        if (snap.TeamBCaptainId is Guid cb && players.TryGetValue(cb, out var cbn) && !string.IsNullOrWhiteSpace(cbn))
+            snap.TeamBCaptainName = cbn;
     }
 
     private static IReadOnlyList<SquadPlayer> WithCaptainFlags(

@@ -18,12 +18,19 @@ public partial class RankingsViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private string categoryTitle = "Batting Ranking";
-    [ObservableProperty] private string categoryHint = "ICC-style pts (0–1000) from Avg, SR, Runs";
+    [ObservableProperty] private string categoryHint = "Runs, boundaries, SR, avg  ·  dots/ducks/dismissals (−)";
+    [ObservableProperty] private string searchPlaceholder = "Filter by player name";
     [ObservableProperty] private string nameFilter = string.Empty;
     [ObservableProperty] private bool filterByDate;
     [ObservableProperty] private DateTime fromDate = new(DateTime.Today.Year, 1, 1);
     [ObservableProperty] private DateTime toDate = DateTime.Today;
     [ObservableProperty] private string dateRangeText = "All completed matches";
+    [ObservableProperty] private bool isBreakdownVisible;
+    [ObservableProperty] private string breakdownName = string.Empty;
+    [ObservableProperty] private string breakdownRank = string.Empty;
+    [ObservableProperty] private string breakdownCareerLabel = "Full career";
+    [ObservableProperty] private RankingBreakdown? breakdown;
+    private RankingRow? _openedRow;
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool HasActiveFilters => !string.IsNullOrWhiteSpace(NameFilter) || FilterByDate;
@@ -32,6 +39,11 @@ public partial class RankingsViewModel : ObservableObject
     public bool IsAllRounder => SelectedCategory == 2;
     public bool IsFielder => SelectedCategory == 3;
     public bool IsCaptain => SelectedCategory == 4;
+    public bool IsTeam => SelectedCategory == 5;
+    public bool HasPositiveFactors => Breakdown?.HasPositive == true;
+    public bool HasNegativeFactors => Breakdown?.HasNegative == true;
+    public bool HasBreakdownNote => Breakdown?.HasNote == true;
+    public bool CanOpenCareer => _openedRow is { PlayerId: var id } && id != Guid.Empty;
 
     public RankingsViewModel(IStatsService stats, StatsViewModel statsVm)
     {
@@ -58,7 +70,16 @@ public partial class RankingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAllRounder));
         OnPropertyChanged(nameof(IsFielder));
         OnPropertyChanged(nameof(IsCaptain));
+        OnPropertyChanged(nameof(IsTeam));
         ApplyCategory();
+    }
+
+    partial void OnBreakdownChanged(RankingBreakdown? value)
+    {
+        OnPropertyChanged(nameof(HasPositiveFactors));
+        OnPropertyChanged(nameof(HasNegativeFactors));
+        OnPropertyChanged(nameof(HasBreakdownNote));
+        OnPropertyChanged(nameof(CanOpenCareer));
     }
 
     [RelayCommand]
@@ -112,6 +133,7 @@ public partial class RankingsViewModel : ObservableObject
             "allrounder" => 2,
             "fielder" => 3,
             "captain" => 4,
+            "team" => 5,
             _ => 0
         };
     }
@@ -135,10 +157,47 @@ public partial class RankingsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenBreakdown(RankingRow? row)
+    {
+        if (row is null)
+            return;
+
+        _openedRow = row;
+        BreakdownName = row.PlayerName;
+        BreakdownRank = row.RankText;
+        BreakdownCareerLabel = IsTeam ? "View team" : "Full career";
+        Breakdown = RankingExplain.ForRow(SelectedCategory, row);
+        IsBreakdownVisible = true;
+        OnPropertyChanged(nameof(CanOpenCareer));
+    }
+
+    [RelayCommand]
+    private void CloseBreakdown()
+    {
+        IsBreakdownVisible = false;
+    }
+
+    [RelayCommand]
+    private async Task OpenCareerAsync()
+    {
+        var row = _openedRow;
+        CloseBreakdown();
+        await OpenPlayerAsync(row).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task OpenPlayerAsync(RankingRow? row)
     {
         if (row is null || row.PlayerId == Guid.Empty)
             return;
+
+        if (IsTeam)
+        {
+            if (Shell.Current is not null)
+                await Shell.Current.GoToAsync($"TeamEditPage?id={row.PlayerId}&mode=view")
+                    .ConfigureAwait(true);
+            return;
+        }
 
         try
         {
@@ -164,37 +223,44 @@ public partial class RankingsViewModel : ObservableObject
 
     private void ApplyCategory()
     {
+        SearchPlaceholder = IsTeam ? "Filter by team name" : "Filter by player name";
         IReadOnlyList<RankingRow> rows;
         switch (SelectedCategory)
         {
             case 1:
                 CategoryTitle = "Bowling Ranking";
-                CategoryHint = "ICC-style pts (0–1000) from Wickets, Avg, Econ, Dots";
+                CategoryHint = "Wkts, maidens, dots, economy vs 8, extras (−)";
                 rows = _bundle.Bowling;
                 break;
             case 2:
                 CategoryTitle = "All-Rounder Ranking";
-                CategoryHint = "Pts (0–1000) from batting + bowling: √(Bat×Bowl) + balance (must have batted & bowled)";
+                CategoryHint = "Batting pts + bowling pts (must have batted & bowled)";
                 rows = _bundle.AllRounder;
                 break;
             case 3:
                 CategoryTitle = "Fielder Ranking";
-                CategoryHint = "ICC-style pts (0–1000): Ct×8, RO×8, St×12 (no ICC fielder table)";
+                CategoryHint = "Catch×10, RO×12, St×15  ·  low rate after 4 matches (−)";
                 rows = _bundle.Fielder;
                 break;
             case 4:
                 CategoryTitle = "Captain Ranking";
-                CategoryHint = "Pts (0–1000) from Win% (tie=½), wins, and games as captain";
+                CategoryHint = "Win×4 + tie×1 − loss×2";
                 rows = _bundle.Captain;
+                break;
+            case 5:
+                CategoryTitle = "Team Ranking";
+                CategoryHint = "Win×2 + tie×1 − loss×1 + NRR×10";
+                rows = _bundle.Team;
                 break;
             default:
                 CategoryTitle = "Batting Ranking";
-                CategoryHint = "ICC-style pts (0–1000) from Avg, SR, Runs (+ not-out bonus)";
+                CategoryHint = "Runs, boundaries, SR, avg  ·  dots/ducks/dismissals (−)";
                 rows = _bundle.Batting;
                 break;
         }
 
         _categoryRows = rows.ToList();
+        RankingBars.Apply(_categoryRows);
         ApplyNameFilter();
     }
 

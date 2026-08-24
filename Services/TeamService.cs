@@ -18,20 +18,29 @@ public sealed record TeamDraft(
     string Name,
     Guid? CaptainPlayerId,
     IReadOnlyList<Guid> PlayerIds,
-    bool IsActive = true);
+    bool IsActive = true,
+    IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
 public sealed record TeamListItem(
     Guid Id,
     string Name,
     string? CaptainName,
     int PlayerCount,
-    bool IsActive)
+    bool IsActive,
+    int PlayingCount = 0)
 {
+    public Guid? CaptainPlayerId { get; init; }
     public string StatusText => IsActive ? "Active" : "Inactive";
     public string ToggleActiveLabel => IsActive ? "Deactivate" : "Activate";
     public string CaptainLine => string.IsNullOrWhiteSpace(CaptainName)
         ? "No captain"
         : $"Captain: {CaptainName} (C)";
+    public string PlayersLine => PlayingCount > 0 && PlayingCount != PlayerCount
+        ? $"{PlayingCount} playing · {PlayerCount} squad"
+        : $"{PlayerCount} players";
+    public string PickerLabel => PlayingCount > 0 && PlayingCount != PlayerCount
+        ? $"{Name} · {PlayingCount} playing"
+        : Name;
 }
 
 public sealed record TeamDetail(
@@ -39,18 +48,21 @@ public sealed record TeamDetail(
     string Name,
     Guid? CaptainPlayerId,
     IReadOnlyList<Player> Players,
-    bool IsActive);
+    bool IsActive,
+    IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
 /// <summary>Teams always come from the live API. SQLite is not used for master data.</summary>
 public sealed class TeamService : ITeamService
 {
     private readonly IApiClient _api;
     private readonly IAuthService _auth;
+    private readonly IMatchSquadCache _squadCache;
 
-    public TeamService(IApiClient api, IAuthService auth)
+    public TeamService(IApiClient api, IAuthService auth, IMatchSquadCache squadCache)
     {
         _api = api;
         _auth = auth;
+        _squadCache = squadCache;
     }
 
     public async Task<IReadOnlyList<TeamListItem>> GetAllAsync(CancellationToken ct = default)
@@ -77,7 +89,9 @@ public sealed class TeamService : ITeamService
                 t.Name,
                 t.CaptainPlayerId is Guid cid ? names.GetValueOrDefault(cid) : null,
                 t.PlayerIds?.Count ?? 0,
-                t.IsActive))
+                t.IsActive,
+                TeamRoster.PlayingPlayerIds(t).Count)
+            { CaptainPlayerId = t.CaptainPlayerId })
             .ToList();
     }
 
@@ -103,7 +117,13 @@ public sealed class TeamService : ITeamService
             .OrderBy(p => p.FullName)
             .ToList();
 
-        return new TeamDetail(team.Id, team.Name, team.CaptainPlayerId, squad, team.IsActive);
+        return new TeamDetail(
+            team.Id,
+            team.Name,
+            team.CaptainPlayerId,
+            squad,
+            team.IsActive,
+            TeamRoster.PlayingPlayerIds(team).ToList());
     }
 
     public async Task<Team> CreateAsync(TeamDraft draft, CancellationToken ct = default)
@@ -111,7 +131,9 @@ public sealed class TeamService : ITeamService
         _auth.EnsureCanWrite();
         var name = RequireName(draft.Name);
         var playerIds = DistinctIds(draft.PlayerIds);
+        var playingPlayerIds = DistinctIds(draft.PlayingPlayerIds ?? Array.Empty<Guid>());
         ValidateCaptain(draft.CaptainPlayerId, playerIds);
+        ValidatePlaying(playerIds, playingPlayerIds);
 
         var remote = await _api.CreateTeamAsync(new
         {
@@ -119,6 +141,7 @@ public sealed class TeamService : ITeamService
             name,
             captainPlayerId = draft.CaptainPlayerId,
             playerIds,
+            playingPlayerIds,
             isActive = draft.IsActive
         }, ct).ConfigureAwait(false);
 
@@ -130,7 +153,9 @@ public sealed class TeamService : ITeamService
         _auth.EnsureCanWrite();
         var name = RequireName(draft.Name);
         var playerIds = DistinctIds(draft.PlayerIds);
+        var playingPlayerIds = DistinctIds(draft.PlayingPlayerIds ?? Array.Empty<Guid>());
         ValidateCaptain(draft.CaptainPlayerId, playerIds);
+        ValidatePlaying(playerIds, playingPlayerIds);
 
         var remote = await _api.UpdateTeamAsync(id, new
         {
@@ -138,9 +163,11 @@ public sealed class TeamService : ITeamService
             name,
             captainPlayerId = draft.CaptainPlayerId,
             playerIds,
+            playingPlayerIds,
             isActive = draft.IsActive
         }, ct).ConfigureAwait(false);
 
+        _squadCache.ClearAll();
         return ToEntity(remote);
     }
 
@@ -150,7 +177,12 @@ public sealed class TeamService : ITeamService
         var detail = await GetAsync(id, ct).ConfigureAwait(false)
                      ?? throw new InvalidOperationException("Team not found.");
         var playerIds = detail.Players.Select(p => p.Id).ToList();
-        await UpdateAsync(id, new TeamDraft(detail.Name, detail.CaptainPlayerId, playerIds, isActive), ct)
+        await UpdateAsync(id, new TeamDraft(
+                detail.Name,
+                detail.CaptainPlayerId,
+                playerIds,
+                isActive,
+                detail.PlayingPlayerIds), ct)
             .ConfigureAwait(false);
     }
 
@@ -177,6 +209,15 @@ public sealed class TeamService : ITeamService
             return;
         if (!playerIds.Contains(captainId.Value))
             throw new InvalidOperationException("Captain must be one of the team players. Add the player to the team first.");
+    }
+
+    private static void ValidatePlaying(IReadOnlyList<Guid> squadIds, IReadOnlyList<Guid> playingIds)
+    {
+        if (playingIds.Count == 0)
+            throw new InvalidOperationException("Select at least one playing player from the squad.");
+        var allowed = squadIds.ToHashSet();
+        if (playingIds.Any(id => !allowed.Contains(id)))
+            throw new InvalidOperationException("Playing players must be selected from the squad.");
     }
 
     private static List<Guid> DistinctIds(IReadOnlyList<Guid> ids)

@@ -44,7 +44,7 @@
         </VerticalStackLayout>
 
         <RefreshView Grid.Row="2"
-                     IsRefreshing="{Binding IsBusy}"
+                     IsRefreshing="{Binding IsBusy, Mode=OneWay}"
                      Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}" SelectionMode="None">
                 <CollectionView.ItemTemplate>
@@ -65,11 +65,22 @@
                                            HeightRequest="64"
                                            WidthRequest="64"
                                            Aspect="AspectFill" />
-                                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4">
                                         <Label Text="{Binding Name}"
                                                TextColor="White"
                                                FontAttributes="Bold"
                                                FontSize="18" />
+                                        <Border StrokeThickness="0"
+                                                BackgroundColor="#C62828"
+                                                Padding="8,3"
+                                                StrokeShape="RoundRectangle 8"
+                                                HorizontalOptions="Start"
+                                                IsVisible="{Binding HasLive}">
+                                            <Label Text="{Binding LiveTag}"
+                                                   TextColor="White"
+                                                   FontAttributes="Bold"
+                                                   FontSize="11" />
+                                        </Border>
                                         <Label Text="Tap to open"
                                                TextColor="#8899AA"
                                                FontSize="12" />
