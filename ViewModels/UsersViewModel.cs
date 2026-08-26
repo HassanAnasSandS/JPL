@@ -15,21 +15,27 @@ public sealed class UserRow
     public string LeagueName { get; init; } = string.Empty;
     public bool IsActive { get; init; }
     public string StatusText => IsActive ? "Active" : "Deactive";
+    public Color StatusColor => StatusColors.For(IsActive);
     public string StatusLabel => StatusText;
     public string ToggleActiveLabel => IsActive ? "Deactivate" : "Activate";
 }
 
 public partial class UsersViewModel : ObservableObject
 {
+    private static readonly UserLeagueOption AllLeaguesOption = new() { Id = Guid.Empty, Name = "All leagues" };
+
     private readonly IUserService _users;
     private readonly IAuthService _auth;
     private readonly IUsersModuleGate _gate;
+    private readonly ILeagueService _leagues;
     private List<AppUser> _all = new();
 
     public ObservableCollection<UserRow> Items { get; } = new();
+    public ObservableCollection<UserLeagueOption> LeagueFilterOptions { get; } = new();
 
     /// <summary>0 = All, 1 = Active, 2 = Deactive</summary>
     [ObservableProperty] private int statusFilter;
+    [ObservableProperty] private UserLeagueOption? selectedLeagueFilter;
     [ObservableProperty] private bool isUnlocked;
     [ObservableProperty] private string modulePassword = string.Empty;
     [ObservableProperty] private string? unlockError;
@@ -47,7 +53,10 @@ public partial class UsersViewModel : ObservableObject
     public bool ShowLockPanel => !IsUnlocked;
 
     public bool HasActiveFilters =>
-        !string.IsNullOrWhiteSpace(NameFilter) || StatusFilter != 0;
+        !string.IsNullOrWhiteSpace(NameFilter) || StatusFilter != 0 || HasLeagueFilter;
+
+    private bool HasLeagueFilter =>
+        SelectedLeagueFilter is { } league && league.Id != Guid.Empty;
 
     public bool IsAllFilter => StatusFilter == 0;
     public bool IsActiveFilter => StatusFilter == 1;
@@ -57,13 +66,16 @@ public partial class UsersViewModel : ObservableObject
     public string ActiveFilterLabel => $"Active ({ActiveCount})";
     public string InactiveFilterLabel => $"Deactive ({InactiveCount})";
 
-    public UsersViewModel(IUserService users, IAuthService auth, IUsersModuleGate gate)
+    public UsersViewModel(IUserService users, IAuthService auth, IUsersModuleGate gate, ILeagueService leagues)
     {
         _users = users;
         _auth = auth;
         _gate = gate;
+        _leagues = leagues;
         CanWrite = _auth.Current?.CanManageUsers == true;
         IsUnlocked = _gate.IsUnlocked;
+        LeagueFilterOptions.Add(AllLeaguesOption);
+        SelectedLeagueFilter = AllLeaguesOption;
     }
 
     public void RefreshAuthState()
@@ -91,6 +103,12 @@ public partial class UsersViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAllFilter));
         OnPropertyChanged(nameof(IsActiveFilter));
         OnPropertyChanged(nameof(IsInactiveFilter));
+        ApplyFilters();
+    }
+
+    partial void OnSelectedLeagueFilterChanged(UserLeagueOption? value)
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
         ApplyFilters();
     }
 
@@ -154,6 +172,7 @@ public partial class UsersViewModel : ObservableObject
             IsUnlocked = true;
 
             _all = (await _users.GetAllAsync().ConfigureAwait(true)).ToList();
+            await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
             RefreshCounts();
             ApplyFilters();
         }
@@ -165,6 +184,7 @@ public partial class UsersViewModel : ObservableObject
             if (NetworkUi.IsNetworkFailure(ex))
                 await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
             _all = new List<AppUser>();
+            await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
             RefreshCounts();
             ApplyFilters();
         }
@@ -190,6 +210,29 @@ public partial class UsersViewModel : ObservableObject
     {
         NameFilter = string.Empty;
         StatusFilter = 0;
+        SelectedLeagueFilter = LeagueFilterOptions.FirstOrDefault(l => l.Id == Guid.Empty)
+            ?? AllLeaguesOption;
+    }
+
+    private async Task LoadLeagueFilterOptionsAsync()
+    {
+        var previousId = SelectedLeagueFilter?.Id ?? Guid.Empty;
+        LeagueFilterOptions.Clear();
+        LeagueFilterOptions.Add(AllLeaguesOption);
+
+        try
+        {
+            var list = await _leagues.GetAllAsync().ConfigureAwait(true);
+            foreach (var league in list.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
+                LeagueFilterOptions.Add(new UserLeagueOption { Id = league.Id, Name = league.Name });
+        }
+        catch
+        {
+            // Keep All leagues even if catalog fetch fails; users still list by name search.
+        }
+
+        SelectedLeagueFilter = LeagueFilterOptions.FirstOrDefault(l => l.Id == previousId)
+            ?? AllLeaguesOption;
     }
 
     private void RefreshCounts()
@@ -209,6 +252,9 @@ public partial class UsersViewModel : ObservableObject
             2 => q.Where(u => !u.IsActive),
             _ => q
         };
+
+        if (SelectedLeagueFilter is { } league && league.Id != Guid.Empty)
+            q = q.Where(u => u.LeagueId == league.Id);
 
         var name = NameFilter?.Trim();
         if (!string.IsNullOrWhiteSpace(name))

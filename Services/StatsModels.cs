@@ -30,6 +30,34 @@ public sealed class ConfrontationStat
     public string BowlingStrikeRateText => Outs == 0 ? "-" : BowlingStrikeRate.ToString("0.##");
 }
 
+/// <summary>This captain vs an opposing captain (player 1 vs 1 · Captaincy).</summary>
+public sealed class CaptainVsStat
+{
+    public Guid CaptainId { get; init; }
+    public string CaptainName { get; init; } = string.Empty;
+    public Guid OpponentCaptainId { get; init; }
+    public string OpponentCaptainName { get; init; } = string.Empty;
+
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+
+    public double WinPct => Played == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
+    public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public string RecordText => $"{Won}–{Lost}–{Tied}";
+    public bool HasSeries => Series > 0;
+    public string SeriesRecordText => Series == 0
+        ? "-"
+        : $"{SeriesWon}–{SeriesLoss}–{SeriesTied}";
+}
+
 /// <summary>Full leaderboard row: Match · Batting · Bowling · Fielding · Attendance.</summary>
 public sealed class PlayerCareerSummary
 {
@@ -178,6 +206,88 @@ public sealed class PlayerCareerSummary
     public string BowlingEconomyText => OversBowledBalls == 0 ? "-" : BowlingEconomy.ToString("0.##");
     public double BowlingStrikeRate => Wickets == 0 ? 0 : Math.Round((double)OversBowledBalls / Wickets, 2);
     public string BowlingStrikeRateText => Wickets == 0 ? "-" : BowlingStrikeRate.ToString("0.##");
+}
+
+/// <summary>Statistics · Teams row: matches, NRR, tournaments, series.</summary>
+public sealed class TeamCareerSummary
+{
+    public Guid TeamId { get; init; }
+    public string TeamName { get; init; } = string.Empty;
+    public int Rank { get; set; }
+    public bool IsAltRow { get; set; }
+
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int Points => Won * 2 + Tied;
+    public int RunsFor { get; set; }
+    public int RunsAgainst { get; set; }
+    public int BallsFor { get; set; }
+    public int BallsAgainst { get; set; }
+    public int Tournaments { get; set; }
+    public int TournamentWon { get; set; }
+    public int TournamentLoss { get; set; }
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+
+    public double WinPct => Played == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
+    public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public double Nrr
+    {
+        get
+        {
+            var of = BallsFor <= 0 ? 0 : RunsFor / (BallsFor / 6.0);
+            var oa = BallsAgainst <= 0 ? 0 : RunsAgainst / (BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
+}
+
+/// <summary>Head-to-head row: this team vs one opponent.</summary>
+public sealed class TeamVsStat
+{
+    public Guid OpponentTeamId { get; init; }
+    public string OpponentTeamName { get; init; } = string.Empty;
+    public string TeamName { get; set; } = string.Empty;
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int RunsFor { get; set; }
+    public int RunsAgainst { get; set; }
+    public int BallsFor { get; set; }
+    public int BallsAgainst { get; set; }
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+
+    public double WinPct => Played == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
+    public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public double Nrr
+    {
+        get
+        {
+            var of = BallsFor <= 0 ? 0 : RunsFor / (BallsFor / 6.0);
+            var oa = BallsAgainst <= 0 ? 0 : RunsAgainst / (BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
+    public string RecordText => $"{Won}–{Lost}–{Tied}";
+    public string VsTitle => $"vs {OpponentTeamName}";
+    public bool HasSeries => Series > 0;
+    public string SeriesRecordText => Series == 0
+        ? "-"
+        : $"{SeriesWon}–{SeriesLoss}–{SeriesTied}";
 }
 
 public sealed class RankingRow

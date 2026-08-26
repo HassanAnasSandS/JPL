@@ -36,6 +36,7 @@ public partial class MatchScorecardViewModel : ObservableObject
             _boundStreamUrl = null;
             IsLiveStreamOpen = false;
             StreamSource = null;
+            IsDetailScorecardModalOpen = false;
             _ = LoadAsync();
         }
     }
@@ -67,6 +68,7 @@ public partial class MatchScorecardViewModel : ObservableObject
     [ObservableProperty] private string currentOver = "0.0";
     [ObservableProperty] private string totalOvers = "—";
     [ObservableProperty] private bool isLiveStreamOpen;
+    [ObservableProperty] private bool isDetailScorecardModalOpen;
     [ObservableProperty] private string strikerName = "—";
     [ObservableProperty] private string strikerScore = "";
     [ObservableProperty] private string nonStrikerName = "—";
@@ -92,9 +94,11 @@ public partial class MatchScorecardViewModel : ObservableObject
     public bool HasCurrentInningsLine => !string.IsNullOrWhiteSpace(CurrentInningsLine);
     public bool ShowMainScorecard => HasScorecard && !ShowFullScorecard && !IsLiveStreamOpen;
     public bool ShowLiveButton => HasLiveStream && ShowMainScorecard;
-    public bool ShowLiveOverlay => IsLiveStreamOpen && !ShowFullScorecard && HasLiveStream;
+    public bool ShowAnalyticsButton => HasScorecard && ShowMainScorecard;
+    public bool ShowLiveOverlay => IsLiveStreamOpen && HasLiveStream;
     public bool ShowDetailPane => ShowFullScorecard || ShowPlaceholder;
     public bool ShowShellNavBar => !ShowLiveOverlay;
+    public bool ShowDetailScorecardModal => IsDetailScorecardModalOpen && IsLiveStreamOpen;
     public string ScorecardTapHint => "Tap for full scorecard";
     public string LiveBannerText => HasLiveStream ? "LIVE · STREAM + SCORE" : "LIVE · ball by ball";
 
@@ -122,27 +126,37 @@ public partial class MatchScorecardViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(LiveBannerText));
         OnPropertyChanged(nameof(ShowLiveButton));
+        OnPropertyChanged(nameof(ShowAnalyticsButton));
         OnPropertyChanged(nameof(ShowLiveOverlay));
     }
 
     partial void OnShowFullScorecardChanged(bool value)
     {
-        if (value)
+        if (value && !IsLiveStreamOpen)
             StopStreamPlayback();
         OnPropertyChanged(nameof(ShowMainScorecard));
         OnPropertyChanged(nameof(ShowLiveButton));
+        OnPropertyChanged(nameof(ShowAnalyticsButton));
         OnPropertyChanged(nameof(ShowLiveOverlay));
         OnPropertyChanged(nameof(ShowDetailPane));
         OnPropertyChanged(nameof(ShowShellNavBar));
+        OnPropertyChanged(nameof(ShowDetailScorecardModal));
     }
 
     partial void OnIsLiveStreamOpenChanged(bool value)
     {
+        if (!value)
+            IsDetailScorecardModalOpen = false;
         OnPropertyChanged(nameof(ShowMainScorecard));
         OnPropertyChanged(nameof(ShowLiveButton));
+        OnPropertyChanged(nameof(ShowAnalyticsButton));
         OnPropertyChanged(nameof(ShowLiveOverlay));
         OnPropertyChanged(nameof(ShowShellNavBar));
+        OnPropertyChanged(nameof(ShowDetailScorecardModal));
     }
+
+    partial void OnIsDetailScorecardModalOpenChanged(bool value)
+        => OnPropertyChanged(nameof(ShowDetailScorecardModal));
 
     partial void OnHasScorecardChanged(bool value)
     {
@@ -150,6 +164,7 @@ public partial class MatchScorecardViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowIdlePlaceholder));
         OnPropertyChanged(nameof(ShowMainScorecard));
         OnPropertyChanged(nameof(ShowLiveButton));
+        OnPropertyChanged(nameof(ShowAnalyticsButton));
         OnPropertyChanged(nameof(ShowDetailPane));
     }
 
@@ -238,6 +253,14 @@ public partial class MatchScorecardViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task OpenAnalyticsAsync()
+    {
+        if (!Guid.TryParse(MatchId, out var id))
+            return;
+        await Shell.Current.GoToAsync($"{nameof(Pages.MatchAnalyticsPage)}?id={id:D}").ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private void CloseLiveStream()
     {
         StopStreamPlayback();
@@ -247,10 +270,18 @@ public partial class MatchScorecardViewModel : ObservableObject
     [RelayCommand]
     private void OpenDetailScorecard()
     {
-        StopStreamPlayback();
-        IsLiveStreamOpen = false;
+        if (IsLiveStreamOpen)
+        {
+            IsDetailScorecardModalOpen = true;
+            return;
+        }
+
         ShowFullScorecard = true;
     }
+
+    [RelayCommand]
+    private void CloseDetailScorecardModal()
+        => IsDetailScorecardModalOpen = false;
 
     [RelayCommand]
     private void ToggleDetailScorecard()

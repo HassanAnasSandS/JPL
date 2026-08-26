@@ -2,32 +2,185 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.PlayerEditPage"
              x:DataType="vm:PlayerEditViewModel"
              Title="{Binding Title}"
              HideSoftInputOnTapped="True">
 
+    <Grid>
     <ScrollView VerticalOptions="Fill"
                 VerticalScrollBarVisibility="Default"
                 HorizontalScrollBarVisibility="Never">
         <VerticalStackLayout Padding="16" Spacing="14" VerticalOptions="Start">
-            <Border Style="{StaticResource CardBorder}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Player name *" Style="{StaticResource SectionLabel}" />
-                    <Entry Placeholder="Full name (required, unique)"
-                           Text="{Binding FullName}"
-                           FontSize="16"
-                           MaxLength="120" />
-                    <HorizontalStackLayout Spacing="10">
-                        <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" />
-                        <Label Text="Active (shown in team squad pickers)"
-                               VerticalOptions="Center"
-                               Style="{StaticResource BodyLabel}" />
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding IsViewMode}">
+                <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
+                    <ctrl:RoundedPhotoView Photo="{Binding PhotoPreview}"
+                                           Initials="{Binding Initials}"
+                                           TappedCommand="{Binding OpenPhotoCommand}" />
+                    <VerticalStackLayout Spacing="2" VerticalOptions="Center" HorizontalOptions="Fill">
+                        <Label Text="{Binding FullName}"
+                               FontAttributes="Bold"
+                               FontSize="17"
+                               Style="{StaticResource BodyLabel}"
+                               LineBreakMode="TailTruncation" />
+                        <Label Text="{Binding NickName}"
+                               FontSize="13"
+                               TextColor="{StaticResource Secondary}"
+                               IsVisible="{Binding HasNickName}" />
+                        <Label Text="{Binding StatusText}"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{Binding StatusColor}" />
+                        <Label Text="{Binding IdentityLine}"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}"
+                               IsVisible="{Binding HasIdentityLine}" />
+                    </VerticalStackLayout>
+                </HorizontalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding IsViewMode}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="{Binding Bio}"
+                           Style="{StaticResource BodyLabel}"
+                           IsVisible="{Binding HasBio}" />
+                    <Label Text="{Binding PublicProfileHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12"
+                           IsVisible="{Binding HasPublicProfile}" />
+                    <HorizontalStackLayout Spacing="8">
+                        <Button Text="Open public profile"
+                                Style="{StaticResource GoldButton}"
+                                Padding="16,10"
+                                MinimumHeightRequest="44"
+                                IsVisible="{Binding HasPublicProfile}"
+                                Command="{Binding OpenPublicProfileCommand}" />
+                        <Button Text="Copy link"
+                                Style="{StaticResource OutlineButton}"
+                                BackgroundColor="{StaticResource CardBackground}"
+                                Padding="16,10"
+                                MinimumHeightRequest="44"
+                                IsVisible="{Binding HasPublicProfile}"
+                                Command="{Binding CopyPublicLinkCommand}" />
                     </HorizontalStackLayout>
                 </VerticalStackLayout>
             </Border>
+
+            <VerticalStackLayout Spacing="14" IsVisible="{Binding CanEdit}">
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Player name *" Style="{StaticResource SectionLabel}" />
+                        <Entry Placeholder="Full name (required, unique)"
+                               Text="{Binding FullName}"
+                               FontSize="16"
+                               MaxLength="120"
+                               IsEnabled="{Binding CanEdit}" />
+                        <HorizontalStackLayout Spacing="10">
+                            <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" IsEnabled="{Binding CanEdit}" />
+                            <Label Text="{Binding StatusText}"
+                                   VerticalOptions="Center"
+                                   Style="{StaticResource BodyLabel}"
+                                   FontAttributes="Bold"
+                                   TextColor="{Binding StatusColor}" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Public cricket identity" Style="{StaticResource SectionLabel}" />
+                        <Label Text="Shown on the shareable web profile. Never put a phone number here."
+                               Style="{StaticResource MutedLabel}" />
+                        <Entry Placeholder="Nickname (optional)"
+                               Text="{Binding NickName}"
+                               FontSize="16"
+                               MaxLength="40"
+                               IsEnabled="{Binding CanEdit}" />
+                        <Entry Placeholder="Role — Batter / Bowler / All-rounder / WK"
+                               Text="{Binding PlayingRole}"
+                               FontSize="16"
+                               MaxLength="40"
+                               IsEnabled="{Binding CanEdit}" />
+                        <Entry Placeholder="Batting — Right-hand / Left-hand"
+                               Text="{Binding BattingStyle}"
+                               FontSize="16"
+                               MaxLength="40"
+                               IsEnabled="{Binding CanEdit}" />
+                        <Entry Placeholder="Bowling — Right-arm fast / off-spin / …"
+                               Text="{Binding BowlingStyle}"
+                               FontSize="16"
+                               MaxLength="60"
+                               IsEnabled="{Binding CanEdit}" />
+                        <Editor Placeholder="Short public bio"
+                                Text="{Binding Bio}"
+                                AutoSize="TextChanges"
+                                MaxLength="500"
+                                FontSize="15"
+                                MinimumHeightRequest="80"
+                                IsEnabled="{Binding CanEdit}" />
+                        <Label Text="{Binding PublicProfileHint}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12"
+                               IsVisible="{Binding HasPublicProfile}" />
+                        <HorizontalStackLayout Spacing="8" IsVisible="{Binding HasPublicProfile}">
+                            <Button Text="Open public profile"
+                                    Style="{StaticResource OutlineButton}"
+                                    BackgroundColor="{StaticResource CardBackground}"
+                                    Padding="16,10"
+                                    MinimumHeightRequest="44"
+                                    Command="{Binding OpenPublicProfileCommand}" />
+                            <Button Text="Copy link"
+                                    Style="{StaticResource GhostButton}"
+                                    Padding="16,10"
+                                    MinimumHeightRequest="44"
+                                    Command="{Binding CopyPublicLinkCommand}" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Player photo" Style="{StaticResource SectionLabel}" />
+                        <HorizontalStackLayout Spacing="14">
+                            <ctrl:RoundedPhotoView Photo="{Binding PhotoPreview}"
+                                                   Initials="{Binding Initials}" />
+                            <VerticalStackLayout Spacing="4"
+                                                 VerticalOptions="Center"
+                                                 HorizontalOptions="Fill">
+                                <Label Text="{Binding PhotoFileName}"
+                                       FontAttributes="Bold"
+                                       FontSize="15"
+                                       Style="{StaticResource BodyLabel}"
+                                       LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding PhotoHint}"
+                                       Style="{StaticResource MutedLabel}" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                        <HorizontalStackLayout Spacing="8">
+                            <Button Text="{Binding PhotoActionLabel}"
+                                    Style="{StaticResource OutlineButton}"
+                                    BackgroundColor="{StaticResource CardBackground}"
+                                    Padding="16,10"
+                                    MinimumHeightRequest="44"
+                                    HorizontalOptions="Start"
+                                    Command="{Binding PickPhotoCommand}" />
+                            <Button Text="Remove"
+                                    Style="{StaticResource GhostButton}"
+                                    Padding="16,10"
+                                    MinimumHeightRequest="44"
+                                    IsVisible="{Binding CanRemovePhoto}"
+                                    Command="{Binding RemovePhotoCommand}" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+
             <Button Text="Save"
                     Style="{StaticResource GoldButton}"
+                    IsVisible="{Binding CanEdit}"
                     Command="{Binding SaveCommand}" />
             <ActivityIndicator IsRunning="{Binding IsBusy}"
                                IsVisible="{Binding IsBusy}"
@@ -37,4 +190,28 @@
                    FontSize="12" />
         </VerticalStackLayout>
     </ScrollView>
+
+    <Grid IsVisible="{Binding IsPhotoModalOpen}"
+          InputTransparent="False"
+          ZIndex="40">
+        <BoxView Color="#CC000000"
+                 HorizontalOptions="Fill"
+                 VerticalOptions="Fill">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding ClosePhotoCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="12">
+            <Button Text="Close"
+                    Style="{StaticResource GhostButton}"
+                    HorizontalOptions="End"
+                    Command="{Binding ClosePhotoCommand}" />
+            <Image Grid.Row="1"
+                   Source="{Binding PhotoPreview}"
+                   Aspect="AspectFit"
+                   HorizontalOptions="Fill"
+                   VerticalOptions="Fill" />
+        </Grid>
+    </Grid>
+    </Grid>
 </ContentPage>

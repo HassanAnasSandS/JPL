@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{PLAYER_NAME}} · Cric360</title>
+  <meta property="og:title" content="{{PLAYER_NAME}} · {{LEAGUE_NAME}}" />
+  <meta property="og:description" content="Public cricket identity on Cric360 — full career, rankings and honours. No paywall." />
+  <style>
+    :root { --bg:#0b1220; --card:#0d1b2a; --line:#243447; --gold:#d4af37; --text:#f4f7fb; --muted:#8fa3b8; --green:#7CFF6B; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    a { color:var(--gold); text-decoration:none; }
+    .top { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; }
+    .brand { font-weight:800; letter-spacing:.06em; color:var(--gold); font-size:12px; }
+    .social { margin-left:auto; display:flex; flex-wrap:wrap; gap:12px; font-size:12px; font-weight:700; }
+    .wrap { max-width:860px; margin:0 auto; padding:16px; }
+    .hero { display:grid; grid-template-columns:88px 1fr; gap:14px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+    .photo { width:88px; height:88px; border-radius:16px; object-fit:cover; background:#182a3e; }
+    .name { font-size:22px; font-weight:800; margin:0; }
+    .nick { color:var(--gold); font-size:13px; margin:2px 0 6px; }
+    .meta { color:var(--muted); font-size:12px; }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .chip { background:#182a3e; border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:11px; font-weight:700; }
+    .chip.gold { background:var(--gold); color:#0d1b2a; border-color:var(--gold); }
+    .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+    button, .btn { appearance:none; border:1px solid var(--line); background:#182a3e; color:var(--text); font-weight:700; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:12px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin-top:14px; }
+    .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; }
+    .stat b { display:block; font-size:20px; color:var(--gold); }
+    .stat span { font-size:11px; color:var(--muted); }
+    h2 { font-size:13px; color:var(--gold); letter-spacing:.08em; margin:22px 0 8px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+    .insight { font-size:13px; line-height:1.45; margin:0 0 8px; color:var(--text); }
+    .bar { height:8px; background:#182a3e; border-radius:8px; overflow:hidden; }
+    .bar > i { display:block; height:100%; background:var(--gold); }
+    .form { display:flex; gap:6px; flex-wrap:wrap; }
+    .pill { background:#182a3e; border-radius:8px; padding:6px 8px; font-size:12px; font-weight:700; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    td { padding:6px 0; border-bottom:1px solid var(--line); }
+    td:last-child { text-align:right; color:var(--gold); font-weight:700; }
+    .bio { font-size:14px; line-height:1.5; color:var(--text); }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <a class="brand" href="/p/{{LEAGUE_ID}}">CRIC360</a>
+    <span class="meta" id="league">{{LEAGUE_NAME}}</span>
+    <span class="social">
+      <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a>
+      <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a>
+    </span>
+  </div>
+  <div class="wrap">
+    <div class="hero">
+      <img class="photo" id="photo" alt="" />
+      <div>
+        <h1 class="name" id="name">{{PLAYER_NAME}}</h1>
+        <div class="nick" id="nick"></div>
+        <div class="meta" id="styles"></div>
+        <div class="chips" id="chips"></div>
+        <div class="row">
+          <button type="button" id="share">Copy public link</button>
+          <a class="btn" href="/p/{{LEAGUE_ID}}">All players</a>
+        </div>
+      </div>
+    </div>
+    <p class="bio" id="bio"></p>
+    <h2>INSIGHTS</h2>
+    <div class="card" id="insights"></div>
+    <h2>CAREER</h2>
+    <div class="grid" id="career"></div>
+    <h2>LEAGUE RANKS · FREE</h2>
+    <div class="chips" id="ranks"></div>
+    <h2>HONOURS</h2>
+    <div class="chips" id="honours"></div>
+    <h2>STRENGTH vs LEAGUE</h2>
+    <div class="card" id="strength"></div>
+    <h2>RECENT FORM</h2>
+    <div class="form" id="form"></div>
+    <h2>VS BOWLERS</h2>
+    <div class="card"><table id="vsBowl"></table></div>
+    <h2>VS BATTERS</h2>
+    <div class="card"><table id="vsBat"></table></div>
+    <h2>NETS</h2>
+    <div class="card" id="nets">No nets identity on CricHeroes. Here it is first-class.</div>
+    <p class="meta" style="margin-top:22px">Follow Cric360 · <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> · <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> · <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a></p>
+  </div>
+  <script>
+    const leagueId = "{{LEAGUE_ID}}";
+    const playerId = "{{PLAYER_ID}}";
+    function esc(s) {
+      return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    }
+    const photo = document.getElementById("photo");
+    photo.src = "/api/public/leagues/" + leagueId + "/players/" + playerId + "/image";
+    photo.onerror = () => { photo.style.display = "none"; };
+
+    fetch("/api/public/leagues/" + leagueId + "/players/" + playerId, { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(p => {
+        document.getElementById("name").textContent = p.fullName;
+        document.getElementById("nick").textContent = p.nickName ? "“" + p.nickName + "”" : "";
+        document.getElementById("styles").textContent = [p.playingRole, p.battingStyle, p.bowlingStyle].filter(Boolean).join(" · ");
+        document.getElementById("bio").textContent = p.bio || "";
+        const chips = [];
+        (p.teams || []).forEach(t => chips.push(t));
+        if (!p.isActive) chips.push("Inactive");
+        document.getElementById("chips").innerHTML = chips.map(c => "<span class='chip'>" + esc(c) + "</span>").join("");
+        document.getElementById("insights").innerHTML = (p.insights || []).map(t => "<p class='insight'>" + esc(t) + "</p>").join("");
+        const m = p.matches || {};
+        const sr = m.ballsFaced ? (m.runs * 100 / m.ballsFaced).toFixed(1) : "-";
+        const econ = m.oversBowledBalls ? (m.runsConceded * 6 / m.oversBowledBalls).toFixed(2) : "-";
+        const avg = m.dismissals ? (m.runs / m.dismissals).toFixed(1) : (m.runs || "-");
+        const stats = [
+          ["Matches", m.matches], ["Runs", m.runs], ["HS", m.highestScoreText], ["Avg", avg],
+          ["SR", sr], ["4s / 6s", (m.fours||0) + " / " + (m.sixes||0)],
+          ["Wickets", m.wickets], ["Best", m.bestBowlingText], ["Econ", econ],
+          ["Catches", m.catches], ["POTM", (p.honours||[]).filter(h => /Player of the Match/.test(h.label)).map(h => h.count)[0] || 0]
+        ];
+        document.getElementById("career").innerHTML = stats.map(s => "<div class='stat'><b>" + esc(s[1] ?? "-") + "</b><span>" + esc(s[0]) + "</span></div>").join("");
+        document.getElementById("ranks").innerHTML = (p.ranks || []).map(r => "<span class='chip gold'>#" + esc(r.rank) + " " + esc(r.category) + "</span>").join("") || "<span class='chip'>Unranked</span>";
+        document.getElementById("honours").innerHTML = (p.honours || []).map(h => "<span class='chip gold'>" + esc(h.count) + "× " + esc(h.label) + "</span>").join("") || "<span class='chip'>No trophies yet</span>";
+        document.getElementById("strength").innerHTML = (p.strength || []).map(s =>
+          "<div style='margin:8px 0'><div class='meta'>" + esc(s.label) + " · " + esc(s.score) + "</div><div class='bar'><i style='width:" + Number(s.score || 0) + "%'></i></div></div>").join("");
+        document.getElementById("form").innerHTML = (p.recentForm || []).map(f => "<span class='pill'>" + esc(f.text) + "</span>").join("") || "<span class='meta'>No innings yet</span>";
+        document.getElementById("vsBowl").innerHTML = (p.vsBowlers || []).map(d => "<tr><td>" + esc(d.opponent) + "</td><td>" + esc(d.line) + "</td></tr>").join("");
+        document.getElementById("vsBat").innerHTML = (p.vsBatters || []).map(d => "<tr><td>" + esc(d.opponent) + "</td><td>" + esc(d.line) + "</td></tr>").join("");
+        if (p.nets) {
+          document.getElementById("nets").innerHTML = "<b>" + esc(p.nets.sessions) + " sessions</b> · " + esc(p.nets.runs) + " runs · " + esc(p.nets.wickets) + " wickets";
+        }
+      })
+      .catch(() => { document.getElementById("bio").textContent = "Profile unavailable."; });
+
+    document.getElementById("share").onclick = async () => {
+      const url = location.href;
+      try { await navigator.clipboard.writeText(url); document.getElementById("share").textContent = "Link copied"; }
+      catch { prompt("Copy this public profile", url); }
+    };
+  </script>
+</body>
+</html>

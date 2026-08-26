@@ -37,6 +37,7 @@ public partial class TeamEditViewModel : ObservableObject
 {
     private readonly ITeamService _teams;
     private readonly IPlayerService _players;
+    private readonly ITeamImageService _images;
     private readonly IAuthService _auth;
 
     public string? TeamId { get; set; }
@@ -45,7 +46,11 @@ public partial class TeamEditViewModel : ObservableObject
 
     public ObservableCollection<SelectablePlayer> RosterCandidates { get; } = new();
 
-    public ObservableCollection<SelectablePlayer> PlayingCandidates { get; } = new();
+    public ObservableCollection<SelectablePlayer> FilteredRoster { get; } = new();
+
+    public ObservableCollection<SelectablePlayer> SquadSummary { get; } = new();
+
+    public ObservableCollection<SelectablePlayer> PlayingSummary { get; } = new();
 
     public ObservableCollection<SelectablePlayer> CaptainOptions { get; } = new();
 
@@ -85,14 +90,51 @@ public partial class TeamEditViewModel : ObservableObject
     [ObservableProperty]
     private string playingHint = "Only playing players appear in the next match. Update this before each match.";
 
-    public bool HasPlayingCandidates => PlayingCandidates.Count > 0;
+    [ObservableProperty]
+    private string nameFilter = string.Empty;
+
+    [ObservableProperty]
+    private ImageSource? photoPreview;
+
+    [ObservableProperty]
+    private string initials = "?";
+
+    [ObservableProperty]
+    private string photoFileName = "No file selected";
+
+    [ObservableProperty]
+    private string photoHint = "Optional · JPEG, PNG or WebP · one logo";
+
+    [ObservableProperty]
+    private bool hasPhoto;
+
+    [ObservableProperty]
+    private bool isPhotoModalOpen;
+
+    public bool ShowPlayerPicker => CanEdit;
+
+    public bool HasFilter => !string.IsNullOrWhiteSpace(NameFilter);
+
+    public bool HasSquadSummary => SquadSummary.Count > 0;
+
+    public bool HasPlayingSummary => PlayingSummary.Count > 0;
 
     private Guid? _existingId;
+    private byte[]? _pendingJpeg;
+    private bool _removePhoto;
+    private bool _loadedExistingPhoto;
 
-    public TeamEditViewModel(ITeamService teams, IPlayerService players, IAuthService auth)
+    public string PhotoActionLabel => HasPhoto ? "Change logo" : "Choose logo";
+    public bool CanRemovePhoto => HasPhoto && CanEdit;
+    public bool ShowInitials => !HasPhoto;
+    public string StatusText => IsActive ? "Active" : "Inactive";
+    public Color StatusColor => StatusColors.For(IsActive);
+
+    public TeamEditViewModel(ITeamService teams, IPlayerService players, ITeamImageService images, IAuthService auth)
     {
         _teams = teams;
         _players = players;
+        _images = images;
         _auth = auth;
         CanWrite = _auth.CanWrite;
         CanEdit = CanWrite;
@@ -110,6 +152,10 @@ public partial class TeamEditViewModel : ObservableObject
             await Shell.Current.GoToAsync("..").ConfigureAwait(true);
             return;
         }
+
+        NameFilter = string.Empty;
+        if (!Guid.TryParse(TeamId, out _))
+            ResetPhoto();
 
         var allPlayers = await _players.GetActiveAsync().ConfigureAwait(true);
 
@@ -136,6 +182,7 @@ public partial class TeamEditViewModel : ObservableObject
 
             Name = detail.Name;
             IsActive = detail.IsActive;
+            Initials = PlayerPhotos.Initials(detail.Name);
             captainId = detail.CaptainPlayerId;
             selected = detail.Players.Select(p => p.Id).ToHashSet();
             playing = (detail.PlayingPlayerIds ?? Array.Empty<Guid>()).ToHashSet();
@@ -174,12 +221,55 @@ public partial class TeamEditViewModel : ObservableObject
         }
 
         RebuildCaptainOptions(captainId);
-        RebuildPlayingOptions();
+        RebuildSummaries();
+        ApplyFilter();
         RefreshHints();
+        await LoadExistingPhotoAsync().ConfigureAwait(true);
+    }
+
+    partial void OnNameChanged(string value)
+        => Initials = PlayerPhotos.Initials(value);
+
+    partial void OnIsActiveChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StatusColor));
+        OnPropertyChanged(nameof(StatusText));
+    }
+
+    partial void OnHasPhotoChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PhotoActionLabel));
+        OnPropertyChanged(nameof(CanRemovePhoto));
+        OnPropertyChanged(nameof(ShowInitials));
+        if (!value)
+            IsPhotoModalOpen = false;
+    }
+
+    [RelayCommand]
+    private void OpenPhoto()
+    {
+        if (PhotoPreview is null)
+            return;
+        IsPhotoModalOpen = true;
+    }
+
+    [RelayCommand]
+    private void ClosePhoto() => IsPhotoModalOpen = false;
+
+    partial void OnCanEditChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowPlayerPicker));
+        OnPropertyChanged(nameof(CanRemovePhoto));
     }
 
     partial void OnSelectedCaptainChanged(SelectablePlayer? value)
         => RefreshCaptainFlags();
+
+    partial void OnNameFilterChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasFilter));
+        ApplyFilter();
+    }
 
     [RelayCommand]
     private void TogglePlayer(SelectablePlayer? player)
@@ -198,7 +288,7 @@ public partial class TeamEditViewModel : ObservableObject
             SelectedCaptain = null;
 
         RebuildCaptainOptions(SelectedCaptain?.Id);
-        RebuildPlayingOptions();
+        RebuildSummaries();
         RefreshHints();
     }
 
@@ -209,7 +299,56 @@ public partial class TeamEditViewModel : ObservableObject
             return;
 
         player.IsPlaying = !player.IsPlaying;
+        RebuildSummaries();
         RefreshHints();
+    }
+
+    [RelayCommand]
+    private void ClearFilter() => NameFilter = string.Empty;
+
+    [RelayCommand]
+    private async Task PickPhotoAsync()
+    {
+        if (!CanEdit)
+            return;
+
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Choose team logo",
+                FileTypes = FilePickerFileType.Images
+            }).ConfigureAwait(true);
+            if (result is null)
+                return;
+
+            await using var stream = await result.OpenReadAsync().ConfigureAwait(true);
+            var jpeg = await PlayerPhotos.ToJpegAsync(stream).ConfigureAwait(true);
+            _pendingJpeg = jpeg;
+            _removePhoto = false;
+            PhotoPreview = PlayerPhotos.ToImageSource(jpeg);
+            HasPhoto = true;
+            PhotoFileName = result.FileName;
+            PhotoHint = $"{Math.Max(1, jpeg.Length / 1024)} KB · will be saved as a small JPEG";
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private void RemovePhoto()
+    {
+        if (!CanEdit)
+            return;
+
+        _pendingJpeg = null;
+        _removePhoto = _existingId is not null && _loadedExistingPhoto;
+        ResetPhoto();
+        if (_removePhoto)
+            PhotoHint = "Logo will be removed when you save";
     }
 
     [RelayCommand]
@@ -244,16 +383,29 @@ public partial class TeamEditViewModel : ObservableObject
 
             var draft = new TeamDraft(name, SelectedCaptain.Id, playerIds, IsActive, playingIds);
 
-            if (_existingId is Guid id)
-                await _teams.UpdateAsync(id, draft).ConfigureAwait(true);
+            Guid id;
+            if (_existingId is Guid existing)
+            {
+                await _teams.UpdateAsync(existing, draft).ConfigureAwait(true);
+                id = existing;
+            }
             else
-                await _teams.CreateAsync(draft).ConfigureAwait(true);
+            {
+                var created = await _teams.CreateAsync(draft).ConfigureAwait(true);
+                id = created.Id;
+                _existingId = id;
+            }
+
+            if (_pendingJpeg is { Length: > 0 })
+                await _images.UploadAsync(id, _pendingJpeg, "logo.jpg").ConfigureAwait(true);
+            else if (_removePhoto)
+                await _images.DeleteAsync(id).ConfigureAwait(true);
 
             await Shell.Current.GoToAsync("..").ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = NetworkUi.UserMessage(ex);
         }
         finally
         {
@@ -276,12 +428,30 @@ public partial class TeamEditViewModel : ObservableObject
         RefreshCaptainFlags();
     }
 
-    private void RebuildPlayingOptions()
+    private void RebuildSummaries()
     {
-        PlayingCandidates.Clear();
+        SquadSummary.Clear();
         foreach (var p in RosterCandidates.Where(x => x.IsSelected).OrderBy(x => x.FullName))
-            PlayingCandidates.Add(p);
-        OnPropertyChanged(nameof(HasPlayingCandidates));
+            SquadSummary.Add(p);
+
+        PlayingSummary.Clear();
+        foreach (var p in RosterCandidates.Where(x => x.IsSelected && x.IsPlaying).OrderBy(x => x.FullName))
+            PlayingSummary.Add(p);
+
+        OnPropertyChanged(nameof(HasSquadSummary));
+        OnPropertyChanged(nameof(HasPlayingSummary));
+    }
+
+    private void ApplyFilter()
+    {
+        var q = NameFilter?.Trim() ?? string.Empty;
+        IEnumerable<SelectablePlayer> source = RosterCandidates.OrderBy(p => p.FullName);
+        if (q.Length > 0)
+            source = source.Where(p => p.FullName.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+        FilteredRoster.Clear();
+        foreach (var p in source)
+            FilteredRoster.Add(p);
     }
 
     private void RefreshHints()
@@ -301,5 +471,42 @@ public partial class TeamEditViewModel : ObservableObject
         var capId = SelectedCaptain?.Id;
         foreach (var p in RosterCandidates)
             p.IsCaptain = capId is Guid id && p.Id == id;
+    }
+
+    private async Task LoadExistingPhotoAsync()
+    {
+        _pendingJpeg = null;
+        _removePhoto = false;
+        _loadedExistingPhoto = false;
+        if (_existingId is not Guid id)
+            return;
+
+        try
+        {
+            var photo = await _images.GetPhotoAsync(id).ConfigureAwait(true);
+            if (photo is not null)
+            {
+                PhotoPreview = photo;
+                HasPhoto = true;
+                PhotoFileName = "Current logo";
+                PhotoHint = "Optional · one logo per team";
+                _loadedExistingPhoto = true;
+            }
+        }
+        catch
+        {
+            ResetPhoto();
+        }
+    }
+
+    private void ResetPhoto()
+    {
+        PhotoPreview = null;
+        HasPhoto = false;
+        PhotoFileName = "No file selected";
+        PhotoHint = "Optional · JPEG, PNG or WebP · one logo";
+        Initials = PlayerPhotos.Initials(Name);
+        OnPropertyChanged(nameof(PhotoActionLabel));
+        OnPropertyChanged(nameof(CanRemovePhoto));
     }
 }

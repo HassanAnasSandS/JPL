@@ -27,6 +27,12 @@ public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Gui
         && LeagueId is null
         && string.Equals(Username, "user", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Players / Teams / Venues / Venue Bookings. Hidden only for the public guest;
+    /// league-assigned users still get a full read-only catalog of their league.
+    /// </summary>
+    public bool CanViewLeagueCatalog => !IsPublicUser;
+
     public string SignedInName => IsPublicUser ? "Public User" : Username;
     public string SignedInLabel => IsPublicUser ? "Public User" : $"{Username}  ·  {RoleLabel}";
 }

@@ -9,6 +9,7 @@ public partial class RankingsViewModel : ObservableObject
 {
     private readonly IStatsService _stats;
     private readonly StatsViewModel _statsVm;
+    public FormatFilterViewModel FormatFilter { get; }
     private RankingsBundle _bundle = new();
     private List<RankingRow> _categoryRows = new();
 
@@ -33,7 +34,7 @@ public partial class RankingsViewModel : ObservableObject
     private RankingRow? _openedRow;
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
-    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(NameFilter) || FilterByDate;
+    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(NameFilter) || FilterByDate || FormatFilter.HasSelection;
     public bool IsBatting => SelectedCategory == 0;
     public bool IsBowling => SelectedCategory == 1;
     public bool IsAllRounder => SelectedCategory == 2;
@@ -45,10 +46,21 @@ public partial class RankingsViewModel : ObservableObject
     public bool HasBreakdownNote => Breakdown?.HasNote == true;
     public bool CanOpenCareer => _openedRow is { PlayerId: var id } && id != Guid.Empty;
 
-    public RankingsViewModel(IStatsService stats, StatsViewModel statsVm)
+    public RankingsViewModel(IStatsService stats, StatsViewModel statsVm, IFormatService formats)
     {
         _stats = stats;
         _statsVm = statsVm;
+        FormatFilter = new FormatFilterViewModel(formats);
+        FormatFilter.Committed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasActiveFilters));
+            _ = LoadAsync();
+        };
+        FormatFilter.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(FormatFilterViewModel.HasSelection) or null)
+                OnPropertyChanged(nameof(HasActiveFilters));
+        };
     }
 
     partial void OnErrorMessageChanged(string? value)
@@ -89,6 +101,7 @@ public partial class RankingsViewModel : ObservableObject
         {
             IsBusy = true;
             ErrorMessage = null;
+            await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
             DateTime? from = null;
             DateTime? toExclusive = null;
             if (FilterByDate)
@@ -105,7 +118,7 @@ public partial class RankingsViewModel : ObservableObject
                 DateRangeText = "All completed matches";
             }
 
-            _bundle = await _stats.GetRankingsAsync(from, toExclusive).ConfigureAwait(true);
+            _bundle = await _stats.GetRankingsAsync(from, toExclusive, FormatFilter.SelectedIds).ConfigureAwait(true);
             ApplyCategory();
         }
         catch (Exception ex)
@@ -145,6 +158,8 @@ public partial class RankingsViewModel : ObservableObject
         FilterByDate = false;
         FromDate = new DateTime(DateTime.Today.Year, 1, 1);
         ToDate = DateTime.Today;
+        FormatFilter.ClearSelection();
+        OnPropertyChanged(nameof(HasActiveFilters));
         await LoadAsync().ConfigureAwait(true);
     }
 

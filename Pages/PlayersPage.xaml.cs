@@ -27,6 +27,13 @@ public partial class PlayersPage : ContentPage
         PageSafe.Run(() => _vm.AddCommand.ExecuteAsync(null));
     }
 
+    private void OnViewClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Button { CommandParameter: Player player })
+            return;
+        PageSafe.Run(() => _vm.ViewCommand.ExecuteAsync(player));
+    }
+
     private void OnEditClicked(object? sender, EventArgs e)
     {
         if (!_vm.CanWrite)

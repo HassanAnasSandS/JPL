@@ -18,7 +18,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Api",
-        version = "1.5",
+        version = "1.8",
         time = DateTime.Now
     });
 }
@@ -323,8 +323,15 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
 public sealed class PlayersController : ControllerBase
 {
     private readonly ApiDbContext _db;
+    private readonly PlayerImageStore _images;
+    private readonly IApiLeagueScope _league;
 
-    public PlayersController(ApiDbContext db) => _db = db;
+    public PlayersController(ApiDbContext db, PlayerImageStore images, IApiLeagueScope league)
+    {
+        _db = db;
+        _images = images;
+        _league = league;
+    }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<PlayerDto>>> GetAll(CancellationToken ct)
@@ -332,13 +339,88 @@ public sealed class PlayersController : ControllerBase
         var list = await _db.Players.AsNoTracking()
             .Where(p => !p.IsDeleted)
             .OrderBy(p => p.FullName)
-            .Select(p => new PlayerDto(
-                p.Id, p.FullName,
-                p.Version, p.UpdatedAtUtc, p.IsDeleted, p.IsActive))
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        return Ok(list.Select(ToDto).ToList());
+    }
 
-        return Ok(list);
+    /// <summary>Player IDs that have a stored photo. Image bytes are not included.</summary>
+    [HttpGet("photos")]
+    public async Task<ActionResult<IReadOnlyList<Guid>>> PhotoIds(CancellationToken ct)
+    {
+        var ids = await _db.Players.AsNoTracking()
+            .Where(p => !p.IsDeleted && p.ImagePath != null && p.ImagePath != "")
+            .Select(p => p.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return Ok(ids);
+    }
+
+    [HttpGet("{id:guid}/image")]
+    public async Task<IActionResult> GetImage(Guid id, CancellationToken ct)
+    {
+        var path = await _db.Players.AsNoTracking()
+            .Where(p => p.Id == id && !p.IsDeleted)
+            .Select(p => p.ImagePath)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(path))
+            return NotFound();
+
+        if (!_images.TryGetFullPath(_league.CurrentLeagueId, path, out var fullPath, out var contentType))
+            return NotFound();
+
+        return PhysicalFile(fullPath, contentType);
+    }
+
+    [HttpPost("{id:guid}/image")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(PlayerImageStore.MaxBytes + 24_576)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PlayerImageStore.MaxBytes + 24_576)]
+    public async Task<IActionResult> UploadImage(Guid id, [FromForm] IFormFile? file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest("Choose an image file.");
+        if (file.Length > PlayerImageStore.MaxBytes)
+            return BadRequest("Image must be 512 KB or smaller.");
+
+        var player = await _db.Players.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (player is null)
+            return NotFound();
+
+        try
+        {
+            var saved = await _images.SaveAsync(_league.CurrentLeagueId, player.Id, file, ct)
+                .ConfigureAwait(false);
+            if (!string.Equals(player.ImagePath, saved, StringComparison.OrdinalIgnoreCase))
+                _images.Delete(_league.CurrentLeagueId, player.ImagePath);
+            player.ImagePath = saved;
+            player.UpdatedAtUtc = DateTime.Now;
+            player.Version++;
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpDelete("{id:guid}/image")]
+    public async Task<IActionResult> DeleteImage(Guid id, CancellationToken ct)
+    {
+        var player = await _db.Players.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (player is null)
+            return NotFound();
+
+        _images.Delete(_league.CurrentLeagueId, player.ImagePath);
+        player.ImagePath = null;
+        player.UpdatedAtUtc = DateTime.Now;
+        player.Version++;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return NoContent();
     }
 
     [HttpGet("{id:guid}")]
@@ -367,6 +449,11 @@ public sealed class PlayersController : ControllerBase
             Id = request.Id is { } id && id != Guid.Empty ? id : Guid.NewGuid(),
             FullName = name,
             IsActive = request.IsActive,
+            NickName = TrimTo(request.NickName, 40),
+            PlayingRole = TrimTo(request.PlayingRole, 40),
+            BattingStyle = TrimTo(request.BattingStyle, 40),
+            BowlingStyle = TrimTo(request.BowlingStyle, 60),
+            Bio = TrimTo(request.Bio, 500),
             Version = 1,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
@@ -392,6 +479,11 @@ public sealed class PlayersController : ControllerBase
 
         player.FullName = name;
         player.IsActive = request.IsActive;
+        player.NickName = TrimTo(request.NickName, 40);
+        player.PlayingRole = TrimTo(request.PlayingRole, 40);
+        player.BattingStyle = TrimTo(request.BattingStyle, 40);
+        player.BowlingStyle = TrimTo(request.BowlingStyle, 60);
+        player.Bio = TrimTo(request.Bio, 500);
         player.UpdatedAtUtc = DateTime.Now;
         player.Version++;
 
@@ -450,7 +542,16 @@ public sealed class PlayersController : ControllerBase
 
     private static PlayerDto ToDto(Player p) => new(
         p.Id, p.FullName,
-        p.Version, p.UpdatedAtUtc, p.IsDeleted, p.IsActive);
+        p.Version, p.UpdatedAtUtc, p.IsDeleted, p.IsActive,
+        p.NickName, p.PlayingRole, p.BattingStyle, p.BowlingStyle, p.Bio);
+
+    private static string? TrimTo(string? raw, int max)
+    {
+        var s = raw?.Trim();
+        if (string.IsNullOrWhiteSpace(s))
+            return null;
+        return s.Length <= max ? s : s[..max];
+    }
 }
 
 [ApiController]
@@ -458,8 +559,15 @@ public sealed class PlayersController : ControllerBase
 public sealed class TeamsController : ControllerBase
 {
     private readonly ApiDbContext _db;
+    private readonly TeamImageStore _images;
+    private readonly IApiLeagueScope _league;
 
-    public TeamsController(ApiDbContext db) => _db = db;
+    public TeamsController(ApiDbContext db, TeamImageStore images, IApiLeagueScope league)
+    {
+        _db = db;
+        _images = images;
+        _league = league;
+    }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<TeamDto>>> GetAll(CancellationToken ct)
@@ -473,6 +581,85 @@ public sealed class TeamsController : ControllerBase
 
         var dto = teams.Select(ToDto).ToList();
         return Ok(dto);
+    }
+
+    /// <summary>Team IDs that have a stored logo. Image bytes are not included.</summary>
+    [HttpGet("photos")]
+    public async Task<ActionResult<IReadOnlyList<Guid>>> PhotoIds(CancellationToken ct)
+    {
+        var ids = await _db.Teams.AsNoTracking()
+            .Where(t => !t.IsDeleted && t.ImagePath != null && t.ImagePath != "")
+            .Select(t => t.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return Ok(ids);
+    }
+
+    [HttpGet("{id:guid}/image")]
+    public async Task<IActionResult> GetImage(Guid id, CancellationToken ct)
+    {
+        var path = await _db.Teams.AsNoTracking()
+            .Where(t => t.Id == id && !t.IsDeleted)
+            .Select(t => t.ImagePath)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(path))
+            return NotFound();
+
+        if (!_images.TryGetFullPath(_league.CurrentLeagueId, path, out var fullPath, out var contentType))
+            return NotFound();
+
+        return PhysicalFile(fullPath, contentType);
+    }
+
+    [HttpPost("{id:guid}/image")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(TeamImageStore.MaxBytes + 24_576)]
+    [RequestFormLimits(MultipartBodyLengthLimit = TeamImageStore.MaxBytes + 24_576)]
+    public async Task<IActionResult> UploadImage(Guid id, [FromForm] IFormFile? file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest("Choose an image file.");
+        if (file.Length > TeamImageStore.MaxBytes)
+            return BadRequest("Image must be 512 KB or smaller.");
+
+        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (team is null)
+            return NotFound();
+
+        try
+        {
+            var saved = await _images.SaveAsync(_league.CurrentLeagueId, team.Id, file, ct)
+                .ConfigureAwait(false);
+            if (!string.Equals(team.ImagePath, saved, StringComparison.OrdinalIgnoreCase))
+                _images.Delete(_league.CurrentLeagueId, team.ImagePath);
+            team.ImagePath = saved;
+            team.UpdatedAtUtc = DateTime.Now;
+            team.Version++;
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpDelete("{id:guid}/image")]
+    public async Task<IActionResult> DeleteImage(Guid id, CancellationToken ct)
+    {
+        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (team is null)
+            return NotFound();
+
+        _images.Delete(_league.CurrentLeagueId, team.ImagePath);
+        team.ImagePath = null;
+        team.UpdatedAtUtc = DateTime.Now;
+        team.Version++;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return NoContent();
     }
 
     [HttpGet("{id:guid}")]
@@ -806,6 +993,50 @@ public sealed class MatchesController : ControllerBase
         }).ToList();
 
         return Ok(list);
+    }
+
+    [HttpGet("{id:guid}/analytics")]
+    public async Task<ActionResult<MatchAnalyticsReport>> GetAnalytics(Guid id, CancellationToken ct)
+    {
+        var match = await _db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == id && !m.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (match is null)
+            return NotFound();
+
+        var innings = await _db.Innings.AsNoTracking()
+            .Where(i => i.MatchId == id)
+            .Include(i => i.Deliveries)
+            .OrderBy(i => i.InningsNumber)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (innings.Count == 0)
+            return NotFound();
+
+        var teamIds = new[] { match.TeamAId, match.TeamBId };
+        var teams = await _db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+        var playerIds = innings.SelectMany(i => i.Deliveries)
+            .SelectMany(d => new[] { d.BatterId, d.NonStrikerId })
+            .Distinct()
+            .ToList();
+        var names = await _db.Players.AsNoTracking()
+            .Where(p => playerIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+            .ConfigureAwait(false);
+
+        var teamA = teams.GetValueOrDefault(match.TeamAId, "Team A");
+        var teamB = teams.GetValueOrDefault(match.TeamBId, "Team B");
+        var rows = innings.Select(inn => (
+            inn.InningsNumber,
+            inn.BattingTeamId == match.TeamAId ? teamA : teamB,
+            (IReadOnlyList<Delivery>)inn.Deliveries.OrderBy(d => d.Sequence).ToList()
+        )).ToList();
+        var result = match.Status == MatchStatus.InProgress ? "LIVE"
+            : match.Status == MatchStatus.Completed ? "Completed" : "";
+        return Ok(MatchAnalyticsBuilder.Build(match.Title, teamA, teamB, result, Math.Max(match.OversLimit, 1), rows, names));
     }
 
     /// <summary>Full batting/bowling scorecard for every innings of a completed match.</summary>
@@ -1735,6 +1966,11 @@ public sealed class SyncController : ControllerBase
                 Id = dto.Id,
                 FullName = dto.FullName,
                 IsActive = dto.IsActive,
+                NickName = dto.NickName,
+                PlayingRole = dto.PlayingRole,
+                BattingStyle = dto.BattingStyle,
+                BowlingStyle = dto.BowlingStyle,
+                Bio = dto.Bio,
                 Version = dto.Version,
                 UpdatedAtUtc = dto.UpdatedAtUtc,
                 IsDeleted = dto.IsDeleted,
@@ -1748,6 +1984,11 @@ public sealed class SyncController : ControllerBase
 
         existing.FullName = dto.FullName;
         existing.IsActive = dto.IsActive;
+        existing.NickName = dto.NickName;
+        existing.PlayingRole = dto.PlayingRole;
+        existing.BattingStyle = dto.BattingStyle;
+        existing.BowlingStyle = dto.BowlingStyle;
+        existing.Bio = dto.Bio;
         existing.Version = dto.Version;
         existing.UpdatedAtUtc = dto.UpdatedAtUtc;
         existing.IsDeleted = dto.IsDeleted;
@@ -1887,6 +2128,7 @@ public sealed class SyncController : ControllerBase
                 if (dto.StartedByUserId != creatorId)
                     throw new InvalidOperationException("Only the signed-in admin can publish a new match.");
             }
+            await EnsureMatchFormatAsync(dto, ct).ConfigureAwait(false);
             _db.Matches.Add(dto);
             if (dto.TournamentFixtureId is Guid newFixtureId)
             {
@@ -1926,6 +2168,8 @@ public sealed class SyncController : ControllerBase
         existing.OversLimit = dto.OversLimit;
         existing.OversMode = dto.OversMode;
         existing.Format = dto.Format;
+        existing.FormatId = dto.FormatId;
+        await EnsureMatchFormatAsync(existing, ct).ConfigureAwait(false);
         existing.MatchDateUtc = dto.MatchDateUtc;
         existing.Venue = dto.Venue;
         existing.Status = dto.Status;
@@ -1945,6 +2189,8 @@ public sealed class SyncController : ControllerBase
             existing.SquadRosterJson = dto.SquadRosterJson;
         if (HasJsonProperty(request.PayloadJson, "liveStreamUrl"))
             existing.LiveStreamUrl = dto.LiveStreamUrl;
+        if (HasJsonProperty(request.PayloadJson, "isLiveTelecast"))
+            existing.IsLiveTelecast = dto.IsLiveTelecast;
         existing.StartedByUserId ??= dto.StartedByUserId;
         existing.StartedOnDeviceId ??= dto.StartedOnDeviceId;
 
@@ -1982,6 +2228,16 @@ public sealed class SyncController : ControllerBase
         }
 
         return false;
+    }
+
+    private async Task EnsureMatchFormatAsync(Match match, CancellationToken ct)
+    {
+        if (match.FormatId is Guid id && id != Guid.Empty
+            && await _db.Formats.AnyAsync(f => f.Id == id, ct).ConfigureAwait(false))
+            return;
+
+        match.FormatId = await FormatCatalog.EnsureAsync(
+            _db, match.Format, match.OversMode, match.OversLimit, ct).ConfigureAwait(false);
     }
 
     private bool TryGetSyncCaller(out Guid userId)
@@ -2091,6 +2347,7 @@ public sealed class SyncController : ControllerBase
         existing.DismissedPlayerId = dto.DismissedPlayerId;
         existing.FielderId = dto.FielderId;
         existing.IsLegalDelivery = dto.IsLegalDelivery;
+        existing.ShotZone = dto.ShotZone;
         existing.Version = dto.Version;
     }
 
@@ -2248,6 +2505,7 @@ public sealed class StatsController : ControllerBase
         [FromQuery] DateTime? toExclusiveUtc,
         [FromQuery] Guid? venueId,
         [FromQuery] string? source,
+        [FromQuery] Guid[]? formatIds,
         CancellationToken ct)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
@@ -2261,7 +2519,7 @@ public sealed class StatsController : ControllerBase
         }
 
         return Ok(await StatsCalculator
-            .BuildLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, ct)
+            .BuildLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
             .ConfigureAwait(false));
     }
 
@@ -2270,12 +2528,13 @@ public sealed class StatsController : ControllerBase
     public async Task<ActionResult<RankingsDto>> Rankings(
         [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toExclusiveUtc,
+        [FromQuery] Guid[]? formatIds,
         CancellationToken ct)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
-        return Ok(await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false));
+        return Ok(await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false));
     }
 
     /// <summary>Team table from all completed matches. Win 2 · Tie 1 · then NRR.</summary>
@@ -2283,12 +2542,30 @@ public sealed class StatsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<RankingRowDto>>> TeamRankings(
         [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toExclusiveUtc,
+        [FromQuery] Guid[]? formatIds,
         CancellationToken ct)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
-        return Ok(await StatsCalculator.BuildTeamRankingsAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false));
+        return Ok(await StatsCalculator.BuildTeamRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>Team leaderboard for Statistics · Teams (matches, NRR, tournaments, series).</summary>
+    [HttpGet("teams")]
+    public async Task<ActionResult<IReadOnlyList<TeamCareerDto>>> Teams(
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toExclusiveUtc,
+        [FromQuery] Guid? venueId,
+        [FromQuery] Guid[]? formatIds,
+        CancellationToken ct)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        return Ok(await StatsCalculator
+            .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            .ConfigureAwait(false));
     }
 
     [HttpGet("players/{playerId:guid}")]
@@ -2348,19 +2625,25 @@ public sealed class HallOfFameController : ControllerBase
     public HallOfFameController(ApiDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<ActionResult<HallOfFameDto>> Get(CancellationToken ct)
+    public async Task<ActionResult<HallOfFameDto>> Get(
+        [FromQuery] Guid[]? formatIds,
+        CancellationToken ct)
     {
-        var matches = await _db.Matches.AsNoTracking()
-            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var formatIdList = StatsCalculator.NormalizeFormatIds(formatIds);
 
-        var tournaments = await _db.Tournaments.AsNoTracking()
+        var matchQuery = _db.Matches.AsNoTracking()
+            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
+
+        var tournamentQuery = _db.Tournaments.AsNoTracking()
             .Where(t => !t.IsDeleted
                         && t.Status == TournamentStatus.Completed
-                        && t.WinnerTeamId != null)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+                        && t.WinnerTeamId != null);
+        if (formatIdList is not null)
+            tournamentQuery = tournamentQuery.Where(t => formatIdList.Contains(t.FormatId ?? Guid.Empty));
+        var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
 
         var potmCounts = new Dictionary<Guid, int>();
         var captainCounts = new Dictionary<Guid, int>();
@@ -2427,13 +2710,14 @@ public sealed class HallOfFameController : ControllerBase
             }
         }
 
-        var seriesList = await _db.Series.AsNoTracking()
+        var seriesQuery = _db.Series.AsNoTracking()
             .Where(s => !s.IsDeleted
                         && s.Status == SeriesStatus.Completed
                         && s.WinnerTeamId != null
-                        && !s.IsTied)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+                        && !s.IsTied);
+        if (formatIdList is not null)
+            seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
+        var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
 
         if (seriesList.Count > 0)
         {
@@ -2897,6 +3181,137 @@ public sealed class VenuesController : ControllerBase
 }
 
 [ApiController]
+[Route("api/formats")]
+public sealed class FormatsController : ControllerBase
+{
+    private readonly ApiDbContext _db;
+
+    public FormatsController(ApiDbContext db) => _db = db;
+
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<FormatDto>>> List(CancellationToken ct)
+    {
+        var list = await _db.Formats.AsNoTracking()
+            .Where(f => !f.IsDeleted)
+            .OrderBy(f => f.Name)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return Ok(list.Select(ToDto).ToList());
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<FormatDto>> Get(Guid id, CancellationToken ct)
+    {
+        var entity = await _db.Formats.AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == id && !f.IsDeleted, ct)
+            .ConfigureAwait(false);
+        return entity is null ? NotFound() : Ok(ToDto(entity));
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<FormatDto>> Create([FromBody] FormatUpsertRequest request, CancellationToken ct)
+    {
+        var name = RequireName(request.Name);
+        var (kind, mode, overs) = ValidateSettings(request);
+        var dup = await _db.Formats.AsNoTracking()
+            .AnyAsync(f => !f.IsDeleted && f.Name.ToLower() == name.ToLower(), ct)
+            .ConfigureAwait(false);
+        if (dup) return BadRequest(new { message = $"Format \"{name}\" already exists." });
+
+        var now = DateTime.Now;
+        var entity = new Format
+        {
+            Id = request.Id is Guid g && g != Guid.Empty ? g : Guid.NewGuid(),
+            Name = name,
+            Kind = kind,
+            OversLimit = overs,
+            OversMode = mode,
+            Version = 1,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        _db.Formats.Add(entity);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Ok(ToDto(entity));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<FormatDto>> Update(Guid id, [FromBody] FormatUpsertRequest request, CancellationToken ct)
+    {
+        var entity = await _db.Formats.FirstOrDefaultAsync(f => f.Id == id && !f.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (entity is null) return NotFound();
+
+        var name = RequireName(request.Name);
+        var (kind, mode, overs) = ValidateSettings(request);
+        var dup = await _db.Formats.AsNoTracking()
+            .AnyAsync(f => !f.IsDeleted && f.Id != id && f.Name.ToLower() == name.ToLower(), ct)
+            .ConfigureAwait(false);
+        if (dup) return BadRequest(new { message = $"Format \"{name}\" already exists." });
+
+        entity.Name = name;
+        entity.Kind = kind;
+        entity.OversLimit = overs;
+        entity.OversMode = mode;
+        entity.UpdatedAtUtc = DateTime.Now;
+        entity.Version++;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Ok(ToDto(entity));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var entity = await _db.Formats.FirstOrDefaultAsync(f => f.Id == id && !f.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (entity is null) return NotFound();
+
+        var block = await DeleteConstraints.FormatAsync(_db, id, ct).ConfigureAwait(false);
+        if (block is not null)
+            return BadRequest(block);
+
+        entity.IsDeleted = true;
+        entity.UpdatedAtUtc = DateTime.Now;
+        entity.Version++;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return NoContent();
+    }
+
+    private static string RequireName(string? name)
+    {
+        var n = (name ?? string.Empty).Trim();
+        if (n.Length == 0) throw new InvalidOperationException("Format name is required.");
+        if (n.Length > 160) throw new InvalidOperationException("Format name must be 160 characters or fewer.");
+        return n;
+    }
+
+    private static (MatchFormat Format, OversMode Mode, int OversLimit) ValidateSettings(FormatUpsertRequest request)
+    {
+        if (request.Format is not (0 or 1))
+            throw new InvalidOperationException("Format must be Single inning or Double innings.");
+        var kind = (MatchFormat)request.Format;
+        var mode = (OversMode)request.OversMode;
+        OversRules.Validate(mode, request.OversLimit, 0);
+        return (kind, mode, OversRules.StoredOversLimit(mode, request.OversLimit));
+    }
+
+    private static FormatDto ToDto(Format f) => new()
+    {
+        Id = f.Id,
+        Name = f.Name,
+        Format = (byte)f.Kind,
+        OversLimit = f.OversLimit,
+        OversMode = (byte)f.OversMode,
+        DetailsLine = FormatCatalog.DetailsLine(f.Kind, f.OversMode, f.OversLimit),
+        Hint = FormatCatalog.Hint(f.Kind, f.OversMode, f.OversLimit),
+        Version = f.Version,
+        CreatedAtUtc = f.CreatedAtUtc,
+        UpdatedAtUtc = f.UpdatedAtUtc,
+        IsDeleted = f.IsDeleted
+    };
+}
+
+[ApiController]
 [Route("api/venuebookings")]
 public sealed class VenueBookingsController : ControllerBase
 {
@@ -3243,6 +3658,7 @@ public sealed class TournamentsController : ControllerBase
             GroupCount = body.GroupCount,
             QualifyPerGroup = body.QualifyPerGroup,
             VenueId = body.VenueId,
+            FormatId = body.FormatId,
             Format = body.Format,
             OversLimit = OversRules.StoredOversLimit((OversMode)body.OversMode, body.OversLimit),
             OversMode = (OversMode)body.OversMode,
@@ -3273,6 +3689,7 @@ public sealed class TournamentsController : ControllerBase
         t.GroupCount = body.GroupCount;
         t.QualifyPerGroup = body.QualifyPerGroup;
         t.VenueId = body.VenueId;
+        t.FormatId = body.FormatId;
         t.Format = body.Format;
         t.OversLimit = OversRules.StoredOversLimit((OversMode)body.OversMode, body.OversLimit);
         t.OversMode = (OversMode)body.OversMode;
@@ -3379,9 +3796,19 @@ public sealed class TournamentsController : ControllerBase
             .ConfigureAwait(false);
         if (!venueOk)
             throw new InvalidOperationException("Selected venue was not found.");
-        if (body.Format is not (0 or 1))
-            throw new InvalidOperationException("Format must be Single inning or Double innings.");
-        OversRules.Validate((OversMode)body.OversMode, body.OversLimit, body.BowlerMaxOvers);
+        var resolved = await FormatCatalog.ResolveAsync(
+                _db,
+                body.FormatId ?? Guid.Empty,
+                (MatchFormat)body.Format,
+                (OversMode)body.OversMode,
+                body.OversLimit,
+                ct)
+            .ConfigureAwait(false);
+        body.FormatId = resolved.Id;
+        body.Format = (byte)resolved.Format;
+        body.OversMode = (byte)resolved.Mode;
+        body.OversLimit = resolved.OversLimit;
+        OversRules.Validate(resolved.Mode, resolved.OversLimit, body.BowlerMaxOvers);
     }
 
     private static string RequireName(string? name)
@@ -3441,6 +3868,16 @@ public sealed class TournamentsController : ControllerBase
             .Select(v => v.Name)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false) ?? "?";
+
+        string? formatName = null;
+        if (t.FormatId is Guid formatId)
+        {
+            formatName = await _db.Formats.AsNoTracking()
+                .Where(f => f.Id == formatId)
+                .Select(f => f.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
 
         var matchIds = t.Fixtures.Where(f => f.MatchId is Guid).Select(f => f.MatchId!.Value).ToList();
         var matches = matchIds.Count == 0
@@ -3506,8 +3943,9 @@ public sealed class TournamentsController : ControllerBase
             QualifyPerGroup = t.QualifyPerGroup,
             VenueId = t.VenueId,
             VenueName = venueName,
+            FormatId = t.FormatId,
             Format = t.Format,
-            FormatText = t.Format == (byte)MatchFormat.DoubleInnings ? "Double innings" : "Single inning",
+            FormatText = formatName ?? (t.Format == (byte)MatchFormat.DoubleInnings ? "Double innings" : "Single inning"),
             OversLimit = t.OversLimit,
             OversMode = (byte)t.OversMode,
             LastBatsmanCanBatAsSingleWicket = t.LastBatsmanCanBatAsSingleWicket,

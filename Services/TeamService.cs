@@ -30,7 +30,12 @@ public sealed record TeamListItem(
     int PlayingCount = 0)
 {
     public Guid? CaptainPlayerId { get; init; }
+    public ImageSource? Photo { get; init; }
+    public string Initials { get; init; } = "?";
+    public bool HasPhoto => Photo is not null;
+    public bool ShowInitials => !HasPhoto;
     public string StatusText => IsActive ? "Active" : "Inactive";
+    public Color StatusColor => StatusColors.For(IsActive);
     public string ToggleActiveLabel => IsActive ? "Deactivate" : "Activate";
     public string CaptainLine => string.IsNullOrWhiteSpace(CaptainName)
         ? "No captain"

@@ -88,6 +88,8 @@
                     </HorizontalStackLayout>
                 </Grid>
 
+                <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="{StaticResource Danger}"
                        FontSize="11"

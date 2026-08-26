@@ -136,6 +136,28 @@ public sealed class ConfrontationDto
     public int ExtrasConceded { get; set; }
 }
 
+/// <summary>Captain vs opposing captain across completed matches (and series).</summary>
+public sealed class CaptainVsDto
+{
+    public Guid CaptainId { get; set; }
+    public string CaptainName { get; set; } = string.Empty;
+    public Guid OpponentCaptainId { get; set; }
+    public string OpponentCaptainName { get; set; } = string.Empty;
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+    public double WinPct => Played == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
+    public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public string RecordText => $"{Won}–{Lost}–{Tied}";
+}
+
 public sealed class RankingRowDto
 {
     public int Rank { get; set; }
@@ -147,6 +169,77 @@ public sealed class RankingRowDto
     public string SecondaryValue { get; set; } = string.Empty;
     public string Detail { get; set; } = string.Empty;
     public double SortScore { get; set; }
+}
+
+/// <summary>Team table for Statistics · Teams: matches, NRR, tournaments, series.</summary>
+public sealed class TeamCareerDto
+{
+    public Guid TeamId { get; set; }
+    public string TeamName { get; set; } = string.Empty;
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int Points => Won * 2 + Tied;
+    public int RunsFor { get; set; }
+    public int RunsAgainst { get; set; }
+    public int BallsFor { get; set; }
+    public int BallsAgainst { get; set; }
+    public int Tournaments { get; set; }
+    public int TournamentWon { get; set; }
+    public int TournamentLoss { get; set; }
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+    public double WinPct => Played == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
+    public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public double Nrr
+    {
+        get
+        {
+            var of = BallsFor <= 0 ? 0 : RunsFor / (BallsFor / 6.0);
+            var oa = BallsAgainst <= 0 ? 0 : RunsAgainst / (BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
+}
+
+/// <summary>One opponent’s record against a selected team (Statistics · Teams 1 vs 1).</summary>
+public sealed class TeamVsDto
+{
+    public Guid OpponentTeamId { get; set; }
+    public string OpponentTeamName { get; set; } = string.Empty;
+    public int Played { get; set; }
+    public int Won { get; set; }
+    public int Lost { get; set; }
+    public int Tied { get; set; }
+    public int RunsFor { get; set; }
+    public int RunsAgainst { get; set; }
+    public int BallsFor { get; set; }
+    public int BallsAgainst { get; set; }
+    public int Series { get; set; }
+    public int SeriesWon { get; set; }
+    public int SeriesLoss { get; set; }
+    public int SeriesTied { get; set; }
+    public double WinPct => Played == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
+    public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public double Nrr
+    {
+        get
+        {
+            var of = BallsFor <= 0 ? 0 : RunsFor / (BallsFor / 6.0);
+            var oa = BallsAgainst <= 0 ? 0 : RunsAgainst / (BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
+    public string RecordText => $"{Won}–{Lost}–{Tied}";
 }
 
 public sealed class RankingsDto
@@ -161,15 +254,25 @@ public sealed class RankingsDto
 
 public static class StatsCalculator
 {
+    public static List<Guid>? NormalizeFormatIds(IReadOnlyList<Guid>? formatIds)
+    {
+        if (formatIds is null || formatIds.Count == 0)
+            return null;
+        var ids = formatIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        return ids.Count == 0 ? null : ids;
+    }
+
     public static async Task<RankingsDto> BuildRankingsAsync(
         ApiDbContext db,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
     {
-        var board = await BuildLeaderboardAsync(db, fromUtc, toExclusiveUtc, ct: ct).ConfigureAwait(false);
+        var board = await BuildLeaderboardAsync(db, fromUtc, toExclusiveUtc, formatIds: formatIds, ct: ct)
+            .ConfigureAwait(false);
         var dto = BuildRankingsFromBoard(board);
-        dto.Team = await BuildTeamRankingsAsync(db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false);
+        dto.Team = await BuildTeamRankingsAsync(db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false);
         return dto;
     }
 
@@ -365,6 +468,7 @@ public static class StatsCalculator
         ApiDbContext db,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
     {
         var matchQuery = db.Matches.AsNoTracking()
@@ -373,6 +477,9 @@ public static class StatsCalculator
             matchQuery = matchQuery.Where(m => m.MatchDateUtc >= from);
         if (toExclusiveUtc is DateTime to)
             matchQuery = matchQuery.Where(m => m.MatchDateUtc < to);
+        var formatIdList = NormalizeFormatIds(formatIds);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
 
         var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
         if (matches.Count == 0)
@@ -475,6 +582,308 @@ public static class StatsCalculator
             .ToList();
     }
 
+    /// <summary>Statistics · Teams leaderboard (completed matches, tournaments, series).</summary>
+    public static async Task<IReadOnlyList<TeamCareerDto>> BuildTeamLeaderboardAsync(
+        ApiDbContext db,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        string? venueName = null;
+        if (venueId is Guid vid)
+        {
+            venueName = await db.Venues.AsNoTracking()
+                .Where(v => v.Id == vid && !v.IsDeleted)
+                .Select(v => v.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
+
+        var matchQuery = db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted);
+        if (fromUtc is DateTime from)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc >= from);
+        if (toExclusiveUtc is DateTime to)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc < to);
+        if (!string.IsNullOrWhiteSpace(venueName))
+        {
+            var vn = venueName.Trim();
+            matchQuery = matchQuery.Where(m =>
+                m.Venue != null && m.Venue.ToLower() == vn.ToLower());
+        }
+        var formatIdList = NormalizeFormatIds(formatIds);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+
+        var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
+        var matchIds = matches.Select(m => m.Id).ToList();
+        var innings = matchIds.Count == 0
+            ? new List<Innings>()
+            : await db.Innings.AsNoTracking()
+                .Where(i => matchIds.Contains(i.MatchId))
+                .Include(i => i.Deliveries)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
+
+        IQueryable<Tournament> tournamentQuery = db.Tournaments.AsNoTracking()
+            .Where(t => !t.IsDeleted && t.Status == TournamentStatus.Completed)
+            .Include(t => t.Teams);
+        if (fromUtc is DateTime tourFrom)
+            tournamentQuery = tournamentQuery.Where(t => t.UpdatedAtUtc >= tourFrom);
+        if (toExclusiveUtc is DateTime tourTo)
+            tournamentQuery = tournamentQuery.Where(t => t.UpdatedAtUtc < tourTo);
+        if (venueId is Guid tourVenueId)
+            tournamentQuery = tournamentQuery.Where(t => t.VenueId == tourVenueId);
+        if (formatIdList is not null)
+            tournamentQuery = tournamentQuery.Where(t => formatIdList.Contains(t.FormatId ?? Guid.Empty));
+        var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
+
+        IQueryable<Series> seriesQuery = db.Series.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.Status == SeriesStatus.Completed);
+        if (fromUtc is DateTime seriesFrom)
+            seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc >= seriesFrom);
+        if (toExclusiveUtc is DateTime seriesTo)
+            seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc < seriesTo);
+        if (venueId is Guid seriesVenueId)
+            seriesQuery = seriesQuery.Where(s => s.VenueId == seriesVenueId);
+        if (formatIdList is not null)
+            seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
+        var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
+
+        var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId })
+            .Concat(tournaments.SelectMany(t => t.Teams.Select(tt => tt.TeamId)))
+            .Concat(seriesList.SelectMany(s => new[] { s.TeamAId, s.TeamBId }))
+            .Distinct()
+            .ToList();
+        if (teamIds.Count == 0)
+            return Array.Empty<TeamCareerDto>();
+
+        var names = await db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+
+        var rows = new Dictionary<Guid, TeamCareerDto>();
+        TeamCareerDto Row(Guid teamId)
+        {
+            if (rows.TryGetValue(teamId, out var existing))
+                return existing;
+            var created = new TeamCareerDto
+            {
+                TeamId = teamId,
+                TeamName = names.GetValueOrDefault(teamId, "?")
+            };
+            rows[teamId] = created;
+            return created;
+        }
+
+        foreach (var match in matches)
+        {
+            innsByMatch.TryGetValue(match.Id, out var inns);
+            inns ??= new List<Innings>();
+
+            var a = Row(match.TeamAId);
+            var b = Row(match.TeamBId);
+            var (aRuns, aBalls) = TeamMatchTotals(inns, match.TeamAId);
+            var (bRuns, bBalls) = TeamMatchTotals(inns, match.TeamBId);
+
+            a.Played++;
+            b.Played++;
+            a.RunsFor += aRuns;
+            a.RunsAgainst += bRuns;
+            a.BallsFor += aBalls;
+            a.BallsAgainst += bBalls;
+            b.RunsFor += bRuns;
+            b.RunsAgainst += aRuns;
+            b.BallsFor += bBalls;
+            b.BallsAgainst += aBalls;
+
+            var (winner, tied) = ResolveResult(match, inns);
+            if (tied)
+            {
+                a.Tied++;
+                b.Tied++;
+            }
+            else if (winner == match.TeamAId)
+            {
+                a.Won++;
+                b.Lost++;
+            }
+            else if (winner == match.TeamBId)
+            {
+                b.Won++;
+                a.Lost++;
+            }
+        }
+
+        foreach (var tour in tournaments)
+        {
+            foreach (var tt in tour.Teams)
+            {
+                var row = Row(tt.TeamId);
+                row.Tournaments++;
+                if (tour.WinnerTeamId == tt.TeamId)
+                    row.TournamentWon++;
+                else
+                    row.TournamentLoss++;
+            }
+        }
+
+        foreach (var series in seriesList)
+        {
+            foreach (var teamId in new[] { series.TeamAId, series.TeamBId })
+            {
+                var row = Row(teamId);
+                row.Series++;
+                if (series.IsTied)
+                    row.SeriesTied++;
+                else if (series.WinnerTeamId == teamId)
+                    row.SeriesWon++;
+                else
+                    row.SeriesLoss++;
+            }
+        }
+
+        return rows.Values
+            .Where(t => t.Played > 0 || t.Tournaments > 0 || t.Series > 0)
+            .OrderByDescending(t => t.Points)
+            .ThenByDescending(t => t.Nrr)
+            .ThenByDescending(t => t.Won)
+            .ThenBy(t => t.TeamName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>Head-to-head records for one team vs every opponent it has faced.</summary>
+    public static async Task<IReadOnlyList<TeamVsDto>> BuildTeamVsAsync(
+        ApiDbContext db,
+        Guid teamId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        string? venueName = null;
+        if (venueId is Guid vid)
+        {
+            venueName = await db.Venues.AsNoTracking()
+                .Where(v => v.Id == vid && !v.IsDeleted)
+                .Select(v => v.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
+
+        var matchQuery = db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted
+                        && (m.TeamAId == teamId || m.TeamBId == teamId));
+        if (fromUtc is DateTime from)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc >= from);
+        if (toExclusiveUtc is DateTime to)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc < to);
+        if (!string.IsNullOrWhiteSpace(venueName))
+        {
+            var vn = venueName.Trim();
+            matchQuery = matchQuery.Where(m =>
+                m.Venue != null && m.Venue.ToLower() == vn.ToLower());
+        }
+        var formatIdList = NormalizeFormatIds(formatIds);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+
+        var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
+        var matchIds = matches.Select(m => m.Id).ToList();
+        var innings = matchIds.Count == 0
+            ? new List<Innings>()
+            : await db.Innings.AsNoTracking()
+                .Where(i => matchIds.Contains(i.MatchId))
+                .Include(i => i.Deliveries)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
+
+        IQueryable<Series> seriesQuery = db.Series.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.Status == SeriesStatus.Completed
+                        && (s.TeamAId == teamId || s.TeamBId == teamId));
+        if (fromUtc is DateTime seriesFrom)
+            seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc >= seriesFrom);
+        if (toExclusiveUtc is DateTime seriesTo)
+            seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc < seriesTo);
+        if (venueId is Guid seriesVenueId)
+            seriesQuery = seriesQuery.Where(s => s.VenueId == seriesVenueId);
+        if (formatIdList is not null)
+            seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
+        var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
+
+        var opponentIds = matches
+            .Select(m => m.TeamAId == teamId ? m.TeamBId : m.TeamAId)
+            .Concat(seriesList.Select(s => s.TeamAId == teamId ? s.TeamBId : s.TeamAId))
+            .Distinct()
+            .ToList();
+        if (opponentIds.Count == 0)
+            return Array.Empty<TeamVsDto>();
+
+        var names = await db.Teams.AsNoTracking()
+            .Where(t => opponentIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+
+        var rows = new Dictionary<Guid, TeamVsDto>();
+        TeamVsDto Row(Guid opponentId)
+        {
+            if (rows.TryGetValue(opponentId, out var existing))
+                return existing;
+            var created = new TeamVsDto
+            {
+                OpponentTeamId = opponentId,
+                OpponentTeamName = names.GetValueOrDefault(opponentId, "?")
+            };
+            rows[opponentId] = created;
+            return created;
+        }
+
+        foreach (var match in matches)
+        {
+            var opponentId = match.TeamAId == teamId ? match.TeamBId : match.TeamAId;
+            var row = Row(opponentId);
+            innsByMatch.TryGetValue(match.Id, out var inns);
+            inns ??= new List<Innings>();
+            var (usRuns, usBalls) = TeamMatchTotals(inns, teamId);
+            var (themRuns, themBalls) = TeamMatchTotals(inns, opponentId);
+            row.Played++;
+            row.RunsFor += usRuns;
+            row.RunsAgainst += themRuns;
+            row.BallsFor += usBalls;
+            row.BallsAgainst += themBalls;
+            var (winner, tied) = ResolveResult(match, inns);
+            if (tied) row.Tied++;
+            else if (winner == teamId) row.Won++;
+            else row.Lost++;
+        }
+
+        foreach (var series in seriesList)
+        {
+            var opponentId = series.TeamAId == teamId ? series.TeamBId : series.TeamAId;
+            var row = Row(opponentId);
+            row.Series++;
+            if (series.IsTied)
+                row.SeriesTied++;
+            else if (series.WinnerTeamId == teamId)
+                row.SeriesWon++;
+            else
+                row.SeriesLoss++;
+        }
+
+        return rows.Values
+            .Where(r => r.Played > 0 || r.Series > 0)
+            .OrderByDescending(r => r.Played)
+            .ThenByDescending(r => r.Won)
+            .ThenBy(r => r.OpponentTeamName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private sealed class TeamAccum
     {
         public Guid TeamId { get; init; }
@@ -516,6 +925,7 @@ public static class StatsCalculator
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
     {
         var players = await db.Players.AsNoTracking()
@@ -546,6 +956,9 @@ public static class StatsCalculator
             matchQuery = matchQuery.Where(m =>
                 m.Venue != null && m.Venue.ToLower() == vn.ToLower());
         }
+        var formatIdList = NormalizeFormatIds(formatIds);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
 
         var matches = await matchQuery
             .ToListAsync(ct)
@@ -574,6 +987,8 @@ public static class StatsCalculator
             tournamentQuery = tournamentQuery.Where(t => t.UpdatedAtUtc < tourTo);
         if (venueId is Guid tourVenueId)
             tournamentQuery = tournamentQuery.Where(t => t.VenueId == tourVenueId);
+        if (formatIdList is not null)
+            tournamentQuery = tournamentQuery.Where(t => formatIdList.Contains(t.FormatId ?? Guid.Empty));
         var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
 
         IQueryable<Series> seriesQuery = db.Series.AsNoTracking()
@@ -584,6 +999,8 @@ public static class StatsCalculator
             seriesQuery = seriesQuery.Where(s => s.UpdatedAtUtc < seriesTo);
         if (venueId is Guid seriesVenueId)
             seriesQuery = seriesQuery.Where(s => s.VenueId == seriesVenueId);
+        if (formatIdList is not null)
+            seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
         var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
 
         var inningsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
@@ -891,6 +1308,141 @@ public static class StatsCalculator
         return asBatterPerspective
             ? stats.OrderByDescending(s => s.Runs).ThenByDescending(s => s.Balls).ToList()
             : stats.OrderByDescending(s => s.Outs).ThenBy(s => s.Runs).ToList();
+    }
+
+    /// <summary>1 vs 1 as captain: this player vs every opposing captain faced.</summary>
+    public static async Task<IReadOnlyList<CaptainVsDto>> BuildCaptainVsAsync(
+        ApiDbContext db,
+        Guid playerId,
+        CancellationToken ct = default)
+    {
+        var teams = await db.Teams.AsNoTracking()
+            .Include(t => t.TeamPlayers)
+            .ToDictionaryAsync(t => t.Id, t => t, ct)
+            .ConfigureAwait(false);
+        var captainTeamIds = teams.Values
+            .Where(t => t.CaptainPlayerId == playerId)
+            .Select(t => t.Id)
+            .ToList();
+
+        var matches = await db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted
+                        && (m.TeamACaptainId == playerId
+                            || m.TeamBCaptainId == playerId
+                            || captainTeamIds.Contains(m.TeamAId)
+                            || captainTeamIds.Contains(m.TeamBId)))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var matchIds = matches.Select(m => m.Id).ToList();
+        var innings = matchIds.Count == 0
+            ? new List<Innings>()
+            : await db.Innings.AsNoTracking()
+                .Where(i => matchIds.Contains(i.MatchId))
+                .Include(i => i.Deliveries)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var seriesList = await db.Series.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.Status == SeriesStatus.Completed
+                        && (captainTeamIds.Contains(s.TeamAId) || captainTeamIds.Contains(s.TeamBId)))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var rows = new Dictionary<Guid, CaptainVsDto>();
+        var nameIds = new HashSet<Guid> { playerId };
+
+        Guid? CaptainOf(Guid teamId, Guid? matchCaptainId)
+            => matchCaptainId ?? (teams.TryGetValue(teamId, out var team) ? team.CaptainPlayerId : null);
+
+        foreach (var match in matches)
+        {
+            var capA = CaptainOf(match.TeamAId, match.TeamACaptainId);
+            var capB = CaptainOf(match.TeamBId, match.TeamBCaptainId);
+            Guid? opponentId = null;
+            Guid? ourTeamId = null;
+            if (capA == playerId)
+            {
+                opponentId = capB;
+                ourTeamId = match.TeamAId;
+            }
+            else if (capB == playerId)
+            {
+                opponentId = capA;
+                ourTeamId = match.TeamBId;
+            }
+            if (opponentId is not Guid opp || opp == Guid.Empty || opp == playerId || ourTeamId is null)
+                continue;
+
+            if (!rows.TryGetValue(opp, out var row))
+            {
+                row = new CaptainVsDto { CaptainId = playerId, OpponentCaptainId = opp };
+                rows[opp] = row;
+                nameIds.Add(opp);
+            }
+
+            innsByMatch.TryGetValue(match.Id, out var inns);
+            inns ??= new List<Innings>();
+            row.Played++;
+            var (winner, tied) = ResolveResult(match, inns);
+            if (tied) row.Tied++;
+            else if (winner == ourTeamId) row.Won++;
+            else row.Lost++;
+        }
+
+        foreach (var series in seriesList)
+        {
+            Guid? ourTeamId = null;
+            Guid? oppTeamId = null;
+            if (captainTeamIds.Contains(series.TeamAId))
+            {
+                ourTeamId = series.TeamAId;
+                oppTeamId = series.TeamBId;
+            }
+            else if (captainTeamIds.Contains(series.TeamBId))
+            {
+                ourTeamId = series.TeamBId;
+                oppTeamId = series.TeamAId;
+            }
+            if (ourTeamId is null || oppTeamId is null)
+                continue;
+            if (!teams.TryGetValue(oppTeamId.Value, out var oppTeam) || oppTeam.CaptainPlayerId is not Guid opp
+                || opp == Guid.Empty || opp == playerId)
+                continue;
+
+            if (!rows.TryGetValue(opp, out var row))
+            {
+                row = new CaptainVsDto { CaptainId = playerId, OpponentCaptainId = opp };
+                rows[opp] = row;
+                nameIds.Add(opp);
+            }
+            row.Series++;
+            if (series.IsTied) row.SeriesTied++;
+            else if (series.WinnerTeamId == ourTeamId) row.SeriesWon++;
+            else row.SeriesLoss++;
+        }
+
+        if (rows.Count == 0)
+            return Array.Empty<CaptainVsDto>();
+
+        var names = await db.Players.AsNoTracking()
+            .Where(p => nameIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+            .ConfigureAwait(false);
+        var selfName = names.GetValueOrDefault(playerId, "?");
+        foreach (var row in rows.Values)
+        {
+            row.CaptainName = selfName;
+            row.OpponentCaptainName = names.GetValueOrDefault(row.OpponentCaptainId, "?");
+        }
+
+        return rows.Values
+            .Where(r => r.Played > 0 || r.Series > 0)
+            .OrderByDescending(r => r.Played)
+            .ThenByDescending(r => r.Won)
+            .ThenBy(r => r.OpponentCaptainName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public static async Task<IReadOnlyList<ConfrontationDto>> BuildNetsConfrontationsAsync(

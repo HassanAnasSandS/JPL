@@ -30,6 +30,7 @@ public sealed class JplDbContext : DbContext
     public DbSet<AuctionCaptain> AuctionCaptains => Set<AuctionCaptain>();
     public DbSet<AuctionLot> AuctionLots => Set<AuctionLot>();
     public DbSet<Venue> Venues => Set<Venue>();
+    public DbSet<Format> Formats => Set<Format>();
     public DbSet<VenueBooking> VenueBookings => Set<VenueBooking>();
     public DbSet<VenueBookingParticipant> VenueBookingParticipants => Set<VenueBookingParticipant>();
     public DbSet<Tournament> Tournaments => Set<Tournament>();
@@ -91,6 +92,12 @@ public sealed class JplDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.FullName).HasMaxLength(120).IsRequired();
+            e.Property(x => x.NickName).HasMaxLength(40);
+            e.Property(x => x.PlayingRole).HasMaxLength(40);
+            e.Property(x => x.BattingStyle).HasMaxLength(40);
+            e.Property(x => x.BowlingStyle).HasMaxLength(60);
+            e.Property(x => x.Bio).HasMaxLength(500);
+            e.Property(x => x.ImagePath).HasMaxLength(80);
             e.HasIndex(x => x.FullName);
             e.HasQueryFilter(x => !x.IsDeleted);
         });
@@ -99,6 +106,7 @@ public sealed class JplDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            e.Property(x => x.ImagePath).HasMaxLength(80);
             e.HasIndex(x => x.Name);
             e.HasOne(x => x.Captain)
                 .WithMany()
@@ -147,6 +155,7 @@ public sealed class JplDbContext : DbContext
             e.Property(x => x.LiveStreamUrl).HasMaxLength(1000);
             e.HasIndex(x => x.MatchDateUtc);
             e.HasIndex(x => x.LeagueId);
+            e.HasIndex(x => x.FormatId);
             e.HasQueryFilter(x => !x.IsDeleted && x.LeagueId == CurrentLeagueId);
         });
 
@@ -210,6 +219,15 @@ public sealed class JplDbContext : DbContext
             e.HasQueryFilter(x => !x.IsDeleted);
         });
 
+        modelBuilder.Entity<Format>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Kind).HasColumnName("Format");
+            e.HasIndex(x => x.Name);
+            e.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<VenueBooking>(e =>
         {
             e.HasKey(x => x.Id);
@@ -235,6 +253,7 @@ public sealed class JplDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.HasIndex(x => x.FormatId);
             e.HasQueryFilter(x => !x.IsDeleted);
         });
 
@@ -258,6 +277,7 @@ public sealed class JplDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.HasIndex(x => x.FormatId);
             e.HasQueryFilter(x => !x.IsDeleted);
         });
 

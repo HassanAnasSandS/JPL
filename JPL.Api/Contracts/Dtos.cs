@@ -46,12 +46,22 @@ public sealed record PlayerDto(
     long Version,
     DateTime UpdatedAtUtc,
     bool IsDeleted,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? NickName = null,
+    string? PlayingRole = null,
+    string? BattingStyle = null,
+    string? BowlingStyle = null,
+    string? Bio = null);
 
 public sealed record PlayerUpsertRequest(
     Guid? Id,
     string FullName,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? NickName = null,
+    string? PlayingRole = null,
+    string? BattingStyle = null,
+    string? BowlingStyle = null,
+    string? Bio = null);
 
 public sealed record TeamDto(
     Guid Id,
@@ -305,6 +315,30 @@ public sealed class VenueDto
     public bool IsDeleted { get; set; }
 }
 
+public sealed class FormatUpsertRequest
+{
+    public Guid? Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public byte Format { get; set; }
+    public int OversLimit { get; set; } = 8;
+    public byte OversMode { get; set; }
+}
+
+public sealed class FormatDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public byte Format { get; set; }
+    public int OversLimit { get; set; }
+    public byte OversMode { get; set; }
+    public string DetailsLine { get; set; } = string.Empty;
+    public string Hint { get; set; } = string.Empty;
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public bool IsDeleted { get; set; }
+}
+
 public sealed class VenueBookingUpsertRequest
 {
     public Guid? Id { get; set; }
@@ -353,6 +387,7 @@ public sealed class TournamentUpsertRequest
     public int GroupCount { get; set; } = 1;
     public int QualifyPerGroup { get; set; } = 1;
     public Guid VenueId { get; set; }
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public int OversLimit { get; set; } = 8;
     public byte OversMode { get; set; }
@@ -390,6 +425,7 @@ public sealed class TournamentDetailDto
     public int QualifyPerGroup { get; set; }
     public Guid VenueId { get; set; }
     public string VenueName { get; set; } = string.Empty;
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public string FormatText { get; set; } = string.Empty;
     public int OversLimit { get; set; }
@@ -465,6 +501,7 @@ public sealed class SeriesUpsertRequest
     public Guid TeamBId { get; set; }
     public int MatchCount { get; set; } = 3;
     public Guid VenueId { get; set; }
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public int OversLimit { get; set; } = 8;
     public byte OversMode { get; set; }
@@ -503,6 +540,7 @@ public sealed class SeriesDetailDto
     public int MatchCount { get; set; }
     public Guid VenueId { get; set; }
     public string VenueName { get; set; } = string.Empty;
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public string FormatText { get; set; } = string.Empty;
     public int OversLimit { get; set; }
@@ -598,6 +636,14 @@ public sealed class PublicLiveMatchDto
     public string? StrikerText { get; set; }
     public string? NonStrikerText { get; set; }
     public string? BowlerText { get; set; }
+    public Guid? StrikerPlayerId { get; set; }
+    public Guid? NonStrikerPlayerId { get; set; }
+    public Guid? BowlerPlayerId { get; set; }
+    /// <summary>Increases only when a new ball is scored. Watch page speaks when this changes.</summary>
+    public int LastBallSequence { get; set; }
+    public string? CommentaryEnglish { get; set; }
+    public string? CommentaryUrdu { get; set; }
+    public string? CommentaryCue { get; set; }
 }
 
 public sealed class BattingRowDto

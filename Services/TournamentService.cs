@@ -24,6 +24,7 @@ public sealed class TournamentDetail
     public int QualifyPerGroup { get; init; }
     public Guid VenueId { get; init; }
     public string VenueName { get; init; } = string.Empty;
+    public Guid? FormatId { get; init; }
     public byte Format { get; init; }
     public string FormatText { get; init; } = string.Empty;
     public int OversLimit { get; init; }
@@ -96,7 +97,8 @@ public sealed record TournamentDraft(
     bool LastBatsmanCanBatAsSingleWicket,
     int BowlerMaxOvers,
     OversMode OversMode,
-    IReadOnlyList<(Guid TeamId, int GroupNumber)> Teams);
+    IReadOnlyList<(Guid TeamId, int GroupNumber)> Teams,
+    Guid? FormatId = null);
 
 public interface ITournamentService
 {
@@ -287,6 +289,7 @@ public sealed class TournamentService : ITournamentService
         groupCount = draft.GroupCount,
         qualifyPerGroup = draft.QualifyPerGroup,
         venueId = draft.VenueId,
+        formatId = draft.FormatId,
         format = draft.Format,
         oversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
         oversMode = (byte)draft.OversMode,
@@ -303,6 +306,7 @@ public sealed class TournamentService : ITournamentService
         QualifyPerGroup = dto.QualifyPerGroup,
         VenueId = dto.VenueId,
         VenueName = dto.VenueName,
+        FormatId = dto.FormatId,
         Format = dto.Format,
         FormatText = string.IsNullOrWhiteSpace(dto.FormatText)
             ? (dto.Format == 1 ? "Double innings" : "Single inning")

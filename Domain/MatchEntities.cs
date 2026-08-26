@@ -56,6 +56,8 @@ public sealed class Match : ILeagueScoped
     public int OversLimit { get; set; } = 20;
     public OversMode OversMode { get; set; } = OversMode.PerInnings;
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
+    /// <summary>FK to the league Format preset. Overs/type on this row stay as a snapshot.</summary>
+    public Guid? FormatId { get; set; }
     public DateTime MatchDateUtc { get; set; } = DateTime.Now;
     public string? Venue { get; set; }
     public MatchStatus Status { get; set; } = MatchStatus.Setup;
@@ -89,6 +91,12 @@ public sealed class Match : ILeagueScoped
     /// Master Players/Teams live on the API only.
     /// </summary>
     public string? SquadRosterJson { get; set; }
+
+    /// <summary>
+    /// When true, balls and stream URL are pushed to the server as you score (live telecast).
+    /// When false, scoring stays on this phone and the match syncs after it is completed.
+    /// </summary>
+    public bool IsLiveTelecast { get; set; } = true;
 
     /// <summary>Optional YouTube/Facebook/https live telecast URL. Viewers watch in an iframe with the live score.</summary>
     public string? LiveStreamUrl { get; set; }
@@ -147,6 +155,9 @@ public sealed class Delivery
 
     /// <summary>Legal delivery counts as a ball faced / ball bowled for stats.</summary>
     public bool IsLegalDelivery { get; set; } = true;
+
+    /// <summary>1–8 wagon sector (Long off … Long on). 0 = not tagged.</summary>
+    public byte ShotZone { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public long Version { get; set; } = 1;

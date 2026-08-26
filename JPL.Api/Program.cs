@@ -23,8 +23,12 @@ public class Program
             o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
         });
 
+        builder.Services.AddMemoryCache(o => o.SizeLimit = 32 * 1024 * 1024);
+        builder.Services.AddSingleton<NeuralCommentaryTts>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IApiLeagueScope, ApiLeagueScope>();
+        builder.Services.AddSingleton<PlayerImageStore>();
+        builder.Services.AddSingleton<TeamImageStore>();
         builder.Services.AddSingleton<LeagueDatabaseManager>();
         builder.Services.AddScoped<IApiDbFactory, ApiDbFactory>();
         builder.Services.AddScoped(sp => sp.GetRequiredService<IApiDbFactory>().CreateForRequest());

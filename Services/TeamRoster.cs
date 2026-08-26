@@ -22,6 +22,18 @@ internal static class TeamRoster
     public static IReadOnlyList<Guid> PlayingPlayerIds(ApiTeamDto team)
         => PlayingPlayerIds(team.PlayerIds, team.PlayingPlayerIds);
 
+    /// <summary>Playing XI only — no fallback to the full squad. Empty means no playing list was set.</summary>
+    public static IReadOnlyList<Guid> PlayingListOnly(
+        IReadOnlyList<Guid>? squad,
+        IReadOnlyList<Guid>? playing)
+    {
+        var allowed = Distinct(squad).ToHashSet();
+        return Distinct(playing).Where(allowed.Contains).ToList();
+    }
+
+    public static IReadOnlyList<Guid> PlayingListOnly(ApiTeamDto team)
+        => PlayingListOnly(team.PlayerIds, team.PlayingPlayerIds);
+
     public static List<Guid> Distinct(IReadOnlyList<Guid>? ids)
         => (ids ?? Array.Empty<Guid>()).Where(id => id != Guid.Empty).Distinct().ToList();
 }

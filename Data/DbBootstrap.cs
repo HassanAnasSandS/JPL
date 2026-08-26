@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 16;
+    private const int SchemaVersion = 18;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -43,10 +43,29 @@ public static class DbBootstrap
 
         await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
             """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "IsLiveTelecast",
+            """ALTER TABLE "Matches" ADD COLUMN "IsLiveTelecast" INTEGER NOT NULL DEFAULT 1;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "StartedByUserId",
             """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "StartedOnDeviceId",
             """ALTER TABLE "Matches" ADD COLUMN "StartedOnDeviceId" TEXT NULL;""", ct).ConfigureAwait(false);
+
+        await EnsureColumnAsync(db, "Players", "ImagePath",
+            """ALTER TABLE "Players" ADD COLUMN "ImagePath" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "NickName",
+            """ALTER TABLE "Players" ADD COLUMN "NickName" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "PlayingRole",
+            """ALTER TABLE "Players" ADD COLUMN "PlayingRole" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "BattingStyle",
+            """ALTER TABLE "Players" ADD COLUMN "BattingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "BowlingStyle",
+            """ALTER TABLE "Players" ADD COLUMN "BowlingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "Bio",
+            """ALTER TABLE "Players" ADD COLUMN "Bio" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Teams", "ImagePath",
+            """ALTER TABLE "Teams" ADD COLUMN "ImagePath" TEXT NULL;""", ct).ConfigureAwait(false);
+
+        await EnsureFormatsAsync(db, ct).ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);
@@ -173,6 +192,8 @@ public static class DbBootstrap
 
         await EnsureColumnAsync(db, "Deliveries", "FielderId",
             """ALTER TABLE "Deliveries" ADD COLUMN "FielderId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Deliveries", "ShotZone",
+            """ALTER TABLE "Deliveries" ADD COLUMN "ShotZone" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
 
         await EnsureColumnAsync(db, "Teams", "IsActive",
             """ALTER TABLE "Teams" ADD COLUMN "IsActive" INTEGER NOT NULL DEFAULT 1;""", ct).ConfigureAwait(false);
@@ -180,8 +201,19 @@ public static class DbBootstrap
         await EnsureColumnAsync(db, "Players", "IsActive",
             """ALTER TABLE "Players" ADD COLUMN "IsActive" INTEGER NOT NULL DEFAULT 1;""", ct).ConfigureAwait(false);
 
-        foreach (var col in new[] { "NickName", "Phone", "BattingStyle", "BowlingStyle", "Notes" })
+        foreach (var col in new[] { "Phone", "Notes" })
             await DropColumnIfExistsAsync(db, "Players", col, ct).ConfigureAwait(false);
+
+        await EnsureColumnAsync(db, "Players", "NickName",
+            """ALTER TABLE "Players" ADD COLUMN "NickName" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "PlayingRole",
+            """ALTER TABLE "Players" ADD COLUMN "PlayingRole" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "BattingStyle",
+            """ALTER TABLE "Players" ADD COLUMN "BattingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "BowlingStyle",
+            """ALTER TABLE "Players" ADD COLUMN "BowlingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Players", "Bio",
+            """ALTER TABLE "Players" ADD COLUMN "Bio" TEXT NULL;""", ct).ConfigureAwait(false);
 
         await EnsureColumnAsync(db, "Matches", "Format",
             """ALTER TABLE "Matches" ADD COLUMN "Format" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
@@ -349,6 +381,8 @@ public static class DbBootstrap
             """ALTER TABLE "Matches" ADD COLUMN "SeriesFixtureId" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
             """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Matches", "IsLiveTelecast",
+            """ALTER TABLE "Matches" ADD COLUMN "IsLiveTelecast" INTEGER NOT NULL DEFAULT 1;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "StartedByUserId",
             """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "StartedOnDeviceId",
@@ -453,6 +487,132 @@ public static class DbBootstrap
 
         await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
         await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// League format catalog + FormatId FK on matches/series/tournaments.
+    /// Existing phones skip EnsureCreated, so this runs every launch.
+    /// </summary>
+    public static async Task EnsureFormatsAsync(JplDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "Formats" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Formats" PRIMARY KEY,
+                "Name" TEXT NOT NULL,
+                "Format" INTEGER NOT NULL DEFAULT 0,
+                "OversLimit" INTEGER NOT NULL DEFAULT 8,
+                "OversMode" INTEGER NOT NULL DEFAULT 1,
+                "Version" INTEGER NOT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL,
+                "IsDeleted" INTEGER NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_Formats_Name" ON "Formats" ("Name");""", ct)
+            .ConfigureAwait(false);
+
+        await EnsureColumnAsync(db, "Matches", "FormatId",
+            """ALTER TABLE "Matches" ADD COLUMN "FormatId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "FormatId",
+            """ALTER TABLE "Tournaments" ADD COLUMN "FormatId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Series", "FormatId",
+            """ALTER TABLE "Series" ADD COLUMN "FormatId" TEXT NULL;""", ct).ConfigureAwait(false);
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """CREATE INDEX IF NOT EXISTS "IX_Matches_FormatId" ON "Matches" ("FormatId");""", ct)
+                .ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync(
+                """CREATE INDEX IF NOT EXISTS "IX_Tournaments_FormatId" ON "Tournaments" ("FormatId");""", ct)
+                .ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync(
+                """CREATE INDEX IF NOT EXISTS "IX_Series_FormatId" ON "Series" ("FormatId");""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* index create is best-effort */
+        }
+
+        try
+        {
+            await BackfillFormatIdsAsync(db, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* best-effort — FormatId is filled on next launch or via API sync */
+        }
+    }
+
+    private static async Task BackfillFormatIdsAsync(JplDbContext db, CancellationToken ct)
+    {
+        var known = (await db.Formats.IgnoreQueryFilters()
+            .Select(f => f.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false)).ToHashSet();
+
+        async Task<Guid> EnsureRow(MatchFormat format, OversMode mode, int oversLimit)
+        {
+            var stored = OversRules.StoredOversLimit(mode, oversLimit);
+            var id = FormatRules.MigratedId(format, mode, stored);
+            if (known.Contains(id))
+                return id;
+
+            var desired = FormatRules.DefaultName(format, mode, stored);
+            var existingNames = await db.Formats.IgnoreQueryFilters()
+                .Where(f => !f.IsDeleted)
+                .Select(f => f.Name)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var name = desired;
+            var n = 2;
+            while (existingNames.Any(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                name = $"{desired} ({n})";
+                n++;
+            }
+
+            var now = DateTime.Now;
+            db.Formats.Add(new Format
+            {
+                Id = id,
+                Name = name,
+                Kind = format,
+                OversLimit = stored,
+                OversMode = mode,
+                Version = 1,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+            known.Add(id);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return id;
+        }
+
+        foreach (var m in await db.Matches.IgnoreQueryFilters().ToListAsync(ct).ConfigureAwait(false))
+        {
+            var id = await EnsureRow(m.Format, m.OversMode, m.OversLimit).ConfigureAwait(false);
+            if (m.FormatId is null || m.FormatId == Guid.Empty)
+                m.FormatId = id;
+        }
+
+        foreach (var t in await db.Tournaments.IgnoreQueryFilters().ToListAsync(ct).ConfigureAwait(false))
+        {
+            var id = await EnsureRow(t.Format, t.OversMode, t.OversLimit).ConfigureAwait(false);
+            if (t.FormatId is null || t.FormatId == Guid.Empty)
+                t.FormatId = id;
+        }
+
+        foreach (var s in await db.Series.IgnoreQueryFilters().ToListAsync(ct).ConfigureAwait(false))
+        {
+            var id = await EnsureRow(s.Format, s.OversMode, s.OversLimit).ConfigureAwait(false);
+            if (s.FormatId is null || s.FormatId == Guid.Empty)
+                s.FormatId = id;
+        }
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Live telecast queue — existing phones skip EnsureCreated for new tables.</summary>

@@ -26,6 +26,7 @@ public sealed class SeriesDetail
     public int MatchCount { get; init; }
     public Guid VenueId { get; init; }
     public string VenueName { get; init; } = string.Empty;
+    public Guid? FormatId { get; init; }
     public byte Format { get; init; }
     public string FormatText { get; init; } = string.Empty;
     public int OversLimit { get; init; }
@@ -89,7 +90,8 @@ public sealed record SeriesDraft(
     int OversLimit,
     bool LastBatsmanCanBatAsSingleWicket,
     int BowlerMaxOvers,
-    OversMode OversMode);
+    OversMode OversMode,
+    Guid? FormatId = null);
 
 public interface ISeriesService
 {
@@ -252,6 +254,7 @@ public sealed class SeriesService : ISeriesService
         teamBId = draft.TeamBId,
         matchCount = draft.MatchCount,
         venueId = draft.VenueId,
+        formatId = draft.FormatId,
         format = draft.Format,
         oversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
         oversMode = (byte)draft.OversMode,
@@ -275,6 +278,7 @@ public sealed class SeriesService : ISeriesService
             MatchCount = dto.MatchCount,
             VenueId = dto.VenueId,
             VenueName = dto.VenueName,
+            FormatId = dto.FormatId,
             Format = dto.Format,
             FormatText = string.IsNullOrWhiteSpace(dto.FormatText)
                 ? (dto.Format == 1 ? "Double innings" : "Single inning")

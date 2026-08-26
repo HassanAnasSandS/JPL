@@ -24,6 +24,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     private readonly ITournamentService _tournaments;
     private readonly ITeamService _teams;
     private readonly IVenueService _venues;
+    private readonly IFormatService _formats;
     private readonly IAuthService _auth;
 
     private Guid? _id;
@@ -32,14 +33,14 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     public ObservableCollection<int> GroupOptions { get; } = new() { 1, 2 };
     public ObservableCollection<int> QualifyOptions { get; } = new() { 1, 2 };
     public ObservableCollection<VenueListItem> VenueOptions { get; } = new();
-    public ObservableCollection<SelectOption<MatchFormat>> FormatOptions { get; } = new();
+    public ObservableCollection<FormatListItem> FormatOptions { get; } = new();
 
     [ObservableProperty] private string pageTitle = "New tournament";
     [ObservableProperty] private string name = string.Empty;
     [ObservableProperty] private int groupCount = 1;
     [ObservableProperty] private int qualifyPerGroup = 1;
     [ObservableProperty] private VenueListItem? selectedVenue;
-    [ObservableProperty] private SelectOption<MatchFormat>? selectedFormat;
+    [ObservableProperty] private FormatListItem? selectedFormat;
     [ObservableProperty] private int oversLimit = 8;
     [ObservableProperty] private bool noOversLimit;
     [ObservableProperty] private bool oversAreMatchTotal = true;
@@ -63,24 +64,14 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
         ITournamentService tournaments,
         ITeamService teams,
         IVenueService venues,
+        IFormatService formats,
         IAuthService auth)
     {
         _tournaments = tournaments;
         _teams = teams;
         _venues = venues;
+        _formats = formats;
         _auth = auth;
-
-        FormatOptions.Add(new SelectOption<MatchFormat>
-        {
-            Label = "Single inning (1 turn each)",
-            Value = MatchFormat.SingleInning
-        });
-        FormatOptions.Add(new SelectOption<MatchFormat>
-        {
-            Label = "Double innings (2 turns each)",
-            Value = MatchFormat.DoubleInnings
-        });
-        SelectedFormat = FormatOptions[0];
         UpdateHint();
         UpdateOversHint();
     }
@@ -120,7 +111,17 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     }
 
     partial void OnOversLimitChanged(int value) => UpdateOversHint();
-    partial void OnSelectedFormatChanged(SelectOption<MatchFormat>? value) => UpdateOversHint();
+    partial void OnSelectedFormatChanged(FormatListItem? value)
+    {
+        if (value is not null)
+        {
+            OversLimit = value.OversLimit > 0 ? value.OversLimit : 8;
+            ApplyOversMode(value.OversMode);
+            OversHint = value.Hint;
+        }
+        else
+            UpdateOversHint();
+    }
     partial void OnNoOversLimitChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowOversFields));
@@ -137,18 +138,8 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
 
     private void UpdateOversHint()
     {
-        var format = SelectedFormat?.Value ?? MatchFormat.SingleInning;
-        if (NoOversLimit)
-        {
-            OversHint = "Innings end only on all out or declare. Overs never stop a turn.";
-            return;
-        }
-
-        OversHint = OversAreMatchTotal
-            ? $"All innings share {OversLimit} overs for each match. All out or declare still ends a turn."
-            : format == MatchFormat.DoubleInnings
-                ? $"Each turn gets {OversLimit} overs."
-                : $"Each side gets {OversLimit} overs.";
+        OversHint = SelectedFormat?.Hint
+            ?? "No formats in this league yet. Open Formats and add one first.";
     }
 
     private void ApplyOversMode(OversMode mode)
@@ -182,6 +173,17 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 /* offline */
             }
 
+            FormatOptions.Clear();
+            try
+            {
+                foreach (var f in await _formats.GetAllAsync().ConfigureAwait(true))
+                    FormatOptions.Add(f);
+            }
+            catch
+            {
+                /* offline */
+            }
+
             var teams = await _teams.GetActiveAsync().ConfigureAwait(true);
             TeamPicks.Clear();
             foreach (var t in teams.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
@@ -208,8 +210,15 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 QualifyPerGroup = detail.QualifyPerGroup;
                 SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == detail.VenueId)
                                 ?? VenueOptions.FirstOrDefault();
-                SelectedFormat = FormatOptions.FirstOrDefault(f => (byte)f.Value == detail.Format)
-                                 ?? FormatOptions[0];
+                SelectedFormat = (detail.FormatId is Guid formatId && formatId != Guid.Empty
+                                     ? FormatOptions.FirstOrDefault(f => f.Id == formatId)
+                                     : null)
+                                 ?? FormatOptions.FirstOrDefault(f =>
+                                     (byte)f.Format == detail.Format
+                                     && f.OversMode == detail.OversMode
+                                     && f.OversLimit == detail.OversLimit)
+                                 ?? FormatOptions.FirstOrDefault(f => (byte)f.Format == detail.Format)
+                                 ?? FormatOptions.FirstOrDefault();
                 OversLimit = detail.OversLimit > 0 ? detail.OversLimit : 8;
                 ApplyOversMode(detail.OversMode);
                 LastBatsmanCanBatAsSingleWicket = detail.LastBatsmanCanBatAsSingleWicket;
@@ -226,7 +235,9 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
             else
             {
                 SelectedVenue ??= VenueOptions.FirstOrDefault();
-                SelectedFormat ??= FormatOptions[0];
+                SelectedFormat ??= FormatOptions.FirstOrDefault();
+                if (SelectedFormat is null)
+                    OversHint = "No formats in this league yet. Open Formats and add one first.";
             }
         }
         catch (Exception ex)
@@ -254,8 +265,8 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
             if (SelectedVenue is null)
                 throw new ArgumentException("Venue is required.");
             if (SelectedFormat is null)
-                throw new ArgumentException("Match format is required.");
-            OversRules.Validate(CurrentOversMode, OversLimit, BowlerMaxOvers);
+                throw new ArgumentException("Select a format. Add one in Formats if the list is empty.");
+            OversRules.Validate(SelectedFormat.OversMode, SelectedFormat.OversLimit, BowlerMaxOvers);
 
             var selected = TeamPicks.Where(t => t.IsSelected)
                 .Select(t => (t.TeamId, t.GroupNumber))
@@ -265,12 +276,13 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 GroupCount,
                 QualifyPerGroup,
                 SelectedVenue.Id,
-                (byte)SelectedFormat.Value,
-                OversLimit,
+                (byte)SelectedFormat.Format,
+                SelectedFormat.OversLimit,
                 LastBatsmanCanBatAsSingleWicket,
                 BowlerMaxOvers,
-                CurrentOversMode,
-                selected);
+                SelectedFormat.OversMode,
+                selected,
+                SelectedFormat.Id);
             if (_id is Guid id)
                 await _tournaments.UpdateAsync(id, draft).ConfigureAwait(true);
             else

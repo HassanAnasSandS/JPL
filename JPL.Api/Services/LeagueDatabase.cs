@@ -204,11 +204,150 @@ public sealed class LeagueDatabaseManager
         await EnsureTeamPlayerPlayingColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureOversModeColumnsAsync(dbName, ct).ConfigureAwait(false);
         await EnsureLiveStreamUrlColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureIsLiveTelecastColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureScoringOwnerColumnsAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureShotZoneColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureNetSessionTablesAsync(dbName, ct).ConfigureAwait(false);
         await EnsureSeriesTablesAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureFormatsAsync(dbName, ct).ConfigureAwait(false);
+        await EnsurePlayerImagePathColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsurePlayerIdentityColumnsAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureTeamImagePathColumnAsync(dbName, ct).ConfigureAwait(false);
         await DropSportsLeagueIdColumnsAsync(dbName, ct).ConfigureAwait(false);
         await DropLeagueDirectoryTablesAsync(dbName, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureShotZoneColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Deliveries', N'ShotZone') IS NULL
+                    ALTER TABLE dbo.Deliveries ADD ShotZone tinyint NOT NULL CONSTRAINT DF_Deliveries_ShotZone DEFAULT 0;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Deliveries" ADD COLUMN "ShotZone" INTEGER NOT NULL DEFAULT 0;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    private async Task EnsurePlayerImagePathColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Players', N'ImagePath') IS NULL
+                    ALTER TABLE dbo.Players ADD ImagePath nvarchar(80) NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Players" ADD COLUMN "ImagePath" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    private async Task EnsurePlayerIdentityColumnsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Players', N'NickName') IS NULL
+                    ALTER TABLE dbo.Players ADD NickName nvarchar(40) NULL;
+                IF COL_LENGTH(N'dbo.Players', N'PlayingRole') IS NULL
+                    ALTER TABLE dbo.Players ADD PlayingRole nvarchar(40) NULL;
+                IF COL_LENGTH(N'dbo.Players', N'BattingStyle') IS NULL
+                    ALTER TABLE dbo.Players ADD BattingStyle nvarchar(40) NULL;
+                IF COL_LENGTH(N'dbo.Players', N'BowlingStyle') IS NULL
+                    ALTER TABLE dbo.Players ADD BowlingStyle nvarchar(60) NULL;
+                IF COL_LENGTH(N'dbo.Players', N'Bio') IS NULL
+                    ALTER TABLE dbo.Players ADD Bio nvarchar(500) NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var (_, sql) in new[]
+        {
+            ("NickName", """ALTER TABLE "Players" ADD COLUMN "NickName" TEXT NULL;"""),
+            ("PlayingRole", """ALTER TABLE "Players" ADD COLUMN "PlayingRole" TEXT NULL;"""),
+            ("BattingStyle", """ALTER TABLE "Players" ADD COLUMN "BattingStyle" TEXT NULL;"""),
+            ("BowlingStyle", """ALTER TABLE "Players" ADD COLUMN "BowlingStyle" TEXT NULL;"""),
+            ("Bio", """ALTER TABLE "Players" ADD COLUMN "Bio" TEXT NULL;""")
+        })
+        {
+            try
+            {
+                await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+                await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+        }
+    }
+
+    private async Task EnsureTeamImagePathColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Teams', N'ImagePath') IS NULL
+                    ALTER TABLE dbo.Teams ADD ImagePath nvarchar(80) NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Teams" ADD COLUMN "ImagePath" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
     }
 
     private async Task EnsureTeamPlayerPlayingColumnAsync(string dbName, CancellationToken ct)
@@ -263,6 +402,37 @@ public sealed class LeagueDatabaseManager
             await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
             await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Matches" ADD COLUMN "SquadRosterJson" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    private async Task EnsureIsLiveTelecastColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF COL_LENGTH(N'dbo.Matches', N'IsLiveTelecast') IS NULL
+                    ALTER TABLE dbo.Matches ADD IsLiveTelecast bit NOT NULL
+                        CONSTRAINT DF_Matches_IsLiveTelecast DEFAULT (1);
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Matches" ADD COLUMN "IsLiveTelecast" INTEGER NOT NULL DEFAULT 1;""", ct)
                 .ConfigureAwait(false);
         }
         catch
@@ -627,6 +797,131 @@ public sealed class LeagueDatabaseManager
         catch
         {
             /* already exists */
+        }
+    }
+
+    private async Task EnsureFormatsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.Formats', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.Formats (
+                        Id uniqueidentifier NOT NULL CONSTRAINT PK_Formats PRIMARY KEY,
+                        Name nvarchar(160) NOT NULL,
+                        Format tinyint NOT NULL,
+                        OversLimit int NOT NULL CONSTRAINT DF_Formats_OversLimit DEFAULT 8,
+                        OversMode tinyint NOT NULL CONSTRAINT DF_Formats_OversMode DEFAULT 1,
+                        Version bigint NOT NULL,
+                        CreatedAtUtc datetime2 NOT NULL,
+                        UpdatedAtUtc datetime2 NOT NULL,
+                        IsDeleted bit NOT NULL CONSTRAINT DF_Formats_IsDeleted DEFAULT 0
+                    );
+                    CREATE INDEX IX_Formats_Name ON dbo.Formats (Name);
+                END
+                IF COL_LENGTH(N'dbo.Matches', N'FormatId') IS NULL
+                    ALTER TABLE dbo.Matches ADD FormatId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'FormatId') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD FormatId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Series', N'FormatId') IS NULL
+                    ALTER TABLE dbo.Series ADD FormatId uniqueidentifier NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            try
+            {
+                await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+                await db.Database.ExecuteSqlRawAsync("""
+                    CREATE TABLE IF NOT EXISTS "Formats" (
+                        "Id" TEXT NOT NULL CONSTRAINT "PK_Formats" PRIMARY KEY,
+                        "Name" TEXT NOT NULL,
+                        "Format" INTEGER NOT NULL,
+                        "OversLimit" INTEGER NOT NULL DEFAULT 8,
+                        "OversMode" INTEGER NOT NULL DEFAULT 1,
+                        "Version" INTEGER NOT NULL,
+                        "CreatedAtUtc" TEXT NOT NULL,
+                        "UpdatedAtUtc" TEXT NOT NULL,
+                        "IsDeleted" INTEGER NOT NULL
+                    );
+                    """, ct).ConfigureAwait(false);
+                try
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                            """ALTER TABLE "Matches" ADD COLUMN "FormatId" TEXT NULL;""", ct)
+                        .ConfigureAwait(false);
+                }
+                catch { /* exists */ }
+                try
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                            """ALTER TABLE "Tournaments" ADD COLUMN "FormatId" TEXT NULL;""", ct)
+                        .ConfigureAwait(false);
+                }
+                catch { /* exists */ }
+                try
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                            """ALTER TABLE "Series" ADD COLUMN "FormatId" TEXT NULL;""", ct)
+                        .ConfigureAwait(false);
+                }
+                catch { /* exists */ }
+            }
+            catch
+            {
+                /* already exists */
+            }
+        }
+
+        try
+        {
+            await using var ctx = CreateContext(ToConnection(dbName), Guid.Empty);
+            await FormatCatalog.BackfillAsync(ctx, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* backfill is best-effort on older catalogs */
+        }
+
+        if (!_sqlServer || !SafeName.IsMatch(dbName))
+            return;
+
+        try
+        {
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var fk = conn.CreateCommand();
+            fk.CommandText = """
+                IF OBJECT_ID(N'dbo.Formats', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Matches', N'FormatId') IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Matches_Formats_FormatId')
+                    ALTER TABLE dbo.Matches WITH NOCHECK
+                    ADD CONSTRAINT FK_Matches_Formats_FormatId FOREIGN KEY (FormatId) REFERENCES dbo.Formats (Id);
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'FormatId') IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Tournaments_Formats_FormatId')
+                    ALTER TABLE dbo.Tournaments WITH NOCHECK
+                    ADD CONSTRAINT FK_Tournaments_Formats_FormatId FOREIGN KEY (FormatId) REFERENCES dbo.Formats (Id);
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Series', N'FormatId') IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Series_Formats_FormatId')
+                    ALTER TABLE dbo.Series WITH NOCHECK
+                    ADD CONSTRAINT FK_Series_Formats_FormatId FOREIGN KEY (FormatId) REFERENCES dbo.Formats (Id);
+                """;
+            await fk.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* FK is optional if orphans remain */
         }
     }
 

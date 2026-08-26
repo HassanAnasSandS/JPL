@@ -18,6 +18,8 @@ public partial class TeamsViewModel : ObservableObject
 
     private readonly ITeamService _teams;
 
+    private readonly ITeamImageService _images;
+
     private readonly IAuthService _auth;
 
     private List<TeamListItem> _all = new();
@@ -76,11 +78,13 @@ public partial class TeamsViewModel : ObservableObject
 
 
 
-    public TeamsViewModel(ITeamService teams, IAuthService auth)
+    public TeamsViewModel(ITeamService teams, ITeamImageService images, IAuthService auth)
 
     {
 
         _teams = teams;
+
+        _images = images;
 
         _auth = auth;
 
@@ -162,7 +166,22 @@ public partial class TeamsViewModel : ObservableObject
 
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
 
-            _all = (await _teams.GetAllAsync().ConfigureAwait(true)).ToList();
+            var teams = (await _teams.GetAllAsync().ConfigureAwait(true)).ToList();
+            IReadOnlyDictionary<Guid, ImageSource> photos = new Dictionary<Guid, ImageSource>();
+            try
+            {
+                photos = await _images.GetPhotosAsync(teams.Select(t => t.Id)).ConfigureAwait(true);
+            }
+            catch
+            {
+                // List still works if logos fail.
+            }
+
+            _all = teams.Select(t => t with
+            {
+                Photo = photos.GetValueOrDefault(t.Id),
+                Initials = PlayerPhotos.Initials(t.Name)
+            }).ToList();
             RefreshCounts();
             ApplyFilters();
 
@@ -435,6 +454,7 @@ public partial class TeamsViewModel : ObservableObject
         {
 
             await _teams.SoftDeleteAsync(team.Id).ConfigureAwait(true);
+            _images.Invalidate(team.Id);
 
             await LoadAsync().ConfigureAwait(true);
 

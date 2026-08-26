@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{LEAGUE_NAME}} players · Cric360</title>
+  <style>
+    :root { --bg:#0b1220; --card:#0d1b2a; --line:#243447; --gold:#d4af37; --text:#f4f7fb; --muted:#8fa3b8; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    a { color:inherit; text-decoration:none; }
+    .top { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:flex-start; }
+    .brand { font-weight:800; letter-spacing:.06em; color:var(--gold); font-size:12px; }
+    .social { margin-left:auto; display:flex; flex-wrap:wrap; gap:12px; font-size:12px; font-weight:700; color:var(--gold); }
+    .social a { color:var(--gold); }
+    h1 { font-size:20px; margin:6px 0 0; }
+    .wrap { max-width:980px; margin:0 auto; padding:16px; }
+    input { width:100%; background:#102033; border:1px solid var(--line); color:var(--text); border-radius:12px; padding:10px 12px; font-size:14px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:14px; }
+    .card { display:grid; grid-template-columns:56px 1fr; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; }
+    .card:hover { border-color:var(--gold); }
+    img { width:56px; height:56px; border-radius:12px; object-fit:cover; background:#182a3e; }
+    .name { font-weight:800; }
+    .meta { color:var(--muted); font-size:12px; margin-top:2px; }
+    .count { color:var(--muted); font-size:12px; margin:8px 0; }
+    .count a { color:var(--gold); font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="brand">CRIC360 PUBLIC IDENTITY</div>
+      <h1>{{LEAGUE_NAME}}</h1>
+    </div>
+    <span class="social">
+      <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a>
+      <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a>
+    </span>
+  </div>
+  <div class="wrap">
+    <input id="q" type="search" placeholder="Search players…" />
+    <div class="count" id="count"></div>
+    <div class="grid" id="grid"></div>
+    <p class="count">Follow @official.cric360 on <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> · <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> · <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a></p>
+  </div>
+  <script>
+    const leagueId = "{{LEAGUE_ID}}";
+    let all = [];
+    function esc(s) {
+      return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    }
+    fetch("/api/public/leagues/" + leagueId + "/players", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { all = d.players || []; render(""); document.getElementById("count").textContent = (d.playerCount || 0) + " public profiles · full stats, no PRO lock"; });
+    document.getElementById("q").oninput = e => render(e.target.value);
+    function render(q) {
+      const s = (q || "").trim().toLowerCase();
+      const rows = all.filter(p => !s || (p.fullName + " " + (p.nickName||"") + " " + (p.teamName||"")).toLowerCase().includes(s));
+      document.getElementById("grid").innerHTML = rows.map(p => {
+        const img = p.hasPhoto ? "<img src='" + esc(p.photoUrl) + "' alt=''/>" : "<img alt=''/>";
+        const nick = p.nickName ? "<div class='meta'>“" + esc(p.nickName) + "”</div>" : "";
+        return "<a class='card' href='" + esc(p.profileUrl) + "'>" + img + "<div><div class='name'>" + esc(p.fullName) + "</div>" + nick + "<div class='meta'>" + esc(p.playingRole || p.teamName || "Player") + "</div><div class='meta'>" + esc(p.headline) + "</div></div></a>";
+      }).join("");
+    }
+  </script>
+</body>
+</html>

@@ -1,6 +1,9 @@
 Android App Release 
 dotnet build "E:\JPL\JPL.csproj" -f net9.0-android -c Release
-# output: E:\JPL\releases\Cric360-v1.8.apk  (display 1.8, versionCode 40)
+# output: E:\JPL\releases\Cric360-v2.1.apk  (display 2.1, versionCode 43)
+# keep:   E:\JPL\releases\Cric360-v2.0.apk  (display 2.0, versionCode 42)
+# keep:   E:\JPL\releases\Cric360-v1.9.apk  (display 1.9, versionCode 41)
+# keep:   E:\JPL\releases\Cric360-v1.8.apk  (display 1.8, versionCode 40)
 # keep:   E:\JPL\releases\Cric360-v1.7.apk  (display 1.7, versionCode 39)
 # keep:   E:\JPL\releases\Cric360-v1.6.apk  (display 1.6, versionCode 38)
 # keep:   E:\JPL\releases\Cric360-v1.5.apk  (display 1.5, versionCode 37)
@@ -11,4 +14,4 @@ dotnet build "E:\JPL\JPL.csproj" -f net9.0-android -c Release
 
 API Release
 dotnet publish "E:\JPL\JPL.Api\JPL.Api.csproj" -c Release -o "E:\JPL\bin\APIs"
-# health: https://jpl.shoptick.shop/api/health  version 1.5
+# health: https://jpl.shoptick.shop/api/health  version 1.8

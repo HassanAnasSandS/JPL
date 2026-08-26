@@ -130,6 +130,81 @@ public partial class LeaguePickerViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task EmailRegisterAsync()
+    {
+        try
+        {
+            await LeagueRegistrationContact.OpenEmailAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not open Email. Write to "
+                           + LeagueRegistrationContact.EmailDisplay
+                           + ". " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task FacebookRegisterAsync()
+    {
+        try
+        {
+            await LeagueRegistrationContact.OpenFacebookAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not open Facebook. Visit "
+                           + LeagueRegistrationContact.FacebookUrl
+                           + ". " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstagramRegisterAsync()
+    {
+        try
+        {
+            await LeagueRegistrationContact.OpenInstagramAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not open Instagram. Visit "
+                           + LeagueRegistrationContact.InstagramUrl
+                           + ". " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task TikTokRegisterAsync()
+    {
+        try
+        {
+            await LeagueRegistrationContact.OpenTikTokAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not open TikTok. Visit "
+                           + LeagueRegistrationContact.TikTokUrl
+                           + ". " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task YouTubeRegisterAsync()
+    {
+        try
+        {
+            await LeagueRegistrationContact.OpenYouTubeAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not open YouTube. Visit "
+                           + LeagueRegistrationContact.YouTubeUrl
+                           + ". " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
     private async Task AddAsync()
     {
         if (!CanManageLeagues)

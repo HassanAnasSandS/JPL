@@ -159,44 +159,123 @@
                 VerticalOptions="Center"
                 HorizontalOptions="Fill"
                 StrokeShape="RoundRectangle 18">
+            <ScrollView MaximumHeightRequest="560">
             <VerticalStackLayout Spacing="12">
-                <Label Text="Register your league"
+                <Label Text="Launch Your League on Cric360"
                        FontSize="20"
                        FontAttributes="Bold"
-                       TextColor="#D4AF37" />
-                <Label Text="Contact the Cric360 team to register your own league."
+                       TextColor="#D4AF37"
+                       LineBreakMode="WordWrap" />
+                <Label Text="Give your cricket a professional home. Cric360 delivers live scoring, scorecards, player stats, and branded league identity — so every match looks as good as it plays."
                        FontSize="14"
-                       TextColor="#E8EEF5" />
+                       TextColor="#E8EEF5"
+                       LineBreakMode="WordWrap" />
+                <Label Text="Share your league name and logo. Our team will set you up and take you live."
+                       FontSize="13"
+                       TextColor="#B8C4D4"
+                       LineBreakMode="WordWrap" />
 
-                <Label Text="WhatsApp"
-                       FontSize="12"
-                       FontAttributes="Bold"
-                       TextColor="#8899AA" />
-                <Label Text="+92 322 2857 730"
-                       FontSize="18"
-                       FontAttributes="Bold"
-                       TextColor="#B6FF3B" />
-
-                <Label Text="Please share"
-                       FontSize="12"
-                       FontAttributes="Bold"
-                       TextColor="#8899AA" />
-                <Label Text="• League name&#10;• League logo"
-                       FontSize="14"
-                       TextColor="#E8EEF5" />
+                <Border StrokeThickness="0"
+                        BackgroundColor="#0F1A28"
+                        Padding="14"
+                        StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="12">
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding WhatsAppRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="WhatsApp"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="#8899AA" />
+                            <Label Text="0322 2857730"
+                                   FontSize="16"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding EmailRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="Email"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="#8899AA" />
+                            <Label Text="official.cric360@gmail.com"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding FacebookRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="Facebook"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="#8899AA" />
+                            <Label Text="Official.Cric360"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding InstagramRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="Instagram"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="#8899AA" />
+                            <Label Text="@official.cric360"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding TikTokRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="TikTok"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="#8899AA" />
+                            <Label Text="@official.cric360"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding YouTubeRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="YouTube"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="#8899AA" />
+                            <Label Text="cric360 Cricket Scoring"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
 
                 <Border StrokeThickness="0"
                         BackgroundColor="#243447"
                         Padding="12"
                         StrokeShape="RoundRectangle 10">
                     <VerticalStackLayout Spacing="4">
-                        <Label Text="Note"
+                        <Label Text="Introductory offer"
                                FontSize="12"
                                FontAttributes="Bold"
                                TextColor="#D4AF37" />
-                        <Label Text="Registration is free for the first 6 months. After that, a monthly or yearly subscription is required."
+                        <Label Text="Registration is free for the first 6 months. After that, continue with a monthly or yearly subscription."
                                FontSize="13"
-                               TextColor="#B8C4D4" />
+                               TextColor="#B8C4D4"
+                               LineBreakMode="WordWrap" />
                     </VerticalStackLayout>
                 </Border>
 
@@ -208,6 +287,46 @@
                         TextColor="White"
                         CornerRadius="12"
                         Command="{Binding WhatsAppRegisterCommand}" />
+                <Button Text="Email Cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#243447"
+                        TextColor="#B6FF3B"
+                        CornerRadius="12"
+                        Command="{Binding EmailRegisterCommand}" />
+                <Button Text="Facebook — Official.Cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#1877F2"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding FacebookRegisterCommand}" />
+                <Button Text="Instagram — @official.cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#C13584"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding InstagramRegisterCommand}" />
+                <Button Text="TikTok — @official.cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#111111"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding TikTokRegisterCommand}" />
+                <Button Text="YouTube — cric360 Cricket Scoring"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#FF0000"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding YouTubeRegisterCommand}" />
                 <Button Text="Close"
                         FontAttributes="Bold"
                         FontSize="14"
@@ -219,6 +338,7 @@
                         CornerRadius="12"
                         Command="{Binding CloseRegisterPopupCommand}" />
             </VerticalStackLayout>
+            </ScrollView>
         </Border>
     </Grid>
     </Grid>

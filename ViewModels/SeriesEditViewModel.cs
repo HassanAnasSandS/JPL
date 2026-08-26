@@ -11,6 +11,7 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
     private readonly ISeriesService _series;
     private readonly ITeamService _teams;
     private readonly IVenueService _venues;
+    private readonly IFormatService _formats;
     private readonly IAuthService _auth;
 
     private Guid? _id;
@@ -18,7 +19,7 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
     public ObservableCollection<TeamListItem> TeamOptions { get; } = new();
     public ObservableCollection<int> MatchCountOptions { get; } = new();
     public ObservableCollection<VenueListItem> VenueOptions { get; } = new();
-    public ObservableCollection<SelectOption<MatchFormat>> FormatOptions { get; } = new();
+    public ObservableCollection<FormatListItem> FormatOptions { get; } = new();
 
     [ObservableProperty] private string pageTitle = "New series";
     [ObservableProperty] private string name = string.Empty;
@@ -26,7 +27,7 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
     [ObservableProperty] private TeamListItem? selectedTeamA;
     [ObservableProperty] private TeamListItem? selectedTeamB;
     [ObservableProperty] private VenueListItem? selectedVenue;
-    [ObservableProperty] private SelectOption<MatchFormat>? selectedFormat;
+    [ObservableProperty] private FormatListItem? selectedFormat;
     [ObservableProperty] private int oversLimit = 8;
     [ObservableProperty] private bool noOversLimit;
     [ObservableProperty] private bool oversAreMatchTotal = true;
@@ -49,27 +50,18 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
         ISeriesService series,
         ITeamService teams,
         IVenueService venues,
+        IFormatService formats,
         IAuthService auth)
     {
         _series = series;
         _teams = teams;
         _venues = venues;
+        _formats = formats;
         _auth = auth;
 
         for (var i = 1; i <= 7; i++)
             MatchCountOptions.Add(i);
 
-        FormatOptions.Add(new SelectOption<MatchFormat>
-        {
-            Label = "Single inning (1 turn each)",
-            Value = MatchFormat.SingleInning
-        });
-        FormatOptions.Add(new SelectOption<MatchFormat>
-        {
-            Label = "Double innings (2 turns each)",
-            Value = MatchFormat.DoubleInnings
-        });
-        SelectedFormat = FormatOptions[0];
         UpdateOversHint();
     }
 
@@ -82,7 +74,17 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
     }
 
     partial void OnOversLimitChanged(int value) => UpdateOversHint();
-    partial void OnSelectedFormatChanged(SelectOption<MatchFormat>? value) => UpdateOversHint();
+    partial void OnSelectedFormatChanged(FormatListItem? value)
+    {
+        if (value is not null)
+        {
+            OversLimit = value.OversLimit > 0 ? value.OversLimit : 8;
+            ApplyOversMode(value.OversMode);
+            OversHint = value.Hint;
+        }
+        else
+            UpdateOversHint();
+    }
     partial void OnNoOversLimitChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowOversFields));
@@ -97,18 +99,8 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
 
     private void UpdateOversHint()
     {
-        var format = SelectedFormat?.Value ?? MatchFormat.SingleInning;
-        if (NoOversLimit)
-        {
-            OversHint = "Innings end only on all out or declare. Overs never stop a turn.";
-            return;
-        }
-
-        OversHint = OversAreMatchTotal
-            ? $"All innings share {OversLimit} overs for each match. All out or declare still ends a turn."
-            : format == MatchFormat.DoubleInnings
-                ? $"Each turn gets {OversLimit} overs."
-                : $"Each side gets {OversLimit} overs.";
+        OversHint = SelectedFormat?.Hint
+            ?? "No formats in this league yet. Open Formats and add one first.";
     }
 
     private void ApplyOversMode(OversMode mode)
@@ -138,6 +130,14 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
             }
             catch { /* offline */ }
 
+            FormatOptions.Clear();
+            try
+            {
+                foreach (var f in await _formats.GetAllAsync().ConfigureAwait(true))
+                    FormatOptions.Add(f);
+            }
+            catch { /* offline */ }
+
             TeamOptions.Clear();
             foreach (var t in (await _teams.GetActiveAsync().ConfigureAwait(true))
                      .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
@@ -157,8 +157,15 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
                 SelectedTeamB = TeamOptions.FirstOrDefault(t => t.Id == detail.TeamBId);
                 SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == detail.VenueId)
                                 ?? VenueOptions.FirstOrDefault();
-                SelectedFormat = FormatOptions.FirstOrDefault(f => (byte)f.Value == detail.Format)
-                                 ?? FormatOptions[0];
+                SelectedFormat = (detail.FormatId is Guid formatId && formatId != Guid.Empty
+                                     ? FormatOptions.FirstOrDefault(f => f.Id == formatId)
+                                     : null)
+                                 ?? FormatOptions.FirstOrDefault(f =>
+                                     (byte)f.Format == detail.Format
+                                     && f.OversMode == detail.OversMode
+                                     && f.OversLimit == detail.OversLimit)
+                                 ?? FormatOptions.FirstOrDefault(f => (byte)f.Format == detail.Format)
+                                 ?? FormatOptions.FirstOrDefault();
                 OversLimit = detail.OversLimit > 0 ? detail.OversLimit : 8;
                 ApplyOversMode(detail.OversMode);
                 LastBatsmanCanBatAsSingleWicket = detail.LastBatsmanCanBatAsSingleWicket;
@@ -167,7 +174,9 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
             else
             {
                 SelectedVenue ??= VenueOptions.FirstOrDefault();
-                SelectedFormat ??= FormatOptions[0];
+                SelectedFormat ??= FormatOptions.FirstOrDefault();
+                if (SelectedFormat is null)
+                    OversHint = "No formats in this league yet. Open Formats and add one first.";
             }
         }
         catch (Exception ex)
@@ -192,8 +201,8 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
             if (SelectedVenue is null)
                 throw new ArgumentException("Venue is required.");
             if (SelectedFormat is null)
-                throw new ArgumentException("Match format is required.");
-            OversRules.Validate(CurrentOversMode, OversLimit, BowlerMaxOvers);
+                throw new ArgumentException("Select a format. Add one in Formats if the list is empty.");
+            OversRules.Validate(SelectedFormat.OversMode, SelectedFormat.OversLimit, BowlerMaxOvers);
 
             var draft = new SeriesDraft(
                 Name,
@@ -201,11 +210,12 @@ public partial class SeriesEditViewModel : ObservableObject, IQueryAttributable
                 SelectedTeamB.Id,
                 MatchCount,
                 SelectedVenue.Id,
-                (byte)SelectedFormat.Value,
-                OversLimit,
+                (byte)SelectedFormat.Format,
+                SelectedFormat.OversLimit,
                 LastBatsmanCanBatAsSingleWicket,
                 BowlerMaxOvers,
-                CurrentOversMode);
+                SelectedFormat.OversMode,
+                SelectedFormat.Id);
             if (_id is Guid id)
                 await _series.UpdateAsync(id, draft).ConfigureAwait(true);
             else

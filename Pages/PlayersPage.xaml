@@ -8,6 +8,8 @@
 
              xmlns:domain="clr-namespace:JPL.Domain"
 
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+
              x:Class="JPL.Pages.PlayersPage"
              x:Name="ThisPage"
              x:DataType="vm:PlayersViewModel"
@@ -32,9 +34,19 @@
 
                    TextColor="{StaticResource Primary}" />
 
-            <Button Grid.Column="1"
+            <HorizontalStackLayout Grid.Column="1" Spacing="8">
 
-                    Text="+ Add"
+                    <Button Text="Public"
+
+                        Style="{StaticResource OutlineButton}"
+
+                        BackgroundColor="{StaticResource CardBackground}"
+
+                        Padding="16,10"
+
+                        Command="{Binding OpenPublicDirectoryCommand}" />
+
+                    <Button Text="+ Add"
 
                     Style="{StaticResource GoldButton}"
 
@@ -43,6 +55,8 @@
                     IsVisible="{Binding CanWrite}"
 
                     Clicked="OnAddClicked" />
+
+            </HorizontalStackLayout>
 
         </Grid>
 
@@ -234,13 +248,21 @@
 
                 <CollectionView.ItemTemplate>
 
-                    <DataTemplate x:DataType="domain:Player">
+                    <DataTemplate x:DataType="vm:PlayerRow">
 
                         <Border Style="{StaticResource CardBorder}">
 
                             <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
 
-                                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+
+                                    <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
+
+                                    <ctrl:RoundedPhotoView Photo="{Binding Photo}"
+
+                                                           Initials="{Binding Initials}" />
+
+                                        <VerticalStackLayout Spacing="2" VerticalOptions="Center" HorizontalOptions="Fill">
 
                                     <Label Text="{Binding FullName}"
 
@@ -256,26 +278,17 @@
 
                                            FontAttributes="Bold"
 
-                                           TextColor="{StaticResource Success}">
+                                           TextColor="{Binding StatusColor}" />
 
-                                        <Label.Triggers>
+                                        </VerticalStackLayout>
 
-                                            <DataTrigger TargetType="Label" Binding="{Binding IsActive}" Value="False">
+                                    </HorizontalStackLayout>
 
-                                                <Setter Property="TextColor" Value="{StaticResource Danger}" />
-
-                                            </DataTrigger>
-
-                                        </Label.Triggers>
-
-                                    </Label>
-
-                                </VerticalStackLayout>
+                                </Grid>
 
 
 
-                                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8"
-                                      IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
+                                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
 
                                     <Button Text="{Binding ToggleActiveLabel}"
 
@@ -283,11 +296,29 @@
 
                                             HorizontalOptions="Fill"
 
+                                            IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+
                                             Clicked="OnToggleActiveClicked"
 
-                                            CommandParameter="{Binding .}" />
+                                            CommandParameter="{Binding Player}" />
 
                                     <Button Grid.Column="1"
+
+                                            Text="View"
+
+                                            Style="{StaticResource OutlineButton}"
+
+                                            Padding="14,8"
+
+                                            MinimumHeightRequest="40"
+
+                                            FontSize="13"
+
+                                            Clicked="OnViewClicked"
+
+                                            CommandParameter="{Binding Player}" />
+
+                                    <Button Grid.Column="2"
 
                                             Text="Edit"
 
@@ -299,11 +330,13 @@
 
                                             FontSize="13"
 
+                                            IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+
                                             Clicked="OnEditClicked"
 
-                                            CommandParameter="{Binding .}" />
+                                            CommandParameter="{Binding Player}" />
 
-                                    <Button Grid.Column="2"
+                                    <Button Grid.Column="3"
 
                                             Text="Del"
 
@@ -315,9 +348,11 @@
 
                                             FontSize="13"
 
+                                            IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+
                                             Clicked="OnDeleteClicked"
 
-                                            CommandParameter="{Binding .}" />
+                                            CommandParameter="{Binding Player}" />
 
                                 </Grid>
 

@@ -134,4 +134,18 @@ internal static class DeleteConstraints
 
         return null;
     }
+
+    public static async Task<string?> FormatAsync(ApiDbContext db, Guid id, CancellationToken ct)
+    {
+        if (await db.Matches.AnyAsync(m => !m.IsDeleted && m.FormatId == id, ct).ConfigureAwait(false))
+            return "Cannot delete this format because it is used by a match.";
+
+        if (await db.Tournaments.AnyAsync(t => !t.IsDeleted && t.FormatId == id, ct).ConfigureAwait(false))
+            return "Cannot delete this format because it is used by a tournament.";
+
+        if (await db.Series.AnyAsync(s => !s.IsDeleted && s.FormatId == id, ct).ConfigureAwait(false))
+            return "Cannot delete this format because it is used by a series.";
+
+        return null;
+    }
 }

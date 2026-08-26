@@ -3,12 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.HallOfFamePage"
              x:DataType="vm:HallOfFameViewModel"
              Title="Hall of Fame"
              HideSoftInputOnTapped="True">
 
-    <Grid Padding="14" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
+    <Grid Padding="14" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10">
         <Label Text="Hall of Fame"
                FontSize="22"
                FontAttributes="Bold"
@@ -83,7 +84,10 @@
             </HorizontalStackLayout>
         </ScrollView>
 
-        <VerticalStackLayout Grid.Row="2" Spacing="2">
+        <ctrl:FormatMultiSelectView Grid.Row="2"
+                                    BindingContext="{Binding FormatFilter}" />
+
+        <VerticalStackLayout Grid.Row="3" Spacing="2">
             <Label Text="{Binding CategoryTitle}"
                    FontSize="16"
                    FontAttributes="Bold"
@@ -93,7 +97,7 @@
                    FontSize="12" />
         </VerticalStackLayout>
 
-        <RefreshView Grid.Row="3"
+        <RefreshView Grid.Row="4"
                      VerticalOptions="Fill"
                      IsRefreshing="{Binding IsBusy, Mode=OneWay}"
                      Command="{Binding LoadCommand}">
@@ -152,7 +156,7 @@
             </CollectionView>
         </RefreshView>
 
-        <Label Grid.Row="4"
+        <Label Grid.Row="5"
                Text="{Binding ErrorMessage}"
                TextColor="{StaticResource Danger}"
                FontSize="12" />

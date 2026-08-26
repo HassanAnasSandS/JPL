@@ -4,7 +4,9 @@
     <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <title>JPL Live</title>
+  <title>Cric360 Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0b1220;
@@ -32,6 +34,8 @@
       padding: 3px 8px; border-radius: 8px; margin-bottom: 8px;
     }
     .title { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+    .igline { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
+    .igline a { color: var(--gold); text-decoration: none; font-weight: 700; }
     .teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
     .team { min-width: 0; }
     .team.right { text-align: right; }
@@ -46,13 +50,38 @@
       margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
       font-size: 12px; color: var(--muted);
     }
-    .ticker b { color: var(--text); }
+    .ticker a.plink { color: var(--gold); text-decoration: none; font-weight: 700; }
+    .voice {
+      margin-top: 10px; padding: 10px; border: 1px solid var(--line);
+      border-radius: 12px; background: #102033;
+    }
+    .voice-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .voice button {
+      appearance: none; border: 1px solid var(--line); background: #182a3e;
+      color: var(--text); font-size: 12px; font-weight: 700;
+      padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    }
+    .voice button.on { background: var(--gold); color: #0d1b2a; border-color: var(--gold); }
+    .voice .hint { font-size: 11px; color: var(--muted); margin-left: auto; }
+    .analytics { margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #102033; }
+    .analytics h3 { margin: 0 0 6px; font-size: 12px; color: var(--gold); }
+    .analytics .insight { font-size: 12px; color: var(--muted); margin: 0 0 4px; line-height: 1.35; }
+    .analytics canvas { width: 100%; height: 132px; display: block; margin: 6px 0 10px; }
+    .cue {
+      display: inline-block; margin: 8px 0 4px; font-size: 11px; font-weight: 800;
+      letter-spacing: .06em; color: var(--gold);
+    }
+    .line {
+      font-size: 14px; font-weight: 600; line-height: 1.45; min-height: 1.4em;
+    }
+    .line.ur { font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, sans-serif; direction: rtl; }
     .video {
       position: relative; width: 100%; background: #000;
       aspect-ratio: 16 / 9;
     }
     html.video-only, html.video-only body { height: 100%; overflow: hidden; background: #000; }
     html.video-only .score { display: none !important; }
+    html.video-only .voice-float { display: flex !important; }
     html.video-only .wrap { display: block; min-height: 100%; }
     html.video-only .video {
       position: fixed; inset: 0; aspect-ratio: auto; min-height: 100%;
@@ -63,6 +92,11 @@
     .empty {
       display: flex; align-items: center; justify-content: center;
       color: var(--muted); font-size: 14px; padding: 16px; text-align: center;
+    }
+    .voice-float {
+      display: none; position: fixed; left: 10px; right: 10px; bottom: 10px;
+      z-index: 5; background: rgba(13,27,42,.92); border: 1px solid var(--line);
+      border-radius: 12px; padding: 8px 10px; gap: 8px; flex-direction: column;
     }
     @media (min-width: 860px) {
       .wrap { flex-direction: row; min-height: 100vh; }
@@ -93,7 +127,35 @@
       </div>
       <div class="status" id="result">LIVE</div>
       <div class="ticker" id="ticker"></div>
+      <div class="voice" id="voicePanel">
+        <div class="voice-row">
+          <button type="button" id="btnEn" class="on">EN</button>
+          <button type="button" id="btnUr">اردو</button>
+          <button type="button" id="btnMute">Voice on</button>
+          <span class="hint" id="voiceHint">Tap EN or اردو to start voice</span>
+        </div>
+        <div class="cue" id="cue"></div>
+        <div class="line" id="line"></div>
+      </div>
+      <div class="analytics" id="analyticsPanel">
+        <h3>Match analytics</h3>
+        <div id="insights"></div>
+        <div class="cue">WORM</div>
+        <canvas id="wormCanvas" width="640" height="180"></canvas>
+        <div class="cue">MANHATTAN</div>
+        <canvas id="manCanvas" width="640" height="180"></canvas>
+      </div>
+      <p class="igline">Cric360 · <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> · <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> · <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a></p>
     </aside>
+  </div>
+  <div class="voice-float voice" id="voiceFloat">
+    <div class="voice-row">
+      <button type="button" id="btnEn2">EN</button>
+      <button type="button" id="btnUr2">اردو</button>
+      <button type="button" id="btnMute2">Voice on</button>
+    </div>
+    <div class="cue" id="cue2"></div>
+    <div class="line" id="line2"></div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
   <script>
@@ -101,12 +163,192 @@
     const matchId = "{{MATCH_ID}}";
     let lastEmbed = "";
     let iframeEl = null;
+    let lang = (localStorage.getItem("c360-voice-lang") === "ur") ? "ur" : "en";
+    let muted = localStorage.getItem("c360-voice-muted") === "1";
+    let armed = false;
+    let primed = false;
+    let lastSpokenSeq = 0;
+    let lastDto = null;
+    let voicesReady = [];
+    let speakGen = 0;
+    let ttsAbort = null;
+    let playerUrl = "";
+    const player = new Audio();
+    player.preload = "auto";
+    const SILENT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
     if (new URLSearchParams(location.search).get("video") === "1")
       document.documentElement.classList.add("video-only");
 
     function setText(id, value) {
       const el = document.getElementById(id);
       if (el) el.textContent = value || "";
+    }
+
+    function esc(s) {
+      return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    }
+
+    function playerLink(id, text) {
+      const body = esc(text);
+      if (!id) return body;
+      return "<a class='plink' href='/p/" + leagueId + "/" + id + "'>" + body + "</a>";
+    }
+
+    function syncButtons() {
+      document.getElementById("btnEn").classList.toggle("on", lang === "en");
+      document.getElementById("btnUr").classList.toggle("on", lang === "ur");
+      document.getElementById("btnEn2").classList.toggle("on", lang === "en");
+      document.getElementById("btnUr2").classList.toggle("on", lang === "ur");
+      const muteLabel = muted ? "Voice off" : "Voice on";
+      document.getElementById("btnMute").textContent = muteLabel;
+      document.getElementById("btnMute2").textContent = muteLabel;
+      document.getElementById("btnMute").classList.toggle("on", !muted);
+      document.getElementById("btnMute2").classList.toggle("on", !muted);
+      document.getElementById("voiceHint").textContent = armed
+        ? (muted ? "Muted" : (lang === "ur" ? "اردو · real voice" : "English · real voice"))
+        : "Tap EN or اردو to start voice";
+    }
+
+    function scoreVoice(v, wantUr) {
+      const name = (v.name || "") + " " + (v.lang || "");
+      let n = 0;
+      if (/natural|neural|online|google|premium|enhanced/i.test(name)) n += 8;
+      if (/david|zira|mark desktop|hazel desktop|espeak|microsoft desktop/i.test(name)) n -= 12;
+      if (wantUr) {
+        if (/^ur/i.test(v.lang) || /urdu/i.test(name)) n += 10;
+        else if (/^hi/i.test(v.lang) || /hindi/i.test(name)) n += 2;
+        else n -= 4;
+      } else {
+        if (/en-IN|en-GB|en-PK/i.test(v.lang)) n += 6;
+        else if (/^en/i.test(v.lang)) n += 3;
+        else n -= 4;
+        if (/male|prabhat|ryan|ravi|thomas/i.test(name)) n += 2;
+      }
+      return n;
+    }
+
+    function pickVoice() {
+      const list = voicesReady.length ? voicesReady : (speechSynthesis.getVoices() || []);
+      const wantUr = lang === "ur";
+      let best = null, bestN = -99;
+      for (const v of list) {
+        const n = scoreVoice(v, wantUr);
+        if (n > bestN) { best = v; bestN = n; }
+      }
+      return bestN > 0 ? best : null;
+    }
+
+    function unlockAudio() {
+      player.src = SILENT_WAV;
+      player.play().catch(() => {});
+    }
+
+    function stopSpeak() {
+      speakGen += 1;
+      if (ttsAbort) try { ttsAbort.abort(); } catch (e) {}
+      player.pause();
+      if (window.speechSynthesis) speechSynthesis.cancel();
+    }
+
+    function introLine() {
+      return lang === "ur"
+        ? "کرک ۳۶۰ لائیو کمنٹری آن ہے۔ ہر گیند پر بولر، بلے باز اور نتیجہ سنائی دے گا۔"
+        : "Cric360 live commentary is on. You will hear the bowler, the batter, and what happened on each ball.";
+    }
+
+    function lineText(d) {
+      if (!d) return "";
+      return lang === "ur" ? (d.commentaryUrdu || "") : (d.commentaryEnglish || "");
+    }
+
+    async function speak(text) {
+      if (!armed || muted || !text) return;
+      const gen = ++speakGen;
+      if (ttsAbort) try { ttsAbort.abort(); } catch (e) {}
+      ttsAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
+      player.pause();
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      try {
+        const r = await fetch("/api/public/tts?lang=" + encodeURIComponent(lang) + "&q=" + encodeURIComponent(text), {
+          cache: "no-store",
+          signal: ttsAbort ? ttsAbort.signal : undefined
+        });
+        if (gen !== speakGen) return;
+        if (r.ok) {
+          const buf = await r.arrayBuffer();
+          if (gen !== speakGen) return;
+          const blob = new Blob([buf], { type: "audio/mpeg" });
+          if (playerUrl) URL.revokeObjectURL(playerUrl);
+          playerUrl = URL.createObjectURL(blob);
+          player.src = playerUrl;
+          await player.play();
+          return;
+        }
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+      }
+      if (gen !== speakGen) return;
+      speakBrowser(text);
+    }
+
+    function speakBrowser(text) {
+      if (!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang === "ur" ? "ur-PK" : "en-IN";
+      u.rate = lang === "ur" ? 0.9 : 0.98;
+      u.pitch = 0.95;
+      const voice = pickVoice();
+      if (voice) u.voice = voice;
+      speechSynthesis.speak(u);
+    }
+
+    function setLang(next) {
+      lang = next;
+      localStorage.setItem("c360-voice-lang", next);
+      armed = true;
+      unlockAudio();
+      syncButtons();
+      if (lastDto) showLine(lastDto);
+      speak(lineText(lastDto) || introLine());
+    }
+
+    function toggleMute() {
+      muted = !muted;
+      localStorage.setItem("c360-voice-muted", muted ? "1" : "0");
+      armed = true;
+      unlockAudio();
+      if (muted) stopSpeak();
+      else speak(lineText(lastDto) || introLine());
+      syncButtons();
+    }
+
+    document.getElementById("btnEn").onclick = () => setLang("en");
+    document.getElementById("btnUr").onclick = () => setLang("ur");
+    document.getElementById("btnEn2").onclick = () => setLang("en");
+    document.getElementById("btnUr2").onclick = () => setLang("ur");
+    document.getElementById("btnMute").onclick = toggleMute;
+    document.getElementById("btnMute2").onclick = toggleMute;
+    if (window.speechSynthesis) {
+      voicesReady = speechSynthesis.getVoices() || [];
+      speechSynthesis.onvoiceschanged = () => { voicesReady = speechSynthesis.getVoices() || []; };
+      setInterval(() => {
+        if (!speechSynthesis.speaking) return;
+        speechSynthesis.pause();
+        speechSynthesis.resume();
+      }, 12000);
+    }
+    syncButtons();
+
+    function showLine(d) {
+      const text = lang === "ur" ? (d.commentaryUrdu || "") : (d.commentaryEnglish || "");
+      const cue = d.commentaryCue || "";
+      for (const id of ["cue", "cue2"]) setText(id, cue);
+      for (const id of ["line", "line2"]) {
+        const el = document.getElementById(id);
+        el.textContent = text;
+        el.classList.toggle("ur", lang === "ur");
+      }
     }
 
     function render(d) {
@@ -122,11 +364,22 @@
 
       const bits = [];
       if (d.battingTeamName && d.inningsScore)
-        bits.push("<b>" + d.battingTeamName + "</b> " + d.inningsScore + (d.oversText ? " (" + d.oversText + " ov)" : ""));
-      if (d.strikerText) bits.push(d.strikerText);
-      if (d.nonStrikerText) bits.push(d.nonStrikerText);
-      if (d.bowlerText) bits.push("Bowling: " + d.bowlerText);
+        bits.push("<b>" + esc(d.battingTeamName) + "</b> " + esc(d.inningsScore) + (d.oversText ? " (" + esc(d.oversText) + " ov)" : ""));
+      if (d.strikerText) bits.push(playerLink(d.strikerPlayerId, d.strikerText));
+      if (d.nonStrikerText) bits.push(playerLink(d.nonStrikerPlayerId, d.nonStrikerText));
+      if (d.bowlerText) bits.push("Bowling: " + playerLink(d.bowlerPlayerId, d.bowlerText));
       document.getElementById("ticker").innerHTML = bits.join(" · ");
+
+      showLine(d);
+      lastDto = d;
+      const seq = d.lastBallSequence || 0;
+      if (!primed) {
+        lastSpokenSeq = seq;
+        primed = true;
+      } else if (seq > lastSpokenSeq) {
+        lastSpokenSeq = seq;
+        speak(lineText(d));
+      }
 
       if (d.embedSrc && d.embedSrc !== lastEmbed) {
         lastEmbed = d.embedSrc;
@@ -188,6 +441,61 @@
     load();
     connectHub();
     setInterval(load, 2000);
+    setInterval(loadAnalytics, 6000);
+    loadAnalytics();
+
+    async function loadAnalytics() {
+      try {
+        const r = await fetch("/api/public/leagues/" + leagueId + "/matches/" + matchId + "/analytics", { cache: "no-store" });
+        if (!r.ok) return;
+        const a = await r.json();
+        const box = document.getElementById("insights");
+        box.innerHTML = (a.insights || []).slice(0, 4).map(t => "<p class='insight'>" + t + "</p>").join("");
+        drawWorm(document.getElementById("wormCanvas"), a.wormSeries || []);
+        const first = (a.innings && a.innings[0]) ? a.innings[0].manhattan : [];
+        drawManhattan(document.getElementById("manCanvas"), first || []);
+      } catch (e) { /* keep last charts */ }
+    }
+
+    function drawWorm(cv, series) {
+      const ctx = cv.getContext("2d");
+      const w = cv.width, h = cv.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#0b1220";
+      ctx.fillRect(0, 0, w, h);
+      let maxX = 1, maxY = 1;
+      series.forEach(s => (s.points || []).forEach(p => { maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }));
+      const l = 28, t = 10, r = w - 8, b = h - 18;
+      series.forEach(s => {
+        const pts = s.points || [];
+        if (pts.length < 2) return;
+        ctx.strokeStyle = s.color || "#d4af37";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+          const x = l + (r - l) * (p.x / maxX);
+          const y = b - (b - t) * (p.y / maxY);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      });
+    }
+
+    function drawManhattan(cv, bars) {
+      const ctx = cv.getContext("2d");
+      const w = cv.width, h = cv.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#0b1220";
+      ctx.fillRect(0, 0, w, h);
+      if (!bars.length) return;
+      const max = Math.max(1, ...bars.map(b => b.value));
+      const gap = 3, bw = Math.max(4, (w - 16 - gap * bars.length) / bars.length);
+      bars.forEach((bar, i) => {
+        const bh = (h - 24) * (bar.value / max);
+        ctx.fillStyle = bar.color || "#1565c0";
+        ctx.fillRect(10 + i * (bw + gap), h - 16 - bh, bw, Math.max(1, bh));
+      });
+    }
   </script>
 </body>
 </html>

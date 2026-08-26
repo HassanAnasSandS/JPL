@@ -35,7 +35,12 @@ public sealed record ApiPlayerDto(
     long Version,
     DateTime UpdatedAtUtc,
     bool IsDeleted,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? NickName = null,
+    string? PlayingRole = null,
+    string? BattingStyle = null,
+    string? BowlingStyle = null,
+    string? Bio = null);
 
 public sealed record ApiTeamDto(
     Guid Id,
@@ -133,6 +138,21 @@ public sealed class ApiAuctionLotDto
     public Guid? SoldToCaptainPlayerId { get; set; }
 }
 
+public sealed class ApiFormatDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public byte Format { get; set; }
+    public int OversLimit { get; set; }
+    public byte OversMode { get; set; }
+    public string DetailsLine { get; set; } = string.Empty;
+    public string Hint { get; set; } = string.Empty;
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public bool IsDeleted { get; set; }
+}
+
 public sealed class ApiVenueDto
 {
     public Guid Id { get; set; }
@@ -191,6 +211,7 @@ public sealed class ApiTournamentDetailDto
     public int QualifyPerGroup { get; set; }
     public Guid VenueId { get; set; }
     public string VenueName { get; set; } = string.Empty;
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public string FormatText { get; set; } = string.Empty;
     public int OversLimit { get; set; }
@@ -284,6 +305,7 @@ public sealed class ApiSeriesDetailDto
     public int MatchCount { get; set; }
     public Guid VenueId { get; set; }
     public string VenueName { get; set; } = string.Empty;
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public string FormatText { get; set; } = string.Empty;
     public int OversLimit { get; set; }
@@ -355,17 +377,26 @@ public interface IApiClient
     Task<ApiPlayerDto> CreatePlayerAsync(object body, CancellationToken ct = default);
     Task<ApiPlayerDto> UpdatePlayerAsync(Guid id, object body, CancellationToken ct = default);
     Task DeletePlayerAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<Guid>> GetPlayerPhotoIdsAsync(CancellationToken ct = default);
+    Task<byte[]?> GetPlayerImageAsync(Guid id, CancellationToken ct = default);
+    Task UploadPlayerImageAsync(Guid id, byte[] bytes, string fileName, CancellationToken ct = default);
+    Task DeletePlayerImageAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiTeamDto>> GetTeamsAsync(CancellationToken ct = default);
     Task<ApiTeamDto?> GetTeamAsync(Guid id, CancellationToken ct = default);
     Task<ApiTeamDto> CreateTeamAsync(object body, CancellationToken ct = default);
     Task<ApiTeamDto> UpdateTeamAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteTeamAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<Guid>> GetTeamPhotoIdsAsync(CancellationToken ct = default);
+    Task<byte[]?> GetTeamImageAsync(Guid id, CancellationToken ct = default);
+    Task UploadTeamImageAsync(Guid id, byte[] bytes, string fileName, CancellationToken ct = default);
+    Task DeleteTeamImageAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Completed matches from server (ongoing stays local).</summary>
     Task<IReadOnlyList<ApiMatchSummaryDto>> GetCompletedMatchesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<ApiMatchSummaryDto>> GetLiveMatchesAsync(CancellationToken ct = default);
     Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default);
+    Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default);
 
     /// <summary>Completed nets sessions from server (live scoring stays local until complete + outbox sync).</summary>
     Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetCompletedNetSessionsAsync(CancellationToken ct = default);
@@ -377,16 +408,38 @@ public interface IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
     Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
+    Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
-    Task<HallOfFameBundle> GetHallOfFameAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
+        Guid teamId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<HallOfFameBundle> GetHallOfFameAsync(IReadOnlyList<Guid>? formatIds = null, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ApiFormatDto>> GetFormatsAsync(CancellationToken ct = default);
+    Task<ApiFormatDto?> GetFormatAsync(Guid id, CancellationToken ct = default);
+    Task<ApiFormatDto> CreateFormatAsync(object body, CancellationToken ct = default);
+    Task<ApiFormatDto> UpdateFormatAsync(Guid id, object body, CancellationToken ct = default);
+    Task DeleteFormatAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiAuctionDto>> GetAuctionsAsync(CancellationToken ct = default);
     Task<ApiAuctionDto> CreateAuctionAsync(object body, CancellationToken ct = default);
@@ -554,6 +607,48 @@ public sealed class ApiClient : IApiClient
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
 
+    public Task<IReadOnlyList<Guid>> GetPlayerPhotoIdsAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/players/photos", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<Guid>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<Guid>)(list ?? new List<Guid>());
+        }, ct);
+
+    public Task<byte[]?> GetPlayerImageAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/players/{id:D}/image", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task UploadPlayerImageAsync(Guid id, byte[] bytes, string fileName, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var content = new MultipartFormDataContent();
+            var part = new ByteArrayContent(bytes);
+            part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+            content.Add(part, "file", string.IsNullOrWhiteSpace(fileName) ? "photo.jpg" : fileName);
+            using var response = await http.PostAsync($"api/players/{id:D}/image", content, ct)
+                .ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                throw new InvalidOperationException(
+                    "Photo upload is not on the server yet. Publish the latest API, then try again.");
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task DeletePlayerImageAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.DeleteAsync($"api/players/{id:D}/image", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }, ct);
+
     public Task<IReadOnlyList<ApiTeamDto>> GetTeamsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -588,6 +683,48 @@ public sealed class ApiClient : IApiClient
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
 
+    public Task<IReadOnlyList<Guid>> GetTeamPhotoIdsAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/teams/photos", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<Guid>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<Guid>)(list ?? new List<Guid>());
+        }, ct);
+
+    public Task<byte[]?> GetTeamImageAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/teams/{id:D}/image", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task UploadTeamImageAsync(Guid id, byte[] bytes, string fileName, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var content = new MultipartFormDataContent();
+            var part = new ByteArrayContent(bytes);
+            part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+            content.Add(part, "file", string.IsNullOrWhiteSpace(fileName) ? "logo.jpg" : fileName);
+            using var response = await http.PostAsync($"api/teams/{id:D}/image", content, ct)
+                .ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                throw new InvalidOperationException(
+                    "Logo upload is not on the server yet. Publish the latest API, then try again.");
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task DeleteTeamImageAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.DeleteAsync($"api/teams/{id:D}/image", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }, ct);
+
     public Task<IReadOnlyList<ApiMatchSummaryDto>> GetCompletedMatchesAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -616,6 +753,16 @@ public sealed class ApiClient : IApiClient
                 return null;
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             return await response.Content.ReadFromJsonAsync<MatchFullScorecard>(JsonOptions, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/matches/{matchId:D}/analytics", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<MatchAnalyticsReport>(JsonOptions, ct).ConfigureAwait(false);
         }, ct);
 
     public Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetCompletedNetSessionsAsync(CancellationToken ct = default)
@@ -653,6 +800,7 @@ public sealed class ApiClient : IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -666,6 +814,7 @@ public sealed class ApiClient : IApiClient
             if (!string.IsNullOrWhiteSpace(source)
                 && !string.Equals(source, "matches", StringComparison.OrdinalIgnoreCase))
                 query.Add($"source={Uri.EscapeDataString(source)}");
+            AppendFormatIds(query, formatIds);
             var url = "api/stats/leaderboard" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
@@ -716,6 +865,19 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ConfrontationStat>)(list ?? new List<ConfrontationStat>());
         }, ct);
 
+    public Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/stats/confrontations/{playerId:D}/vs-captains", ct)
+                .ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (IReadOnlyList<CaptainVsStat>)Array.Empty<CaptainVsStat>();
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<CaptainVsStat>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<CaptainVsStat>)(list ?? new List<CaptainVsStat>());
+        }, ct);
+
     public Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -734,6 +896,7 @@ public sealed class ApiClient : IApiClient
     public Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -742,6 +905,7 @@ public sealed class ApiClient : IApiClient
                 query.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
             if (toExclusiveUtc is DateTime to)
                 query.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+            AppendFormatIds(query, formatIds);
             var url = "api/stats/team-rankings" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -752,13 +916,103 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<RankingRow>)(list ?? new List<RankingRow>());
         }, ct);
 
-    public Task<HallOfFameBundle> GetHallOfFameAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
         => RunAsync(async http =>
         {
-            using var response = await http.GetAsync("api/hall-of-fame", ct).ConfigureAwait(false);
+            var query = new List<string>();
+            if (fromUtc is DateTime from)
+                query.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
+            if (toExclusiveUtc is DateTime to)
+                query.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+            if (venueId is Guid vid && vid != Guid.Empty)
+                query.Add($"venueId={vid:D}");
+            AppendFormatIds(query, formatIds);
+            var url = "api/stats/teams" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (IReadOnlyList<TeamCareerSummary>)Array.Empty<TeamCareerSummary>();
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<TeamCareerSummary>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<TeamCareerSummary>)(list ?? new List<TeamCareerSummary>());
+        }, ct);
+
+    public Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
+        Guid teamId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            var query = new List<string>();
+            if (fromUtc is DateTime from)
+                query.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
+            if (toExclusiveUtc is DateTime to)
+                query.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+            if (venueId is Guid vid && vid != Guid.Empty)
+                query.Add($"venueId={vid:D}");
+            AppendFormatIds(query, formatIds);
+            var url = $"api/stats/teams/{teamId:D}/vs" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (IReadOnlyList<TeamVsStat>)Array.Empty<TeamVsStat>();
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<TeamVsStat>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<TeamVsStat>)(list ?? new List<TeamVsStat>());
+        }, ct);
+
+    public Task<HallOfFameBundle> GetHallOfFameAsync(IReadOnlyList<Guid>? formatIds = null, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            var query = new List<string>();
+            AppendFormatIds(query, formatIds);
+            var url = "api/hall-of-fame" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             var dto = await response.Content.ReadFromJsonAsync<HallOfFameBundle>(JsonOptions, ct).ConfigureAwait(false);
             return dto ?? new HallOfFameBundle();
+        }, ct);
+
+    public Task<IReadOnlyList<ApiFormatDto>> GetFormatsAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/formats", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<ApiFormatDto>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<ApiFormatDto>)(list ?? new List<ApiFormatDto>());
+        }, ct);
+
+    public Task<ApiFormatDto?> GetFormatAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/formats/{id:D}", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiFormatDto>(JsonOptions, ct)
+                .ConfigureAwait(false);
+        }, ct);
+
+    public Task<ApiFormatDto> CreateFormatAsync(object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiFormatDto>(HttpMethod.Post, "api/formats", body, ct);
+
+    public Task<ApiFormatDto> UpdateFormatAsync(Guid id, object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiFormatDto>(HttpMethod.Put, $"api/formats/{id:D}", body, ct);
+
+    public Task DeleteFormatAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.DeleteAsync($"api/formats/{id:D}", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
 
     public Task<IReadOnlyList<ApiAuctionDto>> GetAuctionsAsync(CancellationToken ct = default)
@@ -1000,6 +1254,17 @@ public sealed class ApiClient : IApiClient
             using var response = await http.DeleteAsync($"api/leagues/{id:D}", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
+
+    private static void AppendFormatIds(List<string> query, IReadOnlyList<Guid>? formatIds)
+    {
+        if (formatIds is null)
+            return;
+        foreach (var id in formatIds)
+        {
+            if (id != Guid.Empty)
+                query.Add($"formatIds={id:D}");
+        }
+    }
 
     private Task<T> SendJsonAsync<T>(HttpMethod method, string url, object body, CancellationToken ct)
         => RunAsync(async http =>

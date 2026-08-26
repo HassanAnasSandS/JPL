@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.TeamEditPage"
              x:Name="ThisPage"
              x:DataType="vm:TeamEditViewModel"
@@ -9,48 +10,117 @@
              HideSoftInputOnTapped="True">
 
     <!-- Single outer ScrollView (no nested CollectionView) so the whole form scrolls. -->
+    <Grid>
     <ScrollView VerticalOptions="Fill"
                 VerticalScrollBarVisibility="Default"
                 HorizontalScrollBarVisibility="Never">
         <VerticalStackLayout Padding="16" Spacing="12" VerticalOptions="Start">
-            <Border Style="{StaticResource CardBorder}">
-                <VerticalStackLayout Spacing="12">
-                    <Label Text="Team name *" Style="{StaticResource SectionLabel}" />
-                    <Entry Placeholder="Team name (required, unique)" Text="{Binding Name}" FontSize="16" MaxLength="120"
-                           IsEnabled="{Binding CanEdit}" />
-                    <HorizontalStackLayout Spacing="10">
-                        <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" IsEnabled="{Binding CanEdit}" />
-                        <Label Text="Active (shown in new matches)"
-                               VerticalOptions="Center"
-                               Style="{StaticResource BodyLabel}" />
-                    </HorizontalStackLayout>
-                </VerticalStackLayout>
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding IsViewMode}">
+                <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
+                    <ctrl:RoundedPhotoView Photo="{Binding PhotoPreview}"
+                                           Initials="{Binding Initials}"
+                                           TappedCommand="{Binding OpenPhotoCommand}" />
+                    <VerticalStackLayout Spacing="2" VerticalOptions="Center" HorizontalOptions="Fill">
+                        <Label Text="{Binding Name}"
+                               FontAttributes="Bold"
+                               FontSize="17"
+                               Style="{StaticResource BodyLabel}"
+                               LineBreakMode="TailTruncation" />
+                        <Label Text="{Binding StatusText}"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{Binding StatusColor}" />
+                    </VerticalStackLayout>
+                </HorizontalStackLayout>
             </Border>
 
-            <Border Style="{StaticResource CardBorder}">
+            <VerticalStackLayout Spacing="12" IsVisible="{Binding CanEdit}">
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Team name *" Style="{StaticResource SectionLabel}" />
+                        <Entry Placeholder="Team name (required, unique)" Text="{Binding Name}" FontSize="16" MaxLength="120"
+                               IsEnabled="{Binding CanEdit}" />
+                        <HorizontalStackLayout Spacing="10">
+                            <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" IsEnabled="{Binding CanEdit}" />
+                            <Label Text="{Binding StatusText}"
+                                   VerticalOptions="Center"
+                                   Style="{StaticResource BodyLabel}"
+                                   FontAttributes="Bold"
+                                   TextColor="{Binding StatusColor}" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Team logo" Style="{StaticResource SectionLabel}" />
+                        <HorizontalStackLayout Spacing="14">
+                            <ctrl:RoundedPhotoView Photo="{Binding PhotoPreview}"
+                                                   Initials="{Binding Initials}" />
+                            <VerticalStackLayout Spacing="4"
+                                                 VerticalOptions="Center"
+                                                 HorizontalOptions="Fill">
+                                <Label Text="{Binding PhotoFileName}"
+                                       FontAttributes="Bold"
+                                       FontSize="15"
+                                       Style="{StaticResource BodyLabel}"
+                                       LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding PhotoHint}"
+                                       Style="{StaticResource MutedLabel}" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                        <HorizontalStackLayout Spacing="8">
+                            <Button Text="{Binding PhotoActionLabel}"
+                                    Style="{StaticResource OutlineButton}"
+                                    BackgroundColor="{StaticResource CardBackground}"
+                                    Padding="16,10"
+                                    MinimumHeightRequest="44"
+                                    HorizontalOptions="Start"
+                                    Command="{Binding PickPhotoCommand}" />
+                            <Button Text="Remove"
+                                    Style="{StaticResource GhostButton}"
+                                    Padding="16,10"
+                                    MinimumHeightRequest="44"
+                                    IsVisible="{Binding CanRemovePhoto}"
+                                    Command="{Binding RemovePhotoCommand}" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+
+            <!-- EDIT: one roster to add to squad and mark playing (Venue Booking style) -->
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding ShowPlayerPicker}">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Squad *" Style="{StaticResource SectionLabel}" />
-                    <Label Text="{Binding SquadHint}"
+                    <Label Text="Players *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Add players to the squad, then mark who will play the next match."
                            Style="{StaticResource MutedLabel}"
                            FontSize="12" />
-                    <Label Text="Only active players are listed — select at least one"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="12"
-                           IsVisible="{Binding CanEdit}" />
-                    <Label Text="Current squad"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="12"
-                           IsVisible="{Binding IsViewMode}" />
-                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding RosterCandidates}"
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <SearchBar Placeholder="Filter player name"
+                                   Text="{Binding NameFilter}"
+                                   CancelButtonColor="{StaticResource Primary}" />
+                        <Button Grid.Column="1"
+                                Text="Clear"
+                                Style="{StaticResource GhostButton}"
+                                Padding="12,8"
+                                VerticalOptions="Center"
+                                IsVisible="{Binding HasFilter}"
+                                Command="{Binding ClearFilterCommand}" />
+                    </Grid>
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding FilteredRoster}"
                                          Spacing="4">
                         <BindableLayout.EmptyView>
-                            <Label Text="No players on this squad"
+                            <Label Text="No players match"
                                    Style="{StaticResource MutedLabel}"
                                    Margin="8" />
                         </BindableLayout.EmptyView>
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="vm:SelectablePlayer">
-                                <Grid ColumnDefinitions="*,Auto" Padding="0,6" ColumnSpacing="8">
+                                <Grid ColumnDefinitions="*,Auto,Auto"
+                                      Padding="0,6"
+                                      ColumnSpacing="8">
                                     <Label Text="{Binding DisplayName}"
                                            VerticalOptions="Center"
                                            Style="{StaticResource BodyLabel}">
@@ -62,9 +132,9 @@
                                         </Label.Triggers>
                                     </Label>
                                     <Button Grid.Column="1"
-                                            Style="{StaticResource GhostButton}"
-                                            Padding="12,8"
-                                            IsVisible="{Binding BindingContext.CanEdit, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            Padding="10,6"
+                                            FontSize="12"
+                                            MinimumHeightRequest="36"
                                             Clicked="OnTogglePlayerClicked"
                                             CommandParameter="{Binding .}">
                                         <Button.Triggers>
@@ -75,70 +145,29 @@
                                             </DataTrigger>
                                             <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
                                                 <Setter Property="Text" Value="Add" />
+                                                <Setter Property="Style" Value="{StaticResource GhostButton}" />
                                             </DataTrigger>
                                         </Button.Triggers>
                                     </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </BindableLayout.ItemTemplate>
-                    </VerticalStackLayout>
-                </VerticalStackLayout>
-            </Border>
-
-            <Border Style="{StaticResource CardBorder}"
-                    IsVisible="{Binding HasPlayingCandidates}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Playing list *" Style="{StaticResource SectionLabel}" />
-                    <Label Text="{Binding PlayingHint}"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="12" />
-                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayingCandidates}"
-                                         Spacing="4">
-                        <BindableLayout.ItemTemplate>
-                            <DataTemplate x:DataType="vm:SelectablePlayer">
-                                <Grid ColumnDefinitions="*,Auto" Padding="0,6" ColumnSpacing="8">
-                                    <Label Text="{Binding DisplayName}"
-                                           VerticalOptions="Center"
-                                           Style="{StaticResource BodyLabel}">
-                                        <Label.Triggers>
-                                            <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
-                                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                                                <Setter Property="FontAttributes" Value="Bold" />
-                                            </DataTrigger>
-                                        </Label.Triggers>
-                                    </Label>
-                                    <Button Grid.Column="1"
-                                            Style="{StaticResource GhostButton}"
-                                            Padding="12,8"
-                                            IsVisible="{Binding BindingContext.CanEdit, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                    <Button Grid.Column="2"
+                                            Text="{Binding PlayingLabel}"
+                                            Padding="10,6"
+                                            FontSize="12"
+                                            MinimumHeightRequest="36"
+                                            IsVisible="{Binding IsSelected}"
                                             Clicked="OnTogglePlayingClicked"
                                             CommandParameter="{Binding .}">
                                         <Button.Triggers>
                                             <DataTrigger TargetType="Button" Binding="{Binding IsPlaying}" Value="True">
-                                                <Setter Property="Text" Value="Playing" />
                                                 <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
                                                 <Setter Property="TextColor" Value="White" />
                                             </DataTrigger>
                                             <DataTrigger TargetType="Button" Binding="{Binding IsPlaying}" Value="False">
-                                                <Setter Property="Text" Value="Bench" />
+                                                <Setter Property="BackgroundColor" Value="#E8EEF5" />
+                                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
                                             </DataTrigger>
                                         </Button.Triggers>
                                     </Button>
-                                    <Label Grid.Column="1"
-                                           Text="{Binding PlayingLabel}"
-                                           VerticalOptions="Center"
-                                           FontSize="12"
-                                           FontAttributes="Bold"
-                                           IsVisible="{Binding BindingContext.IsViewMode, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
-                                        <Label.Triggers>
-                                            <DataTrigger TargetType="Label" Binding="{Binding IsPlaying}" Value="True">
-                                                <Setter Property="TextColor" Value="{StaticResource Success}" />
-                                            </DataTrigger>
-                                            <DataTrigger TargetType="Label" Binding="{Binding IsPlaying}" Value="False">
-                                                <Setter Property="TextColor" Value="{StaticResource TextSecondary}" />
-                                            </DataTrigger>
-                                        </Label.Triggers>
-                                    </Label>
                                 </Grid>
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
@@ -147,6 +176,70 @@
             </Border>
 
             <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Squad" Style="{StaticResource SectionLabel}" />
+                    <Label Text="{Binding SquadHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding SquadSummary}"
+                                         Spacing="2">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No players on this squad"
+                                   Style="{StaticResource MutedLabel}"
+                                   Margin="4,4" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SelectablePlayer">
+                                <Label Text="{Binding DisplayName}"
+                                       Style="{StaticResource BodyLabel}"
+                                       Padding="0,4">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
+                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                            <Setter Property="FontAttributes" Value="Bold" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding HasSquadSummary}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Playing list" Style="{StaticResource SectionLabel}" />
+                    <Label Text="{Binding PlayingHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayingSummary}"
+                                         Spacing="2">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No playing players selected"
+                                   Style="{StaticResource MutedLabel}"
+                                   Margin="4,4" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SelectablePlayer">
+                                <Label Text="{Binding DisplayName}"
+                                       Style="{StaticResource BodyLabel}"
+                                       Padding="0,4">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
+                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                            <Setter Property="FontAttributes" Value="Bold" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}"
+                    IsVisible="{Binding CanEdit}">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Captain *" Style="{StaticResource SectionLabel}" />
                     <Picker Title="Select captain (required)"
@@ -169,4 +262,28 @@
                    FontSize="12" />
         </VerticalStackLayout>
     </ScrollView>
+
+    <Grid IsVisible="{Binding IsPhotoModalOpen}"
+          InputTransparent="False"
+          ZIndex="40">
+        <BoxView Color="#CC000000"
+                 HorizontalOptions="Fill"
+                 VerticalOptions="Fill">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding ClosePhotoCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="12">
+            <Button Text="Close"
+                    Style="{StaticResource GhostButton}"
+                    HorizontalOptions="End"
+                    Command="{Binding ClosePhotoCommand}" />
+            <Image Grid.Row="1"
+                   Source="{Binding PhotoPreview}"
+                   Aspect="AspectFit"
+                   HorizontalOptions="Fill"
+                   VerticalOptions="Fill" />
+        </Grid>
+    </Grid>
+    </Grid>
 </ContentPage>

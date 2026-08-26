@@ -419,6 +419,7 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
         m.IsDeleted,
         m.CreatedAtUtc,
         m.SquadRosterJson,
+        m.IsLiveTelecast,
         m.LiveStreamUrl,
         m.StartedByUserId,
         m.StartedOnDeviceId

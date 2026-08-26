@@ -94,6 +94,7 @@ public sealed class SeriesController : ControllerBase
             TeamBId = body.TeamBId,
             MatchCount = body.MatchCount,
             VenueId = body.VenueId,
+            FormatId = body.FormatId,
             Format = body.Format,
             OversLimit = OversRules.StoredOversLimit((OversMode)body.OversMode, body.OversLimit),
             OversMode = (OversMode)body.OversMode,
@@ -123,6 +124,7 @@ public sealed class SeriesController : ControllerBase
         s.TeamBId = body.TeamBId;
         s.MatchCount = body.MatchCount;
         s.VenueId = body.VenueId;
+        s.FormatId = body.FormatId;
         s.Format = body.Format;
         s.OversLimit = OversRules.StoredOversLimit((OversMode)body.OversMode, body.OversLimit);
         s.OversMode = (OversMode)body.OversMode;
@@ -240,9 +242,19 @@ public sealed class SeriesController : ControllerBase
             .ConfigureAwait(false);
         if (!venueOk)
             throw new InvalidOperationException("Selected venue was not found.");
-        if (body.Format is not (0 or 1))
-            throw new InvalidOperationException("Format must be Single inning or Double innings.");
-        OversRules.Validate((OversMode)body.OversMode, body.OversLimit, body.BowlerMaxOvers);
+        var resolved = await FormatCatalog.ResolveAsync(
+                _db,
+                body.FormatId ?? Guid.Empty,
+                (MatchFormat)body.Format,
+                (OversMode)body.OversMode,
+                body.OversLimit,
+                ct)
+            .ConfigureAwait(false);
+        body.FormatId = resolved.Id;
+        body.Format = (byte)resolved.Format;
+        body.OversMode = (byte)resolved.Mode;
+        body.OversLimit = resolved.OversLimit;
+        OversRules.Validate(resolved.Mode, resolved.OversLimit, body.BowlerMaxOvers);
 
         var teamIds = new[] { body.TeamAId, body.TeamBId };
         var teamCount = await _db.Teams.AsNoTracking()
@@ -286,6 +298,16 @@ public sealed class SeriesController : ControllerBase
             .Select(v => v.Name)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false) ?? "?";
+
+        string? formatName = null;
+        if (s.FormatId is Guid formatId)
+        {
+            formatName = await _db.Formats.AsNoTracking()
+                .Where(f => f.Id == formatId)
+                .Select(f => f.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
 
         var matchIds = s.Fixtures.Where(f => f.MatchId is Guid).Select(f => f.MatchId!.Value).ToList();
         var matches = matchIds.Count == 0
@@ -348,8 +370,9 @@ public sealed class SeriesController : ControllerBase
             MatchCount = s.MatchCount,
             VenueId = s.VenueId,
             VenueName = venueName,
+            FormatId = s.FormatId,
             Format = s.Format,
-            FormatText = s.Format == (byte)MatchFormat.DoubleInnings ? "Double innings" : "Single inning",
+            FormatText = formatName ?? (s.Format == (byte)MatchFormat.DoubleInnings ? "Double innings" : "Single inning"),
             OversLimit = s.OversLimit,
             OversMode = (byte)s.OversMode,
             LastBatsmanCanBatAsSingleWicket = s.LastBatsmanCanBatAsSingleWicket,

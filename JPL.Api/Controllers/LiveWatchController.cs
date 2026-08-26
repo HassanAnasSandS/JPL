@@ -12,11 +12,13 @@ public sealed class LiveWatchController : ControllerBase
 {
     private readonly IApiDbFactory _dbs;
     private readonly IWebHostEnvironment _env;
+    private readonly NeuralCommentaryTts _tts;
 
-    public LiveWatchController(IApiDbFactory dbs, IWebHostEnvironment env)
+    public LiveWatchController(IApiDbFactory dbs, IWebHostEnvironment env, NeuralCommentaryTts tts)
     {
         _dbs = dbs;
         _env = env;
+        _tts = tts;
     }
 
     /// <summary>Public iframe page: live stream + live score together.</summary>
@@ -93,6 +95,13 @@ public sealed class LiveWatchController : ControllerBase
         string? striker = null;
         string? nonStriker = null;
         string? bowler = null;
+        Guid? strikerId = null;
+        Guid? nonStrikerId = null;
+        Guid? bowlerId = null;
+        var lastSeq = 0;
+        string? commentaryEn = null;
+        string? commentaryUr = null;
+        string? commentaryCue = null;
 
         if (current is not null)
         {
@@ -108,6 +117,8 @@ public sealed class LiveWatchController : ControllerBase
             if (last is not null)
             {
                 var playerIds = new[] { last.BatterId, last.NonStrikerId, last.BowlerId }
+                    .Append(last.DismissedPlayerId ?? Guid.Empty)
+                    .Append(last.FielderId ?? Guid.Empty)
                     .Where(id => id != Guid.Empty)
                     .Distinct()
                     .ToList();
@@ -116,7 +127,11 @@ public sealed class LiveWatchController : ControllerBase
                     .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
                     .ConfigureAwait(false);
 
-                string Name(Guid id) => names.GetValueOrDefault(id, "?");
+                string Name(Guid id)
+                {
+                    var n = names.GetValueOrDefault(id, "");
+                    return string.IsNullOrWhiteSpace(n) || n == "?" ? "" : n;
+                }
 
                 var strikerBalls = balls.Where(d => d.BatterId == last.BatterId).ToList();
                 var nonBalls = balls.Where(d => d.BatterId == last.NonStrikerId).ToList();
@@ -124,9 +139,28 @@ public sealed class LiveWatchController : ControllerBase
                 var bowledLegal = bowled.Count(d => d.IsLegalDelivery);
 
                 striker = $"{Name(last.BatterId)} {strikerBalls.Sum(d => d.RunsOffBat)}* ({strikerBalls.Count})";
+                strikerId = last.BatterId == Guid.Empty ? null : last.BatterId;
                 if (last.NonStrikerId != Guid.Empty && last.NonStrikerId != last.BatterId)
+                {
                     nonStriker = $"{Name(last.NonStrikerId)} {nonBalls.Sum(d => d.RunsOffBat)}* ({nonBalls.Count})";
+                    nonStrikerId = last.NonStrikerId;
+                }
                 bowler = $"{Name(last.BowlerId)} {bowled.Count(d => d.IsWicket)}-{bowled.Sum(d => d.RunsOffBat + d.ExtraRuns)} ({bowledLegal / 6}.{bowledLegal % 6})";
+                bowlerId = last.BowlerId == Guid.Empty ? null : last.BowlerId;
+
+                var line = LiveBallCommentary.For(
+                    last,
+                    balls,
+                    Name(last.BatterId),
+                    Name(last.BowlerId),
+                    last.FielderId is Guid fid && fid != Guid.Empty ? Name(fid) : null,
+                    batting ?? "?",
+                    runs,
+                    wkts);
+                lastSeq = last.Sequence;
+                commentaryEn = line?.English;
+                commentaryUr = line?.Urdu;
+                commentaryCue = line?.Cue;
             }
         }
 
@@ -150,7 +184,14 @@ public sealed class LiveWatchController : ControllerBase
             OversText = overs,
             StrikerText = striker,
             NonStrikerText = nonStriker,
-            BowlerText = bowler
+            BowlerText = bowler,
+            StrikerPlayerId = strikerId,
+            NonStrikerPlayerId = nonStrikerId,
+            BowlerPlayerId = bowlerId,
+            LastBallSequence = lastSeq,
+            CommentaryEnglish = commentaryEn,
+            CommentaryUrdu = commentaryUr,
+            CommentaryCue = commentaryCue
         });
     }
 
@@ -167,5 +208,69 @@ public sealed class LiveWatchController : ControllerBase
             }
         }
         return (runs, wickets);
+    }
+
+    [HttpGet("/api/public/leagues/{leagueId:guid}/matches/{matchId:guid}/analytics")]
+    public async Task<ActionResult<MatchAnalyticsReport>> GetPublicAnalytics(
+        Guid leagueId, Guid matchId, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        await using var master = _dbs.CreateMaster();
+        var leagueOk = await master.Leagues.AsNoTracking()
+            .AnyAsync(l => l.Id == leagueId && l.IsActive, ct)
+            .ConfigureAwait(false);
+        if (!leagueOk)
+            return NotFound();
+
+        await using var db = _dbs.CreateForLeague(leagueId);
+        var match = await db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId && !m.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (match is null)
+            return NotFound();
+
+        var innings = await db.Innings.AsNoTracking()
+            .Where(i => i.MatchId == matchId)
+            .Include(i => i.Deliveries)
+            .OrderBy(i => i.InningsNumber)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (innings.Count == 0)
+            return NotFound();
+
+        var teamIds = new[] { match.TeamAId, match.TeamBId };
+        var teams = await db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+        var playerIds = innings.SelectMany(i => i.Deliveries)
+            .SelectMany(d => new[] { d.BatterId, d.NonStrikerId })
+            .Distinct()
+            .ToList();
+        var names = await db.Players.AsNoTracking()
+            .Where(p => playerIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+            .ConfigureAwait(false);
+        var teamA = teams.GetValueOrDefault(match.TeamAId, "Team A");
+        var teamB = teams.GetValueOrDefault(match.TeamBId, "Team B");
+        var rows = innings.Select(inn => (
+            inn.InningsNumber,
+            inn.BattingTeamId == match.TeamAId ? teamA : teamB,
+            (IReadOnlyList<JPL.Api.Models.Delivery>)inn.Deliveries.OrderBy(d => d.Sequence).ToList()
+        )).ToList();
+        var result = match.Status == MatchStatus.InProgress ? "LIVE"
+            : match.Status == MatchStatus.Completed ? "Completed" : "";
+        return Ok(MatchAnalyticsBuilder.Build(match.Title, teamA, teamB, result, Math.Max(match.OversLimit, 1), rows, names));
+    }
+
+    /// <summary>Neural MP3 for live commentary. Public watch page plays this so the voice is human, not robotic SAPI.</summary>
+    [HttpGet("/api/public/tts")]
+    public async Task<IActionResult> CommentaryAudio([FromQuery] string? lang, [FromQuery] string? q, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "public, max-age=120";
+        var mp3 = await _tts.SpeakMp3Async(q, lang, ct).ConfigureAwait(false);
+        if (mp3 is null || mp3.Length == 0)
+            return StatusCode(503);
+        return File(mp3, "audio/mpeg");
     }
 }

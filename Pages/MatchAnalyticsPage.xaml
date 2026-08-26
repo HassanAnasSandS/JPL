@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.MatchAnalyticsPage"
+             x:Name="ThisPage"
+             x:DataType="vm:MatchAnalyticsViewModel"
+             Title="Analytics"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+
+    <RefreshView IsRefreshing="{Binding IsBusy, Mode=OneWay}" Command="{Binding LoadCommand}">
+        <ScrollView>
+            <VerticalStackLayout Padding="12" Spacing="12">
+
+                <Label Text="{Binding Title}"
+                       FontSize="16" FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}"
+                       LineBreakMode="WordWrap" />
+                <Label Text="{Binding ResultText}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       IsVisible="{Binding HasResultText}" />
+                <Border StrokeThickness="0" BackgroundColor="#1B2838" Padding="10,8"
+                        StrokeShape="RoundRectangle 10"
+                        IsVisible="{Binding HasChase}">
+                    <Label Text="{Binding ChaseText}" FontSize="13" FontAttributes="Bold" TextColor="{StaticResource Secondary}" />
+                </Border>
+                <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" IsVisible="{Binding HasError}" />
+
+                <VerticalStackLayout Spacing="6" IsVisible="{Binding HasReport}">
+                    <Label Text="Insights" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Insights}" Spacing="4">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Label Text="{Binding .}" FontSize="12" TextColor="{StaticResource TextPrimary}" LineBreakMode="WordWrap" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Worm — both innings" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                        <Label Text="Both innings on one chart. Updates as balls are scored." FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                        <ctrl:LineChartView Series="{Binding WormSeries}" HeightRequest="200" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Manhattan" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                            <HorizontalStackLayout Grid.Column="1" Spacing="4"
+                                                   BindableLayout.ItemsSource="{Binding InningsList}">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:InningsAnalytics">
+                                        <Button Text="{Binding Number, StringFormat='Inns {0}'}"
+                                                FontSize="11" Padding="8,4" CornerRadius="10"
+                                                Command="{Binding BindingContext.SelectInningsCommand, Source={x:Reference ThisPage}}"
+                                                CommandParameter="{Binding .}" />
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </HorizontalStackLayout>
+                        </Grid>
+                        <Label Text="{Binding InningsSummary}" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                        <Label Text="Green = above innings RR. Red = below. Dots on a bar = wickets." FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                        <ctrl:BarChartView Bars="{Binding Manhattan}" HeightRequest="180" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Run rate" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                        <ctrl:LineChartView Series="{Binding RunRateSeries}" HeightRequest="180" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Phases (powerplay / middle / death)" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Phases}" Spacing="6">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:PhaseRow">
+                                    <Grid ColumnDefinitions="88,*,Auto" ColumnSpacing="8">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="12" VerticalOptions="Center" />
+                                        <Label Grid.Column="1" Text="{Binding ScoreLine}" FontSize="12" VerticalOptions="Center" />
+                                        <Label Grid.Column="2" Text="{Binding RateLine}" FontAttributes="Bold" FontSize="12" TextColor="{StaticResource Primary}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Partnerships" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Partnerships}" Spacing="4">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:PartnershipRow">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Text="{Binding Pair}" FontSize="12" LineBreakMode="TailTruncation" />
+                                        <Label Grid.Column="1" Text="{Binding ScoreLine}" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Over momentum" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                        <Label Text="Runs vs innings run-rate. Green won the over, red lost it." FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                        <ctrl:BarChartView Bars="{Binding Momentum}" HeightRequest="160" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource CardBorder}" Padding="10" IsVisible="{Binding HasReport}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Wagon wheel" FontAttributes="Bold" FontSize="13" TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding WagonHint}" FontSize="10" TextColor="{StaticResource TextSecondary}"
+                               IsVisible="{Binding HasWagonHint}" />
+                        <ctrl:WagonWheelView Sectors="{Binding Wagon}" HeightRequest="260" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+</ContentPage>

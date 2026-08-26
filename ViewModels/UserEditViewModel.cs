@@ -38,7 +38,12 @@ public partial class UserEditViewModel : ObservableObject
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool isPasswordHidden = true;
 
+    public Color StatusColor => StatusColors.For(IsActive);
+
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
+
+    partial void OnIsActiveChanged(bool value)
+        => OnPropertyChanged(nameof(StatusColor));
 
     private Guid? _existingId;
 

@@ -50,46 +50,16 @@
                             SelectedItem="{Binding SelectedVenue}" />
 
                     <Label Text="Format *" FontSize="12" Style="{StaticResource MutedLabel}" />
-                    <Picker Title="Match format"
+                    <Picker Title="Select format"
                             ItemsSource="{Binding FormatOptions}"
-                            ItemDisplayBinding="{Binding Label}"
+                            ItemDisplayBinding="{Binding Name}"
                             SelectedItem="{Binding SelectedFormat}" />
-
-                    <HorizontalStackLayout Spacing="12">
-                        <Switch IsToggled="{Binding NoOversLimit}"
-                                VerticalOptions="Center" />
-                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
-                            <Label Text="No overs limit"
-                                   FontAttributes="Bold"
-                                   Style="{StaticResource BodyLabel}" />
-                            <Label Text="Innings end only on all out or declare."
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="12" />
-                        </VerticalStackLayout>
-                    </HorizontalStackLayout>
-
-                    <VerticalStackLayout Spacing="10" IsVisible="{Binding ShowOversFields}">
-                        <HorizontalStackLayout Spacing="12">
-                            <Switch IsToggled="{Binding OversAreMatchTotal}"
-                                    VerticalOptions="Center" />
-                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
-                                <Label Text="Whole match overs"
-                                       FontAttributes="Bold"
-                                       Style="{StaticResource BodyLabel}" />
-                                <Label Text="On: all innings share one over pool. Off: each innings has its own quota."
-                                       Style="{StaticResource MutedLabel}"
-                                       FontSize="12" />
-                            </VerticalStackLayout>
-                        </HorizontalStackLayout>
-
-                        <Label Text="{Binding OversFieldLabel}" FontSize="12" Style="{StaticResource MutedLabel}" />
-                        <Entry Placeholder="e.g. 20, 50, 100"
-                               Text="{Binding OversLimit}"
-                               Keyboard="Numeric" />
-                        <Label Text="{Binding OversHint}"
-                               FontSize="12"
-                               Style="{StaticResource MutedLabel}" />
-                    </VerticalStackLayout>
+                    <Label Text="{Binding OversHint}"
+                           FontSize="12"
+                           Style="{StaticResource MutedLabel}" />
+                    <Label Text="Add formats in the Formats module. Tournament matches only pick one."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
 
                     <HorizontalStackLayout Spacing="12">
                         <Switch IsToggled="{Binding LastBatsmanCanBatAsSingleWicket}"

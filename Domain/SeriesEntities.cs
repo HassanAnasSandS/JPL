@@ -17,6 +17,7 @@ public sealed class Series
     /// <summary>Number of matches in the series (1–7). Every fixture uses the same match defaults.</summary>
     public int MatchCount { get; set; } = 3;
     public Guid VenueId { get; set; }
+    public Guid? FormatId { get; set; }
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
     public int OversLimit { get; set; } = 8;
     public OversMode OversMode { get; set; } = OversMode.PerInnings;

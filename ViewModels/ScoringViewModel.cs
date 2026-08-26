@@ -74,6 +74,7 @@ public partial class ScoringViewModel : ObservableObject
     [ObservableProperty] private bool isLastBatsmanAlone;
     [ObservableProperty] private string lastBatsmanHint = string.Empty;
     [ObservableProperty] private bool isTargetAchieved;
+    [ObservableProperty] private bool isLiveTelecast;
     [ObservableProperty] private string liveStreamUrl = string.Empty;
     [ObservableProperty] private string liveStreamDraftUrl = string.Empty;
     [ObservableProperty] private string? liveStreamHint;
@@ -82,6 +83,7 @@ public partial class ScoringViewModel : ObservableObject
     [ObservableProperty] private string playerPickTitle = string.Empty;
     [ObservableProperty] private string playerPickHint = string.Empty;
 
+    public bool ShowLiveStreamCard => CanWrite && IsLiveTelecast;
     public bool HasLiveStreamHint => !string.IsNullOrWhiteSpace(LiveStreamHint);
     public bool HasLiveStreamLink => !string.IsNullOrWhiteSpace(LiveStreamUrl);
     public string LiveStreamButtonText => HasLiveStreamLink ? "Change Livelink" : "Add Livelink";
@@ -101,6 +103,9 @@ public partial class ScoringViewModel : ObservableObject
 
     partial void OnDidNotBatTextChanged(string value)
         => OnPropertyChanged(nameof(HasDidNotBat));
+
+    partial void OnIsLiveTelecastChanged(bool value)
+        => OnPropertyChanged(nameof(ShowLiveStreamCard));
 
     partial void OnLiveStreamHintChanged(string? value)
         => OnPropertyChanged(nameof(HasLiveStreamHint));
@@ -226,8 +231,11 @@ public partial class ScoringViewModel : ObservableObject
         }
 
         _isTournamentMatch = ctx.IsTournamentMatch;
+        IsLiveTelecast = ctx.IsLiveTelecast;
         CompleteMatchButtonText = "Complete match";
-        SyncHint = _isTournamentMatch
+        SyncHint = !ctx.IsLiveTelecast
+            ? "This match is local. Balls stay on this phone. Completing the match syncs the full scorecard to the server."
+            : _isTournamentMatch
             ? "Live to the server as you score. Tournament Sync on the list is only after the tournament is finished."
             : "Live to the server as you score. If internet drops, balls stay on this phone and auto-send when it returns.";
 
@@ -493,6 +501,21 @@ public partial class ScoringViewModel : ObservableObject
                 ExtraType.NoBall => input with { RunsOffBat = runs, ExtraRuns = 1 },
                 _ => input with { RunsOffBat = runs, ExtraRuns = 0 }
             };
+
+            if (input.RunsOffBat >= 4)
+            {
+                var pick = await Shell.Current.DisplayActionSheet(
+                    "Shot zone (wagon wheel)",
+                    "Skip",
+                    null,
+                    ShotZones.Names).ConfigureAwait(true);
+                if (!string.IsNullOrWhiteSpace(pick) && pick != "Skip")
+                {
+                    var idx = Array.IndexOf(ShotZones.Names, pick);
+                    if (idx >= 0)
+                        input = input with { ShotZone = (byte)(idx + 1) };
+                }
+            }
 
             // Local SQLite only — pickers already use cached squad.
             _feedback.PlayBallEntered();
@@ -1111,6 +1134,7 @@ public partial class ScoringViewModel : ObservableObject
     partial void OnCanWriteChanged(bool value)
     {
         OnPropertyChanged(nameof(CanScoreBalls));
+        OnPropertyChanged(nameof(ShowLiveStreamCard));
         ScoreCommand.NotifyCanExecuteChanged();
         UndoCommand.NotifyCanExecuteChanged();
         CompleteCommand.NotifyCanExecuteChanged();

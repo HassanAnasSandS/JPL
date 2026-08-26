@@ -41,6 +41,7 @@ public partial class StrengthMeterViewModel : ObservableObject
     private readonly ITeamService _teams;
     private readonly IPlayerService _players;
     private readonly IStatsService _stats;
+    public FormatFilterViewModel FormatFilter { get; }
 
     private List<StrengthPlayerPick> _allPlayers = new();
     private IReadOnlyDictionary<Guid, SkillRating> _ratings = new Dictionary<Guid, SkillRating>();
@@ -74,11 +75,17 @@ public partial class StrengthMeterViewModel : ObservableObject
         ? TeamA is not null && TeamB is not null && TeamA.Id != TeamB.Id
         : ListA.Count > 0 && ListB.Count > 0 && ListACaptain is not null && ListBCaptain is not null);
 
-    public StrengthMeterViewModel(ITeamService teams, IPlayerService players, IStatsService stats)
+    public StrengthMeterViewModel(ITeamService teams, IPlayerService players, IStatsService stats, IFormatService formats)
     {
         _teams = teams;
         _players = players;
         _stats = stats;
+        FormatFilter = new FormatFilterViewModel(formats);
+        FormatFilter.Committed += (_, _) =>
+        {
+            ClearResult();
+            _ = LoadAsync();
+        };
         ListA.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanCompare));
         ListB.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanCompare));
     }
@@ -124,6 +131,7 @@ public partial class StrengthMeterViewModel : ObservableObject
         {
             IsBusy = true;
             ErrorMessage = null;
+            await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
 
             var keepA = ListA.Select(p => p.Id).ToHashSet();
             var keepB = ListB.Select(p => p.Id).ToHashSet();
@@ -134,7 +142,7 @@ public partial class StrengthMeterViewModel : ObservableObject
 
             var teamsTask = _teams.GetActiveAsync();
             var playersTask = _players.GetActiveAsync();
-            var boardTask = _stats.GetLeaderboardAsync();
+            var boardTask = _stats.GetLeaderboardAsync(formatIds: FormatFilter.SelectedIds);
 
             await Task.WhenAll(teamsTask, playersTask, boardTask).ConfigureAwait(true);
 

@@ -19,6 +19,23 @@ public partial class MatchScorecardPage : ContentPage
         PageSafe.Run(() => _vm.StartLiveWatchAsync());
     }
 
+    protected override bool OnBackButtonPressed()
+    {
+        if (_vm.ShowDetailScorecardModal)
+        {
+            _vm.CloseDetailScorecardModalCommand.Execute(null);
+            return true;
+        }
+
+        if (_vm.ShowLiveOverlay)
+        {
+            _vm.CloseLiveStreamCommand.Execute(null);
+            return true;
+        }
+
+        return base.OnBackButtonPressed();
+    }
+
     protected override void OnSizeAllocated(double width, double height)
     {
         base.OnSizeAllocated(width, height);

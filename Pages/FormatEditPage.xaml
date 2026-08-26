@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.FormatEditPage"
+             x:DataType="vm:FormatEditViewModel"
+             Title="{Binding PageTitle}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Format name *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="e.g. T8, League 20, Test"
+                           Text="{Binding Name}"
+                           MaxLength="160"
+                           FontSize="16" />
+
+                    <Label Text="Match type *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                    <Picker Title="Match type"
+                            ItemsSource="{Binding TypeOptions}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedType}" />
+                    <Label Text="{Binding FormatHint}" Style="{StaticResource MutedLabel}" />
+
+                    <HorizontalStackLayout Spacing="12">
+                        <Switch IsToggled="{Binding NoOversLimit}"
+                                VerticalOptions="Center" />
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="No overs limit"
+                                   FontAttributes="Bold"
+                                   Style="{StaticResource BodyLabel}" />
+                            <Label Text="Innings end only when the side is all out or you declare. Overs never end the innings."
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                        </VerticalStackLayout>
+                    </HorizontalStackLayout>
+
+                    <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowOversFields}">
+                        <HorizontalStackLayout Spacing="12">
+                            <Switch IsToggled="{Binding OversAreMatchTotal}"
+                                    VerticalOptions="Center" />
+                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Label Text="Whole match overs"
+                                       FontAttributes="Bold"
+                                       Style="{StaticResource BodyLabel}" />
+                                <Label Text="On: one over pool for the entire match (all innings share it). Off: each innings has its own quota."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+
+                        <Label Text="{Binding OversFieldLabel}" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
+                        <Entry Placeholder="e.g. 8, 20, 50"
+                               Text="{Binding OversLimit}"
+                               Keyboard="Numeric" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+            <Button Text="Save"
+                    Style="{StaticResource GoldButton}"
+                    HeightRequest="48"
+                    Command="{Binding SaveCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

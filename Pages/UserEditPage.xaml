@@ -52,7 +52,8 @@
                         <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" />
                         <Label Text="Active (can sign in). Deactive users are blocked from login."
                                VerticalOptions="Center"
-                               Style="{StaticResource BodyLabel}" />
+                               Style="{StaticResource BodyLabel}"
+                               TextColor="{Binding StatusColor}" />
                     </HorizontalStackLayout>
                 </VerticalStackLayout>
             </Border>

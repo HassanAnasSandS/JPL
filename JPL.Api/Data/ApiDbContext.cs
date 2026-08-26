@@ -26,6 +26,7 @@ public sealed class ApiDbContext : DbContext
     public DbSet<AuctionCaptain> AuctionCaptains => Set<AuctionCaptain>();
     public DbSet<AuctionLot> AuctionLots => Set<AuctionLot>();
     public DbSet<Venue> Venues => Set<Venue>();
+    public DbSet<Format> Formats => Set<Format>();
     public DbSet<VenueBooking> VenueBookings => Set<VenueBooking>();
     public DbSet<VenueBookingParticipant> VenueBookingParticipants => Set<VenueBookingParticipant>();
     public DbSet<Tournament> Tournaments => Set<Tournament>();
@@ -42,6 +43,12 @@ public sealed class ApiDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.FullName).HasMaxLength(120).IsRequired();
+            e.Property(x => x.NickName).HasMaxLength(40);
+            e.Property(x => x.PlayingRole).HasMaxLength(40);
+            e.Property(x => x.BattingStyle).HasMaxLength(40);
+            e.Property(x => x.BowlingStyle).HasMaxLength(60);
+            e.Property(x => x.Bio).HasMaxLength(500);
+            e.Property(x => x.ImagePath).HasMaxLength(80);
             e.HasIndex(x => x.FullName);
         });
 
@@ -49,6 +56,7 @@ public sealed class ApiDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            e.Property(x => x.ImagePath).HasMaxLength(80);
             e.HasOne(x => x.Captain).WithMany().HasForeignKey(x => x.CaptainPlayerId).OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -67,11 +75,23 @@ public sealed class ApiDbContext : DbContext
             e.HasIndex(x => new { x.EntityType, x.EntityId });
         });
 
+        modelBuilder.Entity<Format>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Kind).HasColumnName("Format");
+            // Raw SQL created these as datetime2; other league tables use datetimeoffset.
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2");
+            e.Property(x => x.UpdatedAtUtc).HasColumnType("datetime2");
+            e.HasIndex(x => x.Name);
+        });
+
         modelBuilder.Entity<Match>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Title).HasMaxLength(160).IsRequired();
             e.Property(x => x.LiveStreamUrl).HasMaxLength(1000);
+            e.HasIndex(x => x.FormatId);
         });
 
         modelBuilder.Entity<Innings>(e =>

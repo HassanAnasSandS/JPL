@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Persistent player/team photos (outside API publish folder)
+**/jpl-data/
+
 # JPL API local sqlite
 **/jpl-api.db
 **/jpl-api.db-*

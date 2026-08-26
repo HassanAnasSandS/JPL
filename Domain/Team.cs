@@ -16,6 +16,9 @@ public sealed class Team
 
     public bool IsDeleted { get; set; }
 
+    /// <summary>Relative filename on the API host. Null = no logo. Not used by local SQLite CRUD.</summary>
+    public string? ImagePath { get; set; }
+
     public long Version { get; set; } = 1;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;

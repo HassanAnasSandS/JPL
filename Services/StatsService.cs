@@ -10,15 +10,31 @@ public interface IStatsService
     Task<PlayerCareerSummary?> GetCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid batterId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid bowlerId, string source = "matches", CancellationToken ct = default);
+    Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default);
     Task<IReadOnlyList<PlayerCareerSummary>> GetLeaderboardAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
+        Guid teamId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
 
     /// <summary>Live scoring duel only — local SQLite (fast/offline during balls). Not used by Statistics page.</summary>
@@ -53,10 +69,34 @@ public sealed class StatsService : IStatsService
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
-        return await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId, source, ct).ConfigureAwait(false);
+        return await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId, source, formatIds, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetTeamLeaderboardAsync(fromUtc, toExclusiveUtc, venueId, formatIds, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
+        Guid teamId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetTeamVsAsync(teamId, fromUtc, toExclusiveUtc, venueId, formatIds, ct).ConfigureAwait(false);
     }
 
     public async Task<PlayerCareerSummary?> GetCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default)
@@ -77,20 +117,27 @@ public sealed class StatsService : IStatsService
         return await _api.GetBowlingVsBattersAsync(bowlerId, source, ct).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetCaptainVsAsync(playerId, ct).ConfigureAwait(false);
+    }
+
     public async Task<RankingsBundle> GetRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
         // Always derive player rankings on the client so UI formulas/details stay current
         // even when the API process is an older build. Team table needs match results from API.
-        var board = await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId: null, source: "matches", ct: ct)
+        var board = await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId: null, source: "matches", formatIds: formatIds, ct: ct)
             .ConfigureAwait(false);
         var bundle = RankingsBuilder.FromLeaderboard(board);
         try
         {
-            bundle.Team = await _api.GetTeamRankingsAsync(fromUtc, toExclusiveUtc, ct).ConfigureAwait(false);
+            bundle.Team = await _api.GetTeamRankingsAsync(fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

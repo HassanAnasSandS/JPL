@@ -168,7 +168,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAuctionsModuleGate, AuctionsModuleGate>();
         builder.Services.AddSingleton<IAuctionService, AuctionService>();
         builder.Services.AddSingleton<IPlayerService, PlayerService>();
+        builder.Services.AddSingleton<IPlayerImageService, PlayerImageService>();
         builder.Services.AddSingleton<ITeamService, TeamService>();
+        builder.Services.AddSingleton<ITeamImageService, TeamImageService>();
         builder.Services.AddSingleton<IScoringFeedback, ScoringFeedback>();
         builder.Services.AddSingleton<IMatchService, MatchService>();
         builder.Services.AddSingleton<INetSessionService, NetSessionService>();
@@ -179,6 +181,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITournamentService, TournamentService>();
         builder.Services.AddSingleton<ISeriesService, SeriesService>();
         builder.Services.AddSingleton<ILeagueService, LeagueService>();
+        builder.Services.AddSingleton<IFormatService, FormatService>();
 
         builder.Services.AddTransient<LoginViewModel>();
         builder.Services.AddTransient<LeaguePickerViewModel>();
@@ -200,6 +203,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<HallOfFameViewModel>();
         builder.Services.AddSingleton<StrengthMeterViewModel>();
         builder.Services.AddTransient<MatchScorecardViewModel>();
+        builder.Services.AddTransient<MatchAnalyticsViewModel>();
         builder.Services.AddSingleton<AuctionsViewModel>();
         builder.Services.AddTransient<AuctionEditViewModel>();
         builder.Services.AddSingleton<AuctionReportViewModel>();
@@ -209,6 +213,8 @@ public static class MauiProgram
         builder.Services.AddTransient<VenueBookingEditViewModel>();
         builder.Services.AddSingleton<VenuesViewModel>();
         builder.Services.AddTransient<VenueEditViewModel>();
+        builder.Services.AddSingleton<FormatsViewModel>();
+        builder.Services.AddTransient<FormatEditViewModel>();
         builder.Services.AddSingleton<TournamentsViewModel>();
         builder.Services.AddTransient<TournamentEditViewModel>();
         builder.Services.AddTransient<TournamentDetailViewModel>();
@@ -228,6 +234,7 @@ public static class MauiProgram
         builder.Services.AddTransient<MatchEditPage>();
         builder.Services.AddTransient<ScoringPage>();
         builder.Services.AddTransient<MatchScorecardPage>();
+        builder.Services.AddTransient<MatchAnalyticsPage>();
         builder.Services.AddTransient<NetSessionsPage>();
         builder.Services.AddTransient<NetSessionEditPage>();
         builder.Services.AddTransient<NetsScoringPage>();
@@ -245,6 +252,8 @@ public static class MauiProgram
         builder.Services.AddTransient<VenueBookingEditPage>();
         builder.Services.AddTransient<VenuesPage>();
         builder.Services.AddTransient<VenueEditPage>();
+        builder.Services.AddTransient<FormatsPage>();
+        builder.Services.AddTransient<FormatEditPage>();
         builder.Services.AddTransient<TournamentsPage>();
         builder.Services.AddTransient<TournamentEditPage>();
         builder.Services.AddTransient<TournamentDetailPage>();

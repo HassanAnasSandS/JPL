@@ -8,6 +8,8 @@
 
              xmlns:svc="clr-namespace:JPL.Services"
 
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+
              x:Class="JPL.Pages.TeamsPage"
              x:Name="ThisPage"
              x:DataType="vm:TeamsViewModel"
@@ -246,9 +248,15 @@
 
                             <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
 
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 
-                                    <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                    <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
+
+                                        <ctrl:RoundedPhotoView Photo="{Binding Photo}"
+
+                                                               Initials="{Binding Initials}" />
+
+                                        <VerticalStackLayout Spacing="2" VerticalOptions="Center" HorizontalOptions="Fill">
 
                                         <Label Text="{Binding Name}"
 
@@ -270,21 +278,11 @@
 
                                                FontAttributes="Bold"
 
-                                               TextColor="{StaticResource Success}">
+                                               TextColor="{Binding StatusColor}" />
 
-                                            <Label.Triggers>
+                                        </VerticalStackLayout>
 
-                                                <DataTrigger TargetType="Label" Binding="{Binding IsActive}" Value="False">
-
-                                                    <Setter Property="TextColor" Value="{StaticResource Danger}" />
-
-                                                </DataTrigger>
-
-                                            </Label.Triggers>
-
-                                        </Label>
-
-                                    </VerticalStackLayout>
+                                    </HorizontalStackLayout>
 
                                     <Border Grid.Column="1"
 

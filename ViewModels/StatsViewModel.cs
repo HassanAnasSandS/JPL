@@ -9,19 +9,25 @@ public partial class StatsViewModel : ObservableObject
 {
     private readonly IStatsService _stats;
     private readonly IVenueService _venues;
+    public FormatFilterViewModel FormatFilter { get; }
     private List<PlayerCareerSummary> _all = new();
+    private List<TeamCareerSummary> _allTeams = new();
     private string _sortColumn = "PlayerName";
     private bool _sortAscending = true;
     /// <summary>Shell route to return to when leaving player detail (e.g. "//rankings"). Null = stay on Statistics table.</summary>
     private string? _detailReturnRoute;
 
     public ObservableCollection<PlayerCareerSummary> Leaderboard { get; } = new();
+    public ObservableCollection<TeamCareerSummary> TeamLeaderboard { get; } = new();
+    public ObservableCollection<TeamVsStat> TeamVs { get; } = new();
     public ObservableCollection<ConfrontationStat> Confrontations { get; } = new();
+    public ObservableCollection<CaptainVsStat> CaptainVs { get; } = new();
     public ObservableCollection<VenueListItem> VenueOptions { get; } = new();
 
     [ObservableProperty] private PlayerCareerSummary? selectedCareer;
+    [ObservableProperty] private TeamCareerSummary? selectedTeam;
     [ObservableProperty] private bool showDetail;
-    [ObservableProperty] private bool showBattingVs = true;
+    [ObservableProperty] private int headToHeadMode;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool isSorting;
     [ObservableProperty] private string? errorMessage;
@@ -43,8 +49,10 @@ public partial class StatsViewModel : ObservableObject
     public bool ShowTable => !ShowDetail;
     public bool ShowLoading => IsBusy || IsSorting;
     public string LoadingMessage => IsSorting ? "Sorting…" : "Loading…";
-    public bool IsBattingTab => ShowBattingVs;
-    public bool IsBowlingTab => !ShowBattingVs;
+    public bool IsBattingTab => HeadToHeadMode == 0;
+    public bool IsBowlingTab => HeadToHeadMode == 1;
+    public bool IsCaptainTab => HeadToHeadMode == 2;
+    public bool ShowConfrontationsList => HeadToHeadMode != 2;
     public bool IsMatchStats => SelectedCategory == 0;
     public bool IsTournamentStats => SelectedCategory == 1;
     public bool IsSeriesStats => SelectedCategory == 2;
@@ -55,6 +63,10 @@ public partial class StatsViewModel : ObservableObject
     public bool IsFieldingStats => SelectedCategory == 5;
     public bool IsCaptaincyStats => SelectedCategory == 6;
     public bool IsAttendanceStats => SelectedCategory == 7;
+    public bool IsTeamStats => SelectedCategory == 8;
+    public bool ShowPlayerDetail => ShowDetail && SelectedCareer is not null && SelectedTeam is null;
+    public bool ShowTeamDetail => ShowDetail && SelectedTeam is not null;
+    public bool ShowPlayerLeaderboard => !IsTeamStats;
     public bool ShowMatchCategories => !IsNetsSource;
     public bool IsMatchesSource => !IsNetsSource;
     public string StatsSourceLabel => IsNetsSource ? "Nets" : "Matches";
@@ -65,11 +77,29 @@ public partial class StatsViewModel : ObservableObject
         : HasActiveFilters ? "Filters on" : "Filters";
     public string EmptyStatsHint => IsNetsSource
         ? "No nets stats yet — complete a session first."
-        : "No stats yet — complete a match first.";
+        : IsTeamStats
+            ? "No team stats yet — complete a match first."
+            : "No stats yet — complete a match first.";
+    public string SearchPlaceholder => IsTeamStats ? "Search team" : "Search player";
+    public string NameColumnTitle => IsTeamStats ? "Team" : "Player";
+    public string NameSortParameter => IsTeamStats ? "TeamName" : "PlayerName";
+    public string TableHint => IsTeamStats
+        ? "Tap a team for 1 vs 1 stats"
+        : "Tap a player for 1 vs 1 stats";
+    public string DetailBadgeText => ShowTeamDetail ? "Team" : StatsSourceLabel;
     public string CareerSubtitle
     {
         get
         {
+            if (SelectedTeam is not null)
+            {
+                var n = SelectedTeam.Played;
+                if (n <= 0)
+                    n = SelectedTeam.Series;
+                if (n <= 0)
+                    return "No completed matches yet";
+                return n == 1 ? "Career across 1 match" : $"Career across {n} matches";
+            }
             if (SelectedCareer is null)
                 return string.Empty;
             if (IsNetsSource)
@@ -87,12 +117,23 @@ public partial class StatsViewModel : ObservableObject
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(PlayerNameFilter)
         || (SelectedVenue is not null && SelectedVenue.Id != Guid.Empty)
-        || FilterByDate;
+        || FilterByDate
+        || FormatFilter.HasSelection;
 
-    public StatsViewModel(IStatsService stats, IVenueService venues)
+    public StatsViewModel(IStatsService stats, IVenueService venues, IFormatService formats)
     {
         _stats = stats;
         _venues = venues;
+        FormatFilter = new FormatFilterViewModel(formats);
+        FormatFilter.Committed += (_, _) => _ = LoadAsync();
+        FormatFilter.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(FormatFilterViewModel.HasSelection) or nameof(FormatFilterViewModel.SummaryText) or null)
+            {
+                OnPropertyChanged(nameof(HasActiveFilters));
+                OnPropertyChanged(nameof(FiltersToggleText));
+            }
+        };
         VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All venues" });
         SelectedVenue = VenueOptions[0];
     }
@@ -100,7 +141,18 @@ public partial class StatsViewModel : ObservableObject
     partial void OnShowDetailChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowTable));
+        OnPropertyChanged(nameof(ShowPlayerDetail));
+        OnPropertyChanged(nameof(ShowTeamDetail));
+        OnPropertyChanged(nameof(DetailBadgeText));
         SortCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedTeamChanged(TeamCareerSummary? value)
+    {
+        OnPropertyChanged(nameof(ShowPlayerDetail));
+        OnPropertyChanged(nameof(ShowTeamDetail));
+        OnPropertyChanged(nameof(CareerSubtitle));
+        OnPropertyChanged(nameof(DetailBadgeText));
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -140,7 +192,12 @@ public partial class StatsViewModel : ObservableObject
         => OnPropertyChanged(nameof(FiltersToggleText));
 
     partial void OnSelectedCareerChanged(PlayerCareerSummary? value)
-        => OnPropertyChanged(nameof(CareerSubtitle));
+    {
+        OnPropertyChanged(nameof(CareerSubtitle));
+        OnPropertyChanged(nameof(ShowPlayerDetail));
+        OnPropertyChanged(nameof(ShowTeamDetail));
+        OnPropertyChanged(nameof(DetailBadgeText));
+    }
 
     partial void OnIsNetsSourceChanged(bool value)
     {
@@ -153,14 +210,16 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(TableScopeText));
         OnPropertyChanged(nameof(IsMatchBattingStats));
         OnPropertyChanged(nameof(IsNetsBattingStats));
-        if (value && SelectedCategory is 0 or 1 or 2 or 6 or 7)
+        if (value && HeadToHeadMode == 2)
+            HeadToHeadMode = 0;
+        if (value && SelectedCategory is 0 or 1 or 2 or 6 or 7 or 8)
             SelectedCategory = 3;
         else
             ApplyCategory();
         _ = LoadAsync();
     }
 
-    partial void OnSelectedCategoryChanged(int value)
+    partial void OnSelectedCategoryChanged(int oldValue, int newValue)
     {
         OnPropertyChanged(nameof(IsMatchStats));
         OnPropertyChanged(nameof(IsTournamentStats));
@@ -172,7 +231,25 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFieldingStats));
         OnPropertyChanged(nameof(IsCaptaincyStats));
         OnPropertyChanged(nameof(IsAttendanceStats));
+        OnPropertyChanged(nameof(IsTeamStats));
+        OnPropertyChanged(nameof(ShowPlayerLeaderboard));
+        OnPropertyChanged(nameof(EmptyStatsHint));
+        OnPropertyChanged(nameof(SearchPlaceholder));
+        OnPropertyChanged(nameof(NameColumnTitle));
+        OnPropertyChanged(nameof(NameSortParameter));
+        OnPropertyChanged(nameof(TableHint));
         ApplyCategory();
+        if ((oldValue == 8 || newValue == 8) && ShowDetail)
+        {
+            ShowDetail = false;
+            SelectedCareer = null;
+            SelectedTeam = null;
+            Confrontations.Clear();
+            CaptainVs.Clear();
+            TeamVs.Clear();
+        }
+        if (oldValue == 8 || newValue == 8)
+            _ = LoadAsync();
     }
 
     [RelayCommand]
@@ -194,6 +271,7 @@ public partial class StatsViewModel : ObservableObject
             "fielding" => 5,
             "captaincy" => 6,
             "attendance" => 7,
+            "teams" => 8,
             _ => 0
         };
     }
@@ -239,6 +317,11 @@ public partial class StatsViewModel : ObservableObject
                 CategoryHint = "Present, absent, attendance %";
                 SetDefaultSort("AttendancePct");
                 break;
+            case 8:
+                CategoryTitle = "Teams";
+                CategoryHint = "Matches, win %, NRR, tournaments, and series";
+                SetDefaultSort("Played");
+                break;
             default:
                 CategoryTitle = "Match";
                 CategoryHint = "Played, won, lost, tied";
@@ -271,6 +354,8 @@ public partial class StatsViewModel : ObservableObject
         {
             IsBusy = true;
             ErrorMessage = null;
+
+            await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
 
             if (VenueOptions.Count <= 1)
             {
@@ -309,8 +394,34 @@ public partial class StatsViewModel : ObservableObject
                 ? null
                 : SelectedVenue is { Id: var id } && id != Guid.Empty ? id : null;
             var source = IsNetsSource ? "nets" : "matches";
-            var board = await _stats.GetLeaderboardAsync(from, toExclusive, venueId, source).ConfigureAwait(true);
+            var formatIds = IsNetsSource ? null : FormatFilter.SelectedIds;
+            var loadTeams = IsTeamStats;
+            if (loadTeams)
+            {
+                var teams = await _stats.GetTeamLeaderboardAsync(from, toExclusive, venueId, formatIds)
+                    .ConfigureAwait(true);
+                if (!IsTeamStats)
+                    return;
+                _allTeams = teams.ToList();
+                _all.Clear();
+                Leaderboard.Clear();
+                ApplySort();
+                if (ShowDetail && SelectedTeam is not null)
+                {
+                    var refreshed = _allTeams.FirstOrDefault(t => t.TeamId == SelectedTeam.TeamId);
+                    if (refreshed is not null)
+                        SelectedTeam = refreshed;
+                    await LoadTeamVsAsync().ConfigureAwait(true);
+                }
+                return;
+            }
+
+            var board = await _stats.GetLeaderboardAsync(from, toExclusive, venueId, source, formatIds).ConfigureAwait(true);
+            if (IsTeamStats)
+                return;
             _all = board.ToList();
+            _allTeams.Clear();
+            TeamLeaderboard.Clear();
             ApplySort();
 
             if (ShowDetail && SelectedCareer is not null)
@@ -325,7 +436,11 @@ public partial class StatsViewModel : ObservableObject
         {
             _all.Clear();
             Leaderboard.Clear();
+            _allTeams.Clear();
+            TeamLeaderboard.Clear();
             Confrontations.Clear();
+            CaptainVs.Clear();
+            TeamVs.Clear();
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — statistics need internet."
                 : $"Stats require API (server DB). {ex.Message}";
@@ -353,6 +468,7 @@ public partial class StatsViewModel : ObservableObject
         FromDate = DateTime.Today.AddMonths(-1);
         ToDate = DateTime.Today;
         SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == Guid.Empty) ?? VenueOptions.FirstOrDefault();
+        FormatFilter.ClearSelection();
         ShowFilters = false;
         await LoadAsync().ConfigureAwait(true);
     }
@@ -364,6 +480,9 @@ public partial class StatsViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(column) || !ShowTable)
             return;
 
+        if (column is "PlayerName" or "TeamName")
+            column = NameSortParameter;
+
         if (string.Equals(_sortColumn, column, StringComparison.Ordinal))
         {
             _sortAscending = !_sortAscending;
@@ -372,7 +491,7 @@ public partial class StatsViewModel : ObservableObject
         {
             _sortColumn = column;
             // Name: A→Z first; numeric stats: high→low first.
-            _sortAscending = column is "PlayerName";
+            _sortAscending = column is "PlayerName" or "TeamName";
         }
 
         OnPropertyChanged(nameof(SortColumn));
@@ -386,13 +505,24 @@ public partial class StatsViewModel : ObservableObject
 
             var sortColumn = _sortColumn;
             var ascending = _sortAscending;
-            var source = FilteredRows();
-            var ordered = await Task.Run(() => BuildSortedRows(source, sortColumn, ascending)).ConfigureAwait(true);
-            NumberRows(ordered);
-
-            Leaderboard.Clear();
-            foreach (var row in ordered)
-                Leaderboard.Add(row);
+            if (IsTeamStats)
+            {
+                var source = FilteredTeamRows();
+                var ordered = await Task.Run(() => BuildSortedTeamRows(source, sortColumn, ascending)).ConfigureAwait(true);
+                NumberTeamRows(ordered);
+                TeamLeaderboard.Clear();
+                foreach (var row in ordered)
+                    TeamLeaderboard.Add(row);
+            }
+            else
+            {
+                var source = FilteredRows();
+                var ordered = await Task.Run(() => BuildSortedRows(source, sortColumn, ascending)).ConfigureAwait(true);
+                NumberRows(ordered);
+                Leaderboard.Clear();
+                foreach (var row in ordered)
+                    Leaderboard.Add(row);
+            }
 
             var dir = _sortAscending ? "↑" : "↓";
             SortedByText = $"{DisplayName(_sortColumn)} {dir}  ·  tap a column to sort";
@@ -407,17 +537,37 @@ public partial class StatsViewModel : ObservableObject
 
     private void ApplySort()
     {
-        var ordered = BuildSortedRows(FilteredRows(), _sortColumn, _sortAscending);
-        NumberRows(ordered);
-        Leaderboard.Clear();
-        foreach (var row in ordered)
-            Leaderboard.Add(row);
+        if (IsTeamStats)
+        {
+            var ordered = BuildSortedTeamRows(FilteredTeamRows(), _sortColumn, _sortAscending);
+            NumberTeamRows(ordered);
+            TeamLeaderboard.Clear();
+            foreach (var row in ordered)
+                TeamLeaderboard.Add(row);
+        }
+        else
+        {
+            var ordered = BuildSortedRows(FilteredRows(), _sortColumn, _sortAscending);
+            NumberRows(ordered);
+            Leaderboard.Clear();
+            foreach (var row in ordered)
+                Leaderboard.Add(row);
+        }
 
         var dir = _sortAscending ? "↑" : "↓";
         SortedByText = $"{DisplayName(_sortColumn)} {dir}  ·  tap a column to sort";
     }
 
     private static void NumberRows(IReadOnlyList<PlayerCareerSummary> rows)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            rows[i].Rank = i + 1;
+            rows[i].IsAltRow = i % 2 == 1;
+        }
+    }
+
+    private static void NumberTeamRows(IReadOnlyList<TeamCareerSummary> rows)
     {
         for (var i = 0; i < rows.Count; i++)
         {
@@ -437,6 +587,17 @@ public partial class StatsViewModel : ObservableObject
         return q.ToList();
     }
 
+    private List<TeamCareerSummary> FilteredTeamRows()
+    {
+        IEnumerable<TeamCareerSummary> q = _allTeams;
+        if (!string.IsNullOrWhiteSpace(PlayerNameFilter))
+        {
+            var f = PlayerNameFilter.Trim();
+            q = q.Where(t => t.TeamName.Contains(f, StringComparison.OrdinalIgnoreCase));
+        }
+        return q.ToList();
+    }
+
     private static List<PlayerCareerSummary> BuildSortedRows(
         IReadOnlyList<PlayerCareerSummary> source,
         string sortColumn,
@@ -447,6 +608,18 @@ public partial class StatsViewModel : ObservableObject
             : source.OrderByDescending(r => SortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys));
 
         return ordered.ThenBy(r => r.PlayerName, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static List<TeamCareerSummary> BuildSortedTeamRows(
+        IReadOnlyList<TeamCareerSummary> source,
+        string sortColumn,
+        bool ascending)
+    {
+        IOrderedEnumerable<TeamCareerSummary> ordered = ascending
+            ? source.OrderBy(r => TeamSortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys))
+            : source.OrderByDescending(r => TeamSortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys));
+
+        return ordered.ThenBy(r => r.TeamName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static int CompareKeys(object? a, object? b)
@@ -542,14 +715,44 @@ public partial class StatsViewModel : ObservableObject
         _ => r.PlayerName
     };
 
+    private static object TeamSortKey(TeamCareerSummary r, string column) => column switch
+    {
+        "TeamName" => r.TeamName,
+        "Played" => r.Played,
+        "Won" => r.Won,
+        "Lost" => r.Lost,
+        "Tied" => r.Tied,
+        "Points" => r.Points,
+        "WinPct" => r.Played == 0 ? double.MinValue : r.WinPct,
+        "Nrr" => r.Played == 0 ? double.MinValue : r.Nrr,
+        "RunsFor" => r.RunsFor,
+        "RunsAgainst" => r.RunsAgainst,
+        "Tournaments" => r.Tournaments,
+        "TournamentWon" => r.TournamentWon,
+        "TournamentLoss" => r.TournamentLoss,
+        "Series" => r.Series,
+        "SeriesWon" => r.SeriesWon,
+        "SeriesLoss" => r.SeriesLoss,
+        "SeriesTied" => r.SeriesTied,
+        _ => r.TeamName
+    };
+
     private static string DisplayName(string column) => column switch
     {
         "PlayerName" => "Player",
+        "TeamName" => "Team",
         "Sessions" => "Sessions",
         "Matches" => "Played",
+        "Played" => "Played",
         "Won" => "Won",
+        "Lost" => "Lost",
         "Loss" => "Lost",
         "Tied" => "Tied",
+        "Points" => "Points",
+        "WinPct" => "Win %",
+        "Nrr" => "NRR",
+        "RunsFor" => "Runs for",
+        "RunsAgainst" => "Runs against",
         "CaptainMatches" => "Captain played",
         "CaptainWon" => "Captain won",
         "CaptainLoss" => "Captain lost",
@@ -625,11 +828,31 @@ public partial class StatsViewModel : ObservableObject
     private async Task OpenPlayerAsync(PlayerCareerSummary? row)
     {
         if (row is null) return;
+        SelectedTeam = null;
+        TeamVs.Clear();
+        CaptainVs.Clear();
         SetDetailSource(returnRoute: null);
         SelectedCareer = row;
         ShowDetail = true;
         DetailTitle = row.PlayerName;
-        await LoadPlayerDetailsAsync().ConfigureAwait(true);
+        if (HeadToHeadMode == 0)
+            await LoadPlayerDetailsAsync().ConfigureAwait(true);
+        else
+            HeadToHeadMode = 0;
+    }
+
+    [RelayCommand]
+    private async Task OpenTeamAsync(TeamCareerSummary? row)
+    {
+        if (row is null) return;
+        SelectedCareer = null;
+        Confrontations.Clear();
+        CaptainVs.Clear();
+        SetDetailSource(returnRoute: null);
+        SelectedTeam = row;
+        ShowDetail = true;
+        DetailTitle = row.TeamName;
+        await LoadTeamVsAsync().ConfigureAwait(true);
     }
 
     /// <summary>Open the same career detail UI used from the Statistics table (e.g. from Rankings).</summary>
@@ -644,6 +867,10 @@ public partial class StatsViewModel : ObservableObject
             IsBusy = true;
             ErrorMessage = null;
             SetDetailSource(returnRoute);
+
+            SelectedTeam = null;
+            TeamVs.Clear();
+            CaptainVs.Clear();
 
             if (_all.Count == 0)
             {
@@ -666,7 +893,10 @@ public partial class StatsViewModel : ObservableObject
             SelectedCareer = career;
             ShowDetail = true;
             DetailTitle = career.PlayerName;
-            await LoadPlayerDetailsAsync().ConfigureAwait(true);
+            if (HeadToHeadMode == 0)
+                await LoadPlayerDetailsAsync().ConfigureAwait(true);
+            else
+                HeadToHeadMode = 0;
         }
         catch (Exception ex)
         {
@@ -695,7 +925,10 @@ public partial class StatsViewModel : ObservableObject
     {
         ShowDetail = false;
         Confrontations.Clear();
+        CaptainVs.Clear();
+        TeamVs.Clear();
         SelectedCareer = null;
+        SelectedTeam = null;
 
         var route = _detailReturnRoute;
         _detailReturnRoute = null;
@@ -705,20 +938,31 @@ public partial class StatsViewModel : ObservableObject
             await Shell.Current.GoToAsync(route).ConfigureAwait(true);
     }
 
-    partial void OnShowBattingVsChanged(bool value)
+    partial void OnHeadToHeadModeChanged(int value)
     {
         OnPropertyChanged(nameof(IsBattingTab));
         OnPropertyChanged(nameof(IsBowlingTab));
+        OnPropertyChanged(nameof(IsCaptainTab));
+        OnPropertyChanged(nameof(ShowConfrontationsList));
         _ = LoadPlayerDetailsAsync();
     }
 
     private async Task LoadPlayerDetailsAsync()
     {
-        if (SelectedCareer is null || !ShowDetail) return;
+        if (SelectedCareer is null || !ShowDetail || SelectedTeam is not null) return;
         try
         {
             Confrontations.Clear();
-            if (ShowBattingVs)
+            CaptainVs.Clear();
+            if (IsCaptainTab)
+            {
+                ConfrontationHeader = $"Captain vs captain — {SelectedCareer.PlayerName}";
+                var rows = await _stats.GetCaptainVsAsync(SelectedCareer.PlayerId).ConfigureAwait(true);
+                foreach (var r in rows)
+                    CaptainVs.Add(r);
+                return;
+            }
+            if (IsBattingTab)
             {
                 ConfrontationHeader = IsNetsSource
                     ? $"Nets 1 vs 1 — batting vs bowlers — {SelectedCareer.PlayerName}"
@@ -738,6 +982,7 @@ public partial class StatsViewModel : ObservableObject
         catch (Exception ex)
         {
             Confrontations.Clear();
+            CaptainVs.Clear();
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — statistics need internet."
                 : $"Stats require API (server DB). {ex.Message}";
@@ -747,10 +992,53 @@ public partial class StatsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ShowBatting() => ShowBattingVs = true;
+    private void ShowBatting() => HeadToHeadMode = 0;
 
     [RelayCommand]
-    private void ShowBowling() => ShowBattingVs = false;
+    private void ShowBowling() => HeadToHeadMode = 1;
+
+    [RelayCommand]
+    private void ShowCaptainVs() => HeadToHeadMode = 2;
+
+    private async Task LoadTeamVsAsync()
+    {
+        if (SelectedTeam is null || !ShowDetail) return;
+        try
+        {
+            TeamVs.Clear();
+            DateTime? from = null;
+            DateTime? toExclusive = null;
+            if (FilterByDate)
+            {
+                from = FromDate.Date;
+                toExclusive = ToDate.Date.AddDays(1);
+            }
+            Guid? venueId = SelectedVenue is { Id: var id } && id != Guid.Empty ? id : null;
+            var rows = await _stats.GetTeamVsAsync(
+                    SelectedTeam.TeamId,
+                    from,
+                    toExclusive,
+                    venueId,
+                    FormatFilter.SelectedIds)
+                .ConfigureAwait(true);
+            if (SelectedTeam is null || !ShowDetail)
+                return;
+            foreach (var r in rows)
+            {
+                r.TeamName = SelectedTeam.TeamName;
+                TeamVs.Add(r);
+            }
+        }
+        catch (Exception ex)
+        {
+            TeamVs.Clear();
+            ErrorMessage = NetworkUi.IsNetworkFailure(ex)
+                ? "Offline — statistics need internet."
+                : $"Stats require API (server DB). {ex.Message}";
+            if (NetworkUi.IsNetworkFailure(ex))
+                await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
+        }
+    }
 
     private string StatsSource() => IsNetsSource ? "nets" : "matches";
 }

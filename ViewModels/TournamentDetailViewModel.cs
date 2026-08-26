@@ -46,6 +46,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
     [ObservableProperty] private byte status;
 
     private Guid _venueId;
+    private Guid? _formatId;
     private byte _format;
     private int _oversLimit = 8;
     private byte _oversMode;
@@ -95,6 +96,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
         MetaLine =
             $"Round robin · {detail.GroupCount} group{(detail.GroupCount == 1 ? "" : "s")} · qualify top {detail.QualifyPerGroup}";
         _venueId = detail.VenueId;
+        _formatId = detail.FormatId;
         _format = detail.Format;
         _oversLimit = detail.OversLimit;
         _oversMode = (byte)detail.OversMode;
@@ -277,7 +279,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
                 $"{nameof(Pages.MatchEditPage)}" +
                 $"?tournamentId={_id}&fixtureId={fixture.Id}" +
                 $"&teamAId={fixture.TeamAId}&teamBId={fixture.TeamBId}&title={title}" +
-                $"&venueId={_venueId}&format={_format}&overs={_oversLimit}&oversMode={_oversMode}" +
+                $"&venueId={_venueId}&formatId={_formatId}&format={_format}&overs={_oversLimit}&oversMode={_oversMode}" +
                 $"&lastBat={(_lastBatsmanCanBat ? 1 : 0)}&bowlerMax={_bowlerMaxOvers}" +
                 $"&lockSettings=1")
             .ConfigureAwait(true);

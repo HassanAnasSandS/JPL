@@ -119,6 +119,8 @@
                             Command="{Binding ClearFiltersCommand}" />
                 </Grid>
 
+                <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+
                 <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" ColumnSpacing="8">
                     <Label Text="From"
                            VerticalOptions="Center"

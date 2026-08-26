@@ -171,7 +171,7 @@
             </Border>
 
             <Border Style="{StaticResource CardBorder}" Padding="12"
-                    IsVisible="{Binding CanWrite}">
+                    IsVisible="{Binding ShowLiveStreamCard}">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="LIVE STREAM"
                            FontSize="11"

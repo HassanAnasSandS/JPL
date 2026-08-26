@@ -26,6 +26,12 @@ internal static class SqlServerLocalDateTimes
         {
             foreach (var property in entityType.GetProperties())
             {
+                // Do not override entities that already chose datetime2 (Formats table).
+                var columnType = property.GetColumnType();
+                if (!string.IsNullOrEmpty(columnType)
+                    && !columnType.StartsWith("datetimeoffset", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 if (property.ClrType == typeof(DateTime))
                 {
                     property.SetValueConverter(Converter);

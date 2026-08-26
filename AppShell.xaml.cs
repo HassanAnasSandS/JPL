@@ -51,8 +51,8 @@ public partial class AppShell : Shell
 
         Items.Clear();
 
-        var canManageMasterData = _auth.CanWrite;
-        if (canManageMasterData)
+        var showLeagueCatalog = _auth.Current?.CanViewLeagueCatalog == true;
+        if (showLeagueCatalog)
         {
             Items.Add(CreateFlyout("Players", "players", "playershome", () => services.GetRequiredService<PlayersPage>()));
             Items.Add(CreateFlyout("Teams", "teams", "teamshome", () => services.GetRequiredService<TeamsPage>()));
@@ -62,9 +62,10 @@ public partial class AppShell : Shell
         Items.Add(CreateFlyout("Tournaments", "tournaments", "tournamentshome", () => services.GetRequiredService<TournamentsPage>()));
         Items.Add(CreateFlyout("Series", "series", "serieshome", () => services.GetRequiredService<SeriesPage>()));
         Items.Add(CreateFlyout("Auctions", "auctions", "auctionshome", () => services.GetRequiredService<AuctionsPage>()));
-        if (canManageMasterData)
+        if (showLeagueCatalog)
         {
             Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
+            Items.Add(CreateFlyout("Formats", "formats", "formatshome", () => services.GetRequiredService<FormatsPage>()));
             Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
         }
         Items.Add(CreateFlyout("Statistics", "stats", "statshome", () => services.GetRequiredService<StatsPage>()));
@@ -235,6 +236,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(MatchEditPage), new DiRouteFactory<MatchEditPage>(services));
         Routing.RegisterRoute(nameof(ScoringPage), new DiRouteFactory<ScoringPage>(services));
         Routing.RegisterRoute(nameof(MatchScorecardPage), new DiRouteFactory<MatchScorecardPage>(services));
+        Routing.RegisterRoute(nameof(MatchAnalyticsPage), new DiRouteFactory<MatchAnalyticsPage>(services));
         Routing.RegisterRoute(nameof(NetSessionEditPage), new DiRouteFactory<NetSessionEditPage>(services));
         Routing.RegisterRoute(nameof(NetsScoringPage), new DiRouteFactory<NetsScoringPage>(services));
         Routing.RegisterRoute(nameof(NetSessionScorecardPage), new DiRouteFactory<NetSessionScorecardPage>(services));
@@ -243,6 +245,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(UserEditPage), new DiRouteFactory<UserEditPage>(services));
         Routing.RegisterRoute(nameof(VenueBookingEditPage), new DiRouteFactory<VenueBookingEditPage>(services));
         Routing.RegisterRoute(nameof(VenueEditPage), new DiRouteFactory<VenueEditPage>(services));
+        Routing.RegisterRoute(nameof(FormatEditPage), new DiRouteFactory<FormatEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentEditPage), new DiRouteFactory<TournamentEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentDetailPage), new DiRouteFactory<TournamentDetailPage>(services));
         Routing.RegisterRoute(nameof(SeriesEditPage), new DiRouteFactory<SeriesEditPage>(services));

@@ -20,8 +20,8 @@
     <Color x:Key="SurfaceMutedDark">#243447</Color>
     <Color x:Key="TextPrimary">#0D1B2A</Color>
     <Color x:Key="TextSecondary">#5A6A7A</Color>
-    <Color x:Key="Success">#1B7A3D</Color>
-    <Color x:Key="Danger">#B00020</Color>
+    <Color x:Key="Success">#15803D</Color>
+    <Color x:Key="Danger">#C62828</Color>
     <Color x:Key="AccentBlue">#1565C0</Color>
 
     <Color x:Key="White">White</Color>

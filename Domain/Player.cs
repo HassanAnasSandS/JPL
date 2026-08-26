@@ -6,10 +6,22 @@ public sealed class Player
 
     public string FullName { get; set; } = string.Empty;
 
+    /// <summary>Public nickname shown on the shareable bio page.</summary>
+    public string? NickName { get; set; }
+    /// <summary>Batter / Bowler / All-rounder / Wicket-keeper.</summary>
+    public string? PlayingRole { get; set; }
+    public string? BattingStyle { get; set; }
+    public string? BowlingStyle { get; set; }
+    /// <summary>Short public bio. Never put phone numbers here.</summary>
+    public string? Bio { get; set; }
+
     /// <summary>Inactive players are hidden from team create/update squad pickers.</summary>
     public bool IsActive { get; set; } = true;
 
     public bool IsDeleted { get; set; }
+
+    /// <summary>Relative filename on the API host. Null = no photo. Not used by local SQLite CRUD.</summary>
+    public string? ImagePath { get; set; }
 
     public string StatusText => IsActive ? "Active" : "Inactive";
 

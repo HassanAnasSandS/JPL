@@ -14,6 +14,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     private readonly ITournamentService _tournaments;
     private readonly ISeriesService _series;
     private readonly IVenueService _venues;
+    private readonly IFormatService _formats;
 
     private Guid? _tournamentId;
     private Guid? _tournamentFixtureId;
@@ -22,6 +23,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     private Guid? _pendingTeamAId;
     private Guid? _pendingTeamBId;
     private Guid? _pendingVenueId;
+    private Guid? _pendingFormatId;
     private byte? _pendingFormat;
     private int? _pendingOvers;
     private byte? _pendingOversMode;
@@ -30,7 +32,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
 
     public ObservableCollection<TeamListItem> Teams { get; } = new();
     public ObservableCollection<TeamListItem> BatFirstOptions { get; } = new();
-    public ObservableCollection<SelectOption<MatchFormat>> FormatOptions { get; } = new();
+    public ObservableCollection<FormatListItem> FormatOptions { get; } = new();
     public ObservableCollection<VenueListItem> VenueOptions { get; } = new();
 
     [ObservableProperty] private string title = string.Empty;
@@ -38,7 +40,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     [ObservableProperty] private int oversLimit = 8;
     [ObservableProperty] private bool noOversLimit;
     [ObservableProperty] private bool oversAreMatchTotal = true;
-    [ObservableProperty] private SelectOption<MatchFormat>? selectedFormat;
+    [ObservableProperty] private FormatListItem? selectedFormat;
     [ObservableProperty] private TeamListItem? teamA;
     [ObservableProperty] private TeamListItem? teamB;
     /// <summary>True = Team 1 called Heads (Team 2 gets Tails). False = Team 1 Tails, Team 2 Heads.</summary>
@@ -61,10 +63,12 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     [ObservableProperty] private bool isSeriesMatch;
     [ObservableProperty] private bool lockMatchSettings;
     [ObservableProperty] private string pageTitle = "New match";
+    [ObservableProperty] private bool isLiveTelecast;
     [ObservableProperty] private string liveStreamUrl = string.Empty;
 
     public bool CanChangeTeams => !IsTournamentMatch && !IsSeriesMatch;
     public bool CanEditMatchSettings => !LockMatchSettings;
+    public bool ShowLiveStreamUrl => IsLiveTelecast;
     public bool ShowOversFields => !NoOversLimit;
     public string OversFieldLabel => OversAreMatchTotal ? "Match overs *" : "Overs per innings *";
     public OversMode CurrentOversMode => NoOversLimit
@@ -120,7 +124,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         IAuthService auth,
         ITournamentService tournaments,
         ISeriesService series,
-        IVenueService venues)
+        IVenueService venues,
+        IFormatService formats)
     {
         _matches = matches;
         _teams = teams;
@@ -128,21 +133,20 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         _tournaments = tournaments;
         _series = series;
         _venues = venues;
-
-        FormatOptions.Add(new SelectOption<MatchFormat>
-        {
-            Label = "Single inning (1 turn each)",
-            Value = MatchFormat.SingleInning
-        });
-        FormatOptions.Add(new SelectOption<MatchFormat>
-        {
-            Label = "Double innings (2 turns each)",
-            Value = MatchFormat.DoubleInnings
-        });
-        SelectedFormat = FormatOptions[0];
+        _formats = formats;
     }
 
-    partial void OnSelectedFormatChanged(SelectOption<MatchFormat>? value) => UpdateHint();
+    partial void OnSelectedFormatChanged(FormatListItem? value)
+    {
+        if (value is not null)
+        {
+            OversLimit = value.OversLimit > 0 ? value.OversLimit : 8;
+            ApplyOversMode(value.OversMode);
+            FormatHint = value.Hint;
+        }
+        else
+            UpdateHint();
+    }
     partial void OnOversLimitChanged(int value) => UpdateHint();
     partial void OnNoOversLimitChanged(bool value)
     {
@@ -157,6 +161,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     }
     partial void OnLockMatchSettingsChanged(bool value)
         => OnPropertyChanged(nameof(CanEditMatchSettings));
+    partial void OnIsLiveTelecastChanged(bool value)
+        => OnPropertyChanged(nameof(ShowLiveStreamUrl));
     partial void OnIsTossOverlayVisibleChanged(bool value)
         => OnPropertyChanged(nameof(IsMatchFormEnabled));
 
@@ -280,26 +286,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
 
     private void UpdateHint()
     {
-        var format = SelectedFormat?.Value ?? MatchFormat.SingleInning;
-        if (NoOversLimit)
-        {
-            FormatHint = format == MatchFormat.DoubleInnings
-                ? "Each side bats twice. Innings end only on all out or declare — overs never stop a turn."
-                : "Each side bats once. Innings end only on all out or declare — overs never stop a turn.";
-            return;
-        }
-
-        if (OversAreMatchTotal)
-        {
-            FormatHint = format == MatchFormat.DoubleInnings
-                ? $"Each side bats twice. All turns share {OversLimit} overs for the whole match. All out or declare still ends a turn."
-                : $"Each side bats once. Both sides share {OversLimit} overs for the whole match. All out or declare still ends a turn.";
-            return;
-        }
-
-        FormatHint = format == MatchFormat.DoubleInnings
-            ? $"Each side bats twice ({OversLimit} overs each turn). Follow-on available after 2nd innings if leading."
-            : $"Each side bats once ({OversLimit} overs each).";
+        FormatHint = SelectedFormat?.Hint
+            ?? "No formats in this league yet. Open Formats and add one first.";
     }
 
     private void ApplyOversMode(OversMode mode)
@@ -317,6 +305,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         _pendingTeamAId = null;
         _pendingTeamBId = null;
         _pendingVenueId = null;
+        _pendingFormatId = null;
         _pendingFormat = null;
         _pendingOvers = null;
         _pendingOversMode = null;
@@ -366,6 +355,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
             _pendingTeamBId = teamBId;
         if (query.TryGetValue("venueId", out var vObj) && Guid.TryParse($"{vObj}", out var venueId))
             _pendingVenueId = venueId;
+        if (query.TryGetValue("formatId", out var formatIdObj) && Guid.TryParse($"{formatIdObj}", out var formatId))
+            _pendingFormatId = formatId;
         if (query.TryGetValue("format", out var fObj) && byte.TryParse($"{fObj}", out var format))
             _pendingFormat = format;
         if (query.TryGetValue("overs", out var oObj) && int.TryParse($"{oObj}", out var overs))
@@ -428,12 +419,34 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
             SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == SelectedVenue.Id);
         if (_pendingVenueId is Guid pendingVenue)
             SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == pendingVenue) ?? SelectedVenue;
-        if (_pendingFormat is byte pendingFormat)
-            SelectedFormat = FormatOptions.FirstOrDefault(f => (byte)f.Value == pendingFormat) ?? SelectedFormat;
-        if (_pendingOvers is int pendingOvers && pendingOvers > 0)
-            OversLimit = pendingOvers;
-        if (_pendingOversMode is byte pendingMode)
-            ApplyOversMode((OversMode)pendingMode);
+
+        FormatOptions.Clear();
+        try
+        {
+            foreach (var f in await _formats.GetAllAsync().ConfigureAwait(true))
+                FormatOptions.Add(f);
+        }
+        catch
+        {
+            /* offline — format list empty until online */
+        }
+
+        if (_pendingFormatId is Guid pendingFormatId)
+            SelectedFormat = FormatOptions.FirstOrDefault(f => f.Id == pendingFormatId);
+        if (SelectedFormat is null && _pendingFormat is byte pendingFormat)
+        {
+            var mode = _pendingOversMode is byte pendingMode ? (OversMode)pendingMode : OversMode.MatchTotal;
+            var overs = _pendingOvers is int pendingOvers && pendingOvers > 0 ? pendingOvers : 8;
+            SelectedFormat = FormatOptions.FirstOrDefault(f =>
+                                 (byte)f.Format == pendingFormat
+                                 && f.OversMode == mode
+                                 && f.OversLimit == overs)
+                             ?? FormatOptions.FirstOrDefault(f => (byte)f.Format == pendingFormat);
+        }
+        SelectedFormat ??= FormatOptions.FirstOrDefault();
+        if (SelectedFormat is null)
+            FormatHint = "No formats in this league yet. Open Formats and add one first.";
+
         if (_pendingLastBat is bool pendingLastBat)
             LastBatsmanCanBatAsSingleWicket = pendingLastBat;
         if (_pendingBowlerMax is int pendingBowlerMax)
@@ -570,20 +583,20 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
             if (TeamA.Id == TeamB.Id)
                 throw new InvalidOperationException("Select two different teams.");
             if (SelectedFormat is null)
-                throw new InvalidOperationException("Select a match format.");
-            OversRules.Validate(CurrentOversMode, OversLimit, BowlerMaxOvers);
+                throw new InvalidOperationException("Select a format. Add one in Formats if the list is empty.");
+            OversRules.Validate(SelectedFormat.OversMode, SelectedFormat.OversLimit, BowlerMaxOvers);
             if (TossWinner is null)
                 throw new InvalidOperationException("Flip the coin to decide the toss winner.");
             if (BattingFirst is null)
                 throw new InvalidOperationException("Select which team bats first.");
 
-            // Both squads must be disjoint — same player cannot play for both teams.
+            // Playing lists must be disjoint — same player cannot be in both XIs.
             if (!await EnsureNoSharedPlayersAsync(TeamA, TeamB).ConfigureAwait(true))
                 return;
 
             var bowlingFirst = BattingFirst.Id == TeamA.Id ? TeamB : TeamA;
             var tossWinnerBatsFirst = TossWinner.Id == BattingFirst.Id;
-            var format = SelectedFormat.Value;
+            var format = SelectedFormat.Format;
 
             var match = await _matches.CreateAsync(new MatchDraft(
                 matchTitle,
@@ -591,7 +604,7 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
                 TeamB.Id,
                 null,
                 null,
-                OversLimit,
+                SelectedFormat.OversLimit,
                 format,
                 venueName,
                 TossWinner.Id,
@@ -602,8 +615,10 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
                 _tournamentFixtureId,
                 _seriesId,
                 _seriesFixtureId,
-                CurrentOversMode,
-                LiveStreamUrl)).ConfigureAwait(true);
+                SelectedFormat.OversMode,
+                IsLiveTelecast ? LiveStreamUrl : null,
+                IsLiveTelecast,
+                SelectedFormat.Id)).ConfigureAwait(true);
 
             if (_tournamentId is Guid tid && _tournamentFixtureId is Guid fid)
             {
@@ -641,8 +656,8 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
     }
 
     /// <summary>
-    /// Returns false (and shows a warning) when the two teams share any player.
-    /// Match start is blocked until squads are fully different.
+    /// Returns false (and shows a warning) when the two playing lists share any player.
+    /// Bench/squad overlap is allowed; only the playing XI must be different.
     /// </summary>
     private async Task<bool> EnsureNoSharedPlayersAsync(TeamListItem teamA, TeamListItem teamB)
     {
@@ -651,43 +666,47 @@ public partial class MatchEditViewModel : ObservableObject, IQueryAttributable
         if (detailA is null || detailB is null)
             throw new InvalidOperationException("Could not load team squads. Open Teams while online and try again.");
 
-        var shared = detailA.Players
-            .Where(a => detailB.Players.Any(b => b.Id == a.Id))
-            .OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase)
-            .Select(p => p.FullName)
+        var squadA = detailA.Players.Select(p => p.Id).ToList();
+        var squadB = detailB.Players.Select(p => p.Id).ToList();
+        var playingA = TeamRoster.PlayingListOnly(squadA, detailA.PlayingPlayerIds);
+        var playingB = TeamRoster.PlayingListOnly(squadB, detailB.PlayingPlayerIds);
+
+        if (playingA.Count == 0)
+        {
+            ErrorMessage = $"{teamA.Name} has no playing players. Edit the team and set the playing list.";
+            await Shell.Current.DisplayAlert("Playing list required", ErrorMessage, "OK").ConfigureAwait(true);
+            return false;
+        }
+
+        if (playingB.Count == 0)
+        {
+            ErrorMessage = $"{teamB.Name} has no playing players. Edit the team and set the playing list.";
+            await Shell.Current.DisplayAlert("Playing list required", ErrorMessage, "OK").ConfigureAwait(true);
+            return false;
+        }
+
+        var sharedIds = playingA.Intersect(playingB).ToHashSet();
+        if (sharedIds.Count == 0)
+            return true;
+
+        var byId = detailA.Players.Concat(detailB.Players)
+            .GroupBy(p => p.Id)
+            .ToDictionary(g => g.Key, g => g.First().FullName);
+        var shared = sharedIds
+            .Select(id => byId.GetValueOrDefault(id, id.ToString("N")[..8]))
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (shared.Count == 0)
-        {
-            var playingA = (detailA.PlayingPlayerIds ?? Array.Empty<Guid>()).Count;
-            var playingB = (detailB.PlayingPlayerIds ?? Array.Empty<Guid>()).Count;
-            if (playingA == 0)
-            {
-                ErrorMessage = $"{teamA.Name} has no playing players. Edit the team and set the playing list.";
-                await Shell.Current.DisplayAlert("Playing list required", ErrorMessage, "OK").ConfigureAwait(true);
-                return false;
-            }
-
-            if (playingB == 0)
-            {
-                ErrorMessage = $"{teamB.Name} has no playing players. Edit the team and set the playing list.";
-                await Shell.Current.DisplayAlert("Playing list required", ErrorMessage, "OK").ConfigureAwait(true);
-                return false;
-            }
-
-            return true;
-        }
-
         var names = string.Join("\n• ", shared);
         await Shell.Current.DisplayAlert(
-                "Same players in both teams",
-                $"These player(s) are in both {teamA.Name} and {teamB.Name}:\n\n• {names}\n\n" +
-                "Remove shared players from one team. Match cannot start until all players are different.",
+                "Same players in both playing lists",
+                $"These player(s) are in both {teamA.Name} and {teamB.Name} playing lists:\n\n• {names}\n\n" +
+                "Remove them from one playing list. Squad/bench overlap is allowed. Match cannot start until playing lists are different.",
                 "OK")
             .ConfigureAwait(true);
 
-        ErrorMessage = "Both teams have the same player(s). Fix squads before starting.";
+        ErrorMessage = "Both playing lists have the same player(s). Fix the playing lists before starting.";
         return false;
     }
 

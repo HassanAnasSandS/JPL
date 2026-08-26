@@ -4,6 +4,7 @@
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
              xmlns:pages="clr-namespace:JPL.Pages"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.StatsPage"
              x:Name="ThisPage"
              x:DataType="vm:StatsViewModel"
@@ -224,6 +225,35 @@
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AttendancePctText}" />
             </Grid>
         </DataTemplate>
+        <DataTemplate x:Key="TeamRowTemplate" x:DataType="svc:TeamCareerSummary">
+            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="44,44,44,44,44,52,56,48,48,52,48,52,48,48,48">
+                <Grid.Triggers>
+                    <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
+                        <Setter Property="BackgroundColor" Value="#F0F3F7" />
+                    </DataTrigger>
+                </Grid.Triggers>
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer
+                        Command="{Binding BindingContext.OpenTeamCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                        CommandParameter="{Binding .}" />
+                </Grid.GestureRecognizers>
+                <Label Style="{StaticResource StatCell}" Text="{Binding Played}" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Won}" TextColor="{StaticResource Success}" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Lost}" TextColor="{StaticResource Danger}" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Tied}" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Points}" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding WinPctText}" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding NrrText}" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding RunsFor}" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding RunsAgainst}" />
+                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding Tournaments}" />
+                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding TournamentWon}" TextColor="{StaticResource Success}" />
+                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding Series}" />
+                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding SeriesWon}" TextColor="{StaticResource Success}" />
+                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding SeriesLoss}" TextColor="{StaticResource Danger}" />
+                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding SeriesTied}" />
+            </Grid>
+        </DataTemplate>
         <pages:StatsTabTemplateSelector x:Key="StatsRowSelector"
                                         Match="{StaticResource MatchRowTemplate}"
                                         Tournament="{StaticResource TournamentRowTemplate}"
@@ -369,12 +399,24 @@
                             </DataTrigger>
                         </Button.Triggers>
                     </Button>
+                    <Button Text="Teams"
+                            Style="{StaticResource StatsChip}"
+                            Command="{Binding SelectCategoryCommand}"
+                            CommandParameter="teams"
+                            IsVisible="{Binding ShowMatchCategories}">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsTeamStats}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
                 </HorizontalStackLayout>
             </ScrollView>
 
             <VerticalStackLayout Grid.Row="2" Spacing="8">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                    <SearchBar Placeholder="Search player"
+                    <SearchBar Placeholder="{Binding SearchPlaceholder}"
                                Text="{Binding PlayerNameFilter}"
                                CancelButtonColor="{StaticResource Primary}" />
                     <Button Grid.Column="1"
@@ -404,6 +446,9 @@
                         Padding="12"
                         IsVisible="{Binding ShowFilters}">
                     <VerticalStackLayout Spacing="8">
+                        <VerticalStackLayout IsVisible="{Binding ShowMatchCategories}">
+                            <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                        </VerticalStackLayout>
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding ShowMatchCategories}">
                             <Label Text="Venue"
                                    VerticalOptions="Center"
@@ -454,7 +499,7 @@
                     <Label Text="{Binding CategoryHint}"
                            Style="{StaticResource MutedLabel}"
                            FontSize="12" />
-                    <Label Text="Tap a player for 1 vs 1 stats"
+                    <Label Text="{Binding TableHint}"
                            Style="{StaticResource MutedLabel}"
                            FontSize="11" />
                 </VerticalStackLayout>
@@ -487,11 +532,11 @@
                                        VerticalOptions="Center"
                                        TextColor="{StaticResource Secondary}" />
                                 <Button Grid.Column="1"
-                                        Text="Player"
+                                        Text="{Binding NameColumnTitle}"
                                         Style="{StaticResource StatsSortButton}"
                                         HorizontalOptions="Start"
                                         Command="{Binding SortCommand}"
-                                        CommandParameter="PlayerName" />
+                                        CommandParameter="{Binding NameSortParameter}" />
                                 <Button Grid.Column="2"
                                         Text="Sess"
                                         WidthRequest="52"
@@ -501,7 +546,9 @@
                                         CommandParameter="Sessions" />
                             </Grid>
                             <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Leaderboard}" Spacing="0">
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Leaderboard}"
+                                                 Spacing="0"
+                                                 IsVisible="{Binding ShowPlayerLeaderboard}">
                                 <BindableLayout.EmptyView>
                                     <Label Text="{Binding BindingContext.EmptyStatsHint, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                            Margin="12,20"
@@ -544,6 +591,46 @@
                                                    VerticalOptions="Center"
                                                    TextColor="{StaticResource Primary}"
                                                    IsVisible="{Binding BindingContext.IsNetsSource, Source={x:Reference ThisPage}, x:DataType={x:Null}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamLeaderboard}"
+                                                 Spacing="0"
+                                                 IsVisible="{Binding IsTeamStats}">
+                                <BindableLayout.EmptyView>
+                                    <Label Text="{Binding BindingContext.EmptyStatsHint, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                           Margin="12,20"
+                                           FontSize="13"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                </BindableLayout.EmptyView>
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:TeamCareerSummary">
+                                        <Grid ColumnDefinitions="32,*"
+                                              HeightRequest="40"
+                                              Padding="8,0,4,0">
+                                            <Grid.Triggers>
+                                                <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
+                                                    <Setter Property="BackgroundColor" Value="#F0F3F7" />
+                                                </DataTrigger>
+                                            </Grid.Triggers>
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer
+                                                    Command="{Binding BindingContext.OpenTeamCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                            </Grid.GestureRecognizers>
+                                            <Label Text="{Binding Rank}"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource TextSecondary}"
+                                                   VerticalOptions="Center"
+                                                   HorizontalTextAlignment="Center" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding TeamName}"
+                                                   FontAttributes="Bold"
+                                                   FontSize="13"
+                                                   TextColor="{StaticResource Primary}"
+                                                   LineBreakMode="TailTruncation"
+                                                   VerticalOptions="Center" />
                                         </Grid>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
@@ -698,11 +785,38 @@
                                     <Button Grid.Column="2" Text="Absent" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendanceAbsent" />
                                     <Button Grid.Column="3" Text="Att %" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendancePct" />
                                 </Grid>
+                                <Grid IsVisible="{Binding IsTeamStats}"
+                                      ColumnDefinitions="44,44,44,44,44,52,56,48,48,52,48,52,48,48,48"
+                                      HeightRequest="42"
+                                      Padding="2,0"
+                                      BackgroundColor="{StaticResource Primary}">
+                                    <Button Text="Pld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Played" />
+                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Won" />
+                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Lost" />
+                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tied" />
+                                    <Button Grid.Column="4" Text="Pts" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Points" />
+                                    <Button Grid.Column="5" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="WinPct" />
+                                    <Button Grid.Column="6" Text="NRR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Nrr" />
+                                    <Button Grid.Column="7" Text="RF" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsFor" />
+                                    <Button Grid.Column="8" Text="RA" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsAgainst" />
+                                    <Button Grid.Column="9" Text="Tours" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tournaments" />
+                                    <Button Grid.Column="10" Text="T.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWon" />
+                                    <Button Grid.Column="11" Text="Series" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Series" />
+                                    <Button Grid.Column="12" Text="S.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWon" />
+                                    <Button Grid.Column="13" Text="S.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesLoss" />
+                                    <Button Grid.Column="14" Text="S.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" />
+                                </Grid>
                                 <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
 
                                 <VerticalStackLayout BindingContext="{Binding .}"
                                                      BindableLayout.ItemsSource="{Binding Leaderboard}"
                                                      BindableLayout.ItemTemplateSelector="{StaticResource StatsRowSelector}"
+                                                     IsVisible="{Binding ShowPlayerLeaderboard}"
+                                                     Spacing="0" />
+                                <VerticalStackLayout BindingContext="{Binding .}"
+                                                     BindableLayout.ItemsSource="{Binding TeamLeaderboard}"
+                                                     BindableLayout.ItemTemplate="{StaticResource TeamRowTemplate}"
+                                                     IsVisible="{Binding IsTeamStats}"
                                                      Spacing="0" />
                             </VerticalStackLayout>
                         </ScrollView>
@@ -734,7 +848,7 @@
                                 Padding="8,3"
                                 StrokeShape="RoundRectangle 8"
                                 HorizontalOptions="Start">
-                            <Label Text="{Binding StatsSourceLabel}"
+                            <Label Text="{Binding DetailBadgeText}"
                                    FontSize="11"
                                    FontAttributes="Bold"
                                    TextColor="{StaticResource Primary}" />
@@ -748,6 +862,8 @@
                                TextColor="#B8C4D4" />
                     </VerticalStackLayout>
                 </Border>
+
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowPlayerDetail}">
 
                 <!-- Nets sessions -->
                 <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding IsNetsSource}">
@@ -1262,36 +1378,50 @@
                 <Border Style="{StaticResource CardBorder}" Padding="14">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="{Binding ConfrontationSectionTitle}" Style="{StaticResource SectionLabel}" />
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                            <Button Text="Batting vs bowling"
-                                    Style="{StaticResource StatsChip}"
-                                    Command="{Binding ShowBattingCommand}">
-                                <Button.Triggers>
-                                    <DataTrigger TargetType="Button" Binding="{Binding IsBattingTab}" Value="True">
-                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                                    </DataTrigger>
-                                </Button.Triggers>
-                            </Button>
-                            <Button Grid.Column="1"
-                                    Text="Bowling vs batting"
-                                    Style="{StaticResource StatsChip}"
-                                    Command="{Binding ShowBowlingCommand}">
-                                <Button.Triggers>
-                                    <DataTrigger TargetType="Button" Binding="{Binding IsBowlingTab}" Value="True">
-                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                                    </DataTrigger>
-                                </Button.Triggers>
-                            </Button>
-                        </Grid>
+                        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                            <HorizontalStackLayout Spacing="8">
+                                <Button Text="Batting vs bowling"
+                                        Style="{StaticResource StatsChip}"
+                                        Command="{Binding ShowBattingCommand}">
+                                    <Button.Triggers>
+                                        <DataTrigger TargetType="Button" Binding="{Binding IsBattingTab}" Value="True">
+                                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                        </DataTrigger>
+                                    </Button.Triggers>
+                                </Button>
+                                <Button Text="Bowling vs batting"
+                                        Style="{StaticResource StatsChip}"
+                                        Command="{Binding ShowBowlingCommand}">
+                                    <Button.Triggers>
+                                        <DataTrigger TargetType="Button" Binding="{Binding IsBowlingTab}" Value="True">
+                                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                        </DataTrigger>
+                                    </Button.Triggers>
+                                </Button>
+                                <Button Text="Captain vs captain"
+                                        Style="{StaticResource StatsChip}"
+                                        Command="{Binding ShowCaptainVsCommand}"
+                                        IsVisible="{Binding ShowMatchCategories}">
+                                    <Button.Triggers>
+                                        <DataTrigger TargetType="Button" Binding="{Binding IsCaptainTab}" Value="True">
+                                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                        </DataTrigger>
+                                    </Button.Triggers>
+                                </Button>
+                            </HorizontalStackLayout>
+                        </ScrollView>
 
                         <Label Text="{Binding ConfrontationHeader}"
                                FontSize="13"
                                FontAttributes="Bold"
                                TextColor="{StaticResource TextPrimary}" />
 
-                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Confrontations}" Spacing="10">
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Confrontations}"
+                                             Spacing="10"
+                                             IsVisible="{Binding ShowConfrontationsList}">
                             <BindableLayout.EmptyView>
                                 <Label Text="No head-to-head yet"
                                        Style="{StaticResource MutedLabel}"
@@ -1303,16 +1433,32 @@
                                             BackgroundColor="{StaticResource SurfaceMuted}"
                                             Padding="12"
                                             StrokeShape="RoundRectangle 12">
-                                        <VerticalStackLayout Spacing="6">
-                                            <Label FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Primary}">
-                                                <Label.FormattedText>
-                                                    <FormattedString>
-                                                        <Span Text="{Binding BatterName}" />
-                                                        <Span Text=" vs " TextColor="{StaticResource TextSecondary}" />
-                                                        <Span Text="{Binding BowlerName}" />
-                                                    </FormattedString>
-                                                </Label.FormattedText>
-                                            </Label>
+                                        <VerticalStackLayout Spacing="10">
+                                            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                                <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center">
+                                                    <Label Text="{Binding BatterName}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           TextColor="{StaticResource Primary}"
+                                                           HorizontalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="1"
+                                                       Text="VS"
+                                                       FontAttributes="Bold"
+                                                       FontSize="12"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       VerticalOptions="Center"
+                                                       HorizontalTextAlignment="Center" />
+                                                <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center" VerticalOptions="Center">
+                                                    <Label Text="{Binding BowlerName}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           TextColor="{StaticResource Primary}"
+                                                           HorizontalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                            </Grid>
                                             <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
                                                 <VerticalStackLayout>
                                                     <Label Text="Balls" FontSize="10" TextColor="{StaticResource TextSecondary}" />
@@ -1356,8 +1502,257 @@
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
                         </VerticalStackLayout>
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding CaptainVs}"
+                                             Spacing="10"
+                                             IsVisible="{Binding IsCaptainTab}">
+                            <BindableLayout.EmptyView>
+                                <Label Text="No captain vs captain matches yet"
+                                       Style="{StaticResource MutedLabel}"
+                                       Margin="4" />
+                            </BindableLayout.EmptyView>
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:CaptainVsStat">
+                                    <Border StrokeThickness="0"
+                                            BackgroundColor="{StaticResource SurfaceMuted}"
+                                            Padding="12"
+                                            StrokeShape="RoundRectangle 12">
+                                        <VerticalStackLayout Spacing="10">
+                                            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                                <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center">
+                                                    <Label Text="{Binding CaptainName}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           TextColor="{StaticResource Primary}"
+                                                           HorizontalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="1"
+                                                       Text="VS"
+                                                       FontAttributes="Bold"
+                                                       FontSize="12"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       VerticalOptions="Center"
+                                                       HorizontalTextAlignment="Center" />
+                                                <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center" VerticalOptions="Center">
+                                                    <Label Text="{Binding OpponentCaptainName}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           TextColor="{StaticResource Primary}"
+                                                           HorizontalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                            <Label FontSize="13" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="Record " />
+                                                        <Span Text="{Binding RecordText}" />
+                                                        <Span Text="  ·  Win% " />
+                                                        <Span Text="{Binding WinPctText}" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                                <VerticalStackLayout>
+                                                    <Label Text="Pld" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Played}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="1">
+                                                    <Label Text="Won" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Won}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Success}" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="2">
+                                                    <Label Text="Lost" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Lost}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Danger}" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="3">
+                                                    <Label Text="Tied" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Tied}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                            <Label IsVisible="{Binding HasSeries}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource TextSecondary}">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="Series " />
+                                                        <Span Text="{Binding Series}" />
+                                                        <Span Text="  ·  " />
+                                                        <Span Text="{Binding SeriesRecordText}" />
+                                                        <Span Text=" (W–L–T)" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </Border>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowTeamDetail}">
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="10">
+                            <Label Text="Match record" Style="{StaticResource SectionLabel}" />
+                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                                <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Played" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.Played}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Won" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.Won}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Success}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Lost" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.Lost}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Danger}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Tied" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.Tied}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Win %" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.WinPctText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="NRR" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.NrrText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Pts" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.Points}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="10">
+                            <Label Text="1 vs 1" Style="{StaticResource SectionLabel}" />
+                            <Label Text="Record against every team this side has faced."
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamVs}" Spacing="10">
+                                <BindableLayout.EmptyView>
+                                    <Label Text="No 1 vs 1 matches yet"
+                                           Style="{StaticResource MutedLabel}"
+                                           Margin="4" />
+                                </BindableLayout.EmptyView>
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:TeamVsStat">
+                                        <Border StrokeThickness="0"
+                                                BackgroundColor="{StaticResource SurfaceMuted}"
+                                                Padding="12"
+                                                StrokeShape="RoundRectangle 12">
+                                            <VerticalStackLayout Spacing="8">
+                                                <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                                    <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center">
+                                                        <Label Text="{Binding TeamName}"
+                                                               FontAttributes="Bold"
+                                                               FontSize="14"
+                                                               TextColor="{StaticResource Primary}"
+                                                               HorizontalTextAlignment="Center"
+                                                               LineBreakMode="TailTruncation" />
+                                                    </VerticalStackLayout>
+                                                    <Label Grid.Column="1"
+                                                           Text="VS"
+                                                           FontAttributes="Bold"
+                                                           FontSize="12"
+                                                           TextColor="{StaticResource Secondary}"
+                                                           VerticalOptions="Center"
+                                                           HorizontalTextAlignment="Center" />
+                                                    <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center" VerticalOptions="Center">
+                                                        <Label Text="{Binding OpponentTeamName}"
+                                                               FontAttributes="Bold"
+                                                               FontSize="14"
+                                                               TextColor="{StaticResource Primary}"
+                                                               HorizontalTextAlignment="Center"
+                                                               LineBreakMode="TailTruncation" />
+                                                    </VerticalStackLayout>
+                                                </Grid>
+                                                <Label FontSize="13" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}">
+                                                    <Label.FormattedText>
+                                                        <FormattedString>
+                                                            <Span Text="Record " />
+                                                            <Span Text="{Binding RecordText}" />
+                                                            <Span Text="  ·  Win% " />
+                                                            <Span Text="{Binding WinPctText}" />
+                                                        </FormattedString>
+                                                    </Label.FormattedText>
+                                                </Label>
+                                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                                    <VerticalStackLayout>
+                                                        <Label Text="Pld" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding Played}" FontAttributes="Bold" FontSize="14" />
+                                                    </VerticalStackLayout>
+                                                    <VerticalStackLayout Grid.Column="1">
+                                                        <Label Text="Won" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding Won}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Success}" />
+                                                    </VerticalStackLayout>
+                                                    <VerticalStackLayout Grid.Column="2">
+                                                        <Label Text="Lost" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding Lost}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Danger}" />
+                                                    </VerticalStackLayout>
+                                                    <VerticalStackLayout Grid.Column="3">
+                                                        <Label Text="Tied" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding Tied}" FontAttributes="Bold" FontSize="14" />
+                                                    </VerticalStackLayout>
+                                                </Grid>
+                                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
+                                                    <VerticalStackLayout>
+                                                        <Label Text="Runs for" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding RunsFor}" FontAttributes="Bold" FontSize="14" />
+                                                    </VerticalStackLayout>
+                                                    <VerticalStackLayout Grid.Column="1">
+                                                        <Label Text="Runs against" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding RunsAgainst}" FontAttributes="Bold" FontSize="14" />
+                                                    </VerticalStackLayout>
+                                                    <VerticalStackLayout Grid.Column="2">
+                                                        <Label Text="NRR" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        <Label Text="{Binding NrrText}" FontAttributes="Bold" FontSize="14" />
+                                                    </VerticalStackLayout>
+                                                </Grid>
+                                                <Label IsVisible="{Binding HasSeries}"
+                                                       FontSize="12"
+                                                       TextColor="{StaticResource TextSecondary}">
+                                                    <Label.FormattedText>
+                                                        <FormattedString>
+                                                            <Span Text="Series " />
+                                                            <Span Text="{Binding Series}" />
+                                                            <Span Text="  ·  " />
+                                                            <Span Text="{Binding SeriesRecordText}" />
+                                                            <Span Text=" (W–L–T)" />
+                                                        </FormattedString>
+                                                    </Label.FormattedText>
+                                                </Label>
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                </VerticalStackLayout>
             </VerticalStackLayout>
         </ScrollView>
 

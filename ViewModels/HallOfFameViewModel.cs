@@ -12,6 +12,8 @@ public partial class HallOfFameViewModel : ObservableObject
 
     public ObservableCollection<TrophyRow> Items { get; } = new();
 
+    public FormatFilterViewModel FormatFilter { get; }
+
     [ObservableProperty] private int selectedCategory;
     [ObservableProperty] private string categoryTitle = "Player of the Match";
     [ObservableProperty] private string categoryHint = "Trophies for Player of the Match awards";
@@ -23,7 +25,12 @@ public partial class HallOfFameViewModel : ObservableObject
     public bool IsTourChamp => SelectedCategory == 2;
     public bool IsSeriesChamp => SelectedCategory == 3;
 
-    public HallOfFameViewModel(IApiClient api) => _api = api;
+    public HallOfFameViewModel(IApiClient api, IFormatService formats)
+    {
+        _api = api;
+        FormatFilter = new FormatFilterViewModel(formats);
+        FormatFilter.Committed += (_, _) => _ = LoadAsync();
+    }
 
     partial void OnSelectedCategoryChanged(int value)
     {
@@ -54,7 +61,8 @@ public partial class HallOfFameViewModel : ObservableObject
             IsBusy = true;
             ErrorMessage = null;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
-            _bundle = await _api.GetHallOfFameAsync().ConfigureAwait(true);
+            await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
+            _bundle = await _api.GetHallOfFameAsync(FormatFilter.SelectedIds).ConfigureAwait(true);
             ApplyCategory();
         }
         catch (Exception ex)

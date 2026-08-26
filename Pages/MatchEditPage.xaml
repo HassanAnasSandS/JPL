@@ -33,61 +33,42 @@
                                FontSize="12" />
 
                         <Label Text="Format *" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
-                        <Picker Title="Match format"
+                        <Picker Title="Select format"
                                 ItemsSource="{Binding FormatOptions}"
-                                ItemDisplayBinding="{Binding Label}"
+                                ItemDisplayBinding="{Binding Name}"
                                 SelectedItem="{Binding SelectedFormat}"
                                 IsEnabled="{Binding CanEditMatchSettings}" />
                         <Label Text="{Binding FormatHint}" Style="{StaticResource MutedLabel}" />
-
-                        <HorizontalStackLayout Spacing="12">
-                            <Switch IsToggled="{Binding NoOversLimit}"
-                                    VerticalOptions="Center"
-                                    IsEnabled="{Binding CanEditMatchSettings}" />
-                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
-                                <Label Text="No overs limit"
-                                       FontAttributes="Bold"
-                                       Style="{StaticResource BodyLabel}" />
-                                <Label Text="Innings end only when the side is all out or you declare. Overs never end the innings."
-                                       Style="{StaticResource MutedLabel}"
-                                       FontSize="12" />
-                            </VerticalStackLayout>
-                        </HorizontalStackLayout>
-
-                        <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowOversFields}">
-                            <HorizontalStackLayout Spacing="12">
-                                <Switch IsToggled="{Binding OversAreMatchTotal}"
-                                        VerticalOptions="Center"
-                                        IsEnabled="{Binding CanEditMatchSettings}" />
-                                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
-                                    <Label Text="Whole match overs"
-                                           FontAttributes="Bold"
-                                           Style="{StaticResource BodyLabel}" />
-                                    <Label Text="On: one over pool for the entire match (all innings share it). Off: each innings has its own quota."
-                                           Style="{StaticResource MutedLabel}"
-                                           FontSize="12" />
-                                </VerticalStackLayout>
-                            </HorizontalStackLayout>
-
-                            <Label Text="{Binding OversFieldLabel}" FontAttributes="Bold" Style="{StaticResource BodyLabel}" />
-                            <Entry Placeholder="e.g. 20, 50, 100"
-                                   Text="{Binding OversLimit}"
-                                   Keyboard="Numeric"
-                                   IsEnabled="{Binding CanEditMatchSettings}" />
-                        </VerticalStackLayout>
+                        <Label Text="Add formats in the Formats module. Match start only picks one."
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
                     </VerticalStackLayout>
                 </Border>
 
                 <Border Style="{StaticResource CardBorder}">
                     <VerticalStackLayout Spacing="12">
-                        <Label Text="Live stream (optional)" Style="{StaticResource SectionLabel}" />
-                        <Entry Placeholder="YouTube / Facebook live link"
-                               Text="{Binding LiveStreamUrl}"
-                               Keyboard="Url"
-                               MaxLength="1000" />
-                        <Label Text="Viewers open the scorecard and watch the match in an iframe with the live score beside it. You can paste this later from Live scoring if the stream starts after toss."
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="12" />
+                        <Label Text="Live telecast" Style="{StaticResource SectionLabel}" />
+                        <HorizontalStackLayout Spacing="12">
+                            <Switch IsToggled="{Binding IsLiveTelecast}"
+                                    VerticalOptions="Center" />
+                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                <Label Text="Live telecast this match"
+                                       FontAttributes="Bold"
+                                       Style="{StaticResource BodyLabel}" />
+                                <Label Text="On: video stream + live score go to the server as you score (current live mechanism). Off: match stays on this phone and syncs when you complete it — faster scoring, less server load."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                        <VerticalStackLayout Spacing="8" IsVisible="{Binding ShowLiveStreamUrl}">
+                            <Entry Placeholder="YouTube / Facebook live link (optional)"
+                                   Text="{Binding LiveStreamUrl}"
+                                   Keyboard="Url"
+                                   MaxLength="1000" />
+                            <Label Text="Viewers open the scorecard and watch the match in an iframe with the live score beside it. You can paste this later from Live scoring if the stream starts after toss."
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </Border>
 

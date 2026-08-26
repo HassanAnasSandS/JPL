@@ -33,8 +33,15 @@ public sealed class Player
 {
     public Guid Id { get; set; }
     public string FullName { get; set; } = string.Empty;
+    public string? NickName { get; set; }
+    public string? PlayingRole { get; set; }
+    public string? BattingStyle { get; set; }
+    public string? BowlingStyle { get; set; }
+    public string? Bio { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsDeleted { get; set; }
+    /// <summary>Relative filename under the persistent player-images folder. Null = no photo.</summary>
+    public string? ImagePath { get; set; }
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
@@ -49,6 +56,8 @@ public sealed class Team
     public Player? Captain { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsDeleted { get; set; }
+    /// <summary>Relative filename under the persistent team-images folder. Null = no logo.</summary>
+    public string? ImagePath { get; set; }
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
@@ -94,6 +103,7 @@ public sealed class Match
     public int OversLimit { get; set; } = 20;
     public OversMode OversMode { get; set; } = OversMode.PerInnings;
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
+    public Guid? FormatId { get; set; }
     public DateTime MatchDateUtc { get; set; } = DateTime.Now;
     public string? Venue { get; set; }
     public MatchStatus Status { get; set; }
@@ -112,6 +122,9 @@ public sealed class Match
     public bool IsDeleted { get; set; }
     /// <summary>Optional playing XI snapshot for this match. When set, scorecard Did-not-bat uses it instead of the live team roster.</summary>
     public string? SquadRosterJson { get; set; }
+    /// <summary>When true, this match is published ball-by-ball for live score/stream. When false it arrives on complete-sync only.</summary>
+    public bool IsLiveTelecast { get; set; } = true;
+
     /// <summary>Optional YouTube/Facebook/https live telecast URL shown in an iframe with the live score.</summary>
     public string? LiveStreamUrl { get; set; }
     public Guid? StartedByUserId { get; set; }
@@ -153,6 +166,7 @@ public sealed class Delivery
     public Guid? DismissedPlayerId { get; set; }
     public Guid? FielderId { get; set; }
     public bool IsLegalDelivery { get; set; } = true;
+    public byte ShotZone { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public long Version { get; set; } = 1;
 }
@@ -195,6 +209,19 @@ public sealed class Venue
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public long Version { get; set; } = 1;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
+    public bool IsDeleted { get; set; }
+}
+
+public sealed class Format
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public MatchFormat Kind { get; set; } = MatchFormat.SingleInning;
+    public int OversLimit { get; set; } = 8;
+    public OversMode OversMode { get; set; } = OversMode.MatchTotal;
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
@@ -260,6 +287,7 @@ public sealed class Tournament
     public int QualifyPerGroup { get; set; } = 1;
     /// <summary>Venue applied to every fixture match (required).</summary>
     public Guid VenueId { get; set; }
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; } // MatchFormat
     public int OversLimit { get; set; } = 8;
     public OversMode OversMode { get; set; } = OversMode.PerInnings;
@@ -315,6 +343,7 @@ public sealed class Series
     public Guid TeamBId { get; set; }
     public int MatchCount { get; set; } = 3;
     public Guid VenueId { get; set; }
+    public Guid? FormatId { get; set; }
     public byte Format { get; set; }
     public int OversLimit { get; set; } = 8;
     public OversMode OversMode { get; set; } = OversMode.PerInnings;

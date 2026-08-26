@@ -24,6 +24,7 @@ public sealed class Tournament
     /// <summary>Top teams that qualify from each group (1 or 2).</summary>
     public int QualifyPerGroup { get; set; } = 1;
     public Guid VenueId { get; set; }
+    public Guid? FormatId { get; set; }
     public MatchFormat Format { get; set; } = MatchFormat.SingleInning;
     public int OversLimit { get; set; } = 8;
     public OversMode OversMode { get; set; } = OversMode.PerInnings;

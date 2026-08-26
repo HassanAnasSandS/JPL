@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Controls.FormatMultiSelectView"
+             x:DataType="vm:FormatFilterViewModel">
+    <VerticalStackLayout Spacing="4">
+        <Label Text="Format"
+               FontSize="12"
+               Style="{StaticResource MutedLabel}" />
+        <Border Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+                StrokeThickness="1"
+                BackgroundColor="{AppThemeBinding Light=White, Dark=#152033}"
+                StrokeShape="RoundRectangle 8"
+                Padding="10,8">
+            <Border.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding ToggleDropdownCommand}" />
+            </Border.GestureRecognizers>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Label Text="{Binding SummaryText}"
+                       FontSize="13"
+                       LineBreakMode="TailTruncation"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource TextPrimary}" />
+                <Label Grid.Column="1"
+                       Text="▼"
+                       FontSize="10"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource TextSecondary}" />
+            </Grid>
+        </Border>
+        <Border IsVisible="{Binding IsDropdownOpen}"
+                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+                StrokeThickness="1"
+                BackgroundColor="{AppThemeBinding Light=White, Dark=#152033}"
+                StrokeShape="RoundRectangle 8"
+                Padding="8">
+            <VerticalStackLayout Spacing="6">
+                <Label Text="Select one or more formats"
+                       FontSize="11"
+                       Style="{StaticResource MutedLabel}" />
+                <ScrollView MaximumHeightRequest="220"
+                            VerticalScrollBarVisibility="Default">
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Options}" Spacing="2">
+                        <BindableLayout.EmptyView>
+                            <Label Text="No formats in this league yet"
+                                   FontSize="12"
+                                   Padding="4"
+                                   TextColor="{StaticResource TextSecondary}" />
+                        </BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FormatFilterOption">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Padding="2,1">
+                                    <CheckBox IsChecked="{Binding IsSelected}"
+                                              VerticalOptions="Center"
+                                              Color="{StaticResource Primary}" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Name}"
+                                           FontSize="13"
+                                           VerticalOptions="Center"
+                                           LineBreakMode="TailTruncation"
+                                           TextColor="{StaticResource TextPrimary}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </ScrollView>
+                <Button Text="Done"
+                        Style="{StaticResource GhostButton}"
+                        Padding="12,6"
+                        FontSize="12"
+                        HorizontalOptions="End"
+                        Command="{Binding CloseDropdownCommand}" />
+            </VerticalStackLayout>
+        </Border>
+    </VerticalStackLayout>
+</ContentView>
