@@ -2,6 +2,8 @@ namespace JPL.Api.Contracts;
 
 public sealed record LoginRequest(string Username, string Password);
 
+public sealed record SignupRequest(string Username, string Password, string WhatsApp);
+
 public sealed record LoginResponse(
     Guid UserId,
     string Username,
@@ -30,7 +32,8 @@ public sealed record UserDto(
     bool IsActive,
     DateTime CreatedAtUtc,
     Guid? LeagueId = null,
-    string? LeagueName = null);
+    string? LeagueName = null,
+    string? WhatsAppNumber = null);
 
 public sealed record UserUpsertRequest(
     Guid? Id,
@@ -38,7 +41,8 @@ public sealed record UserUpsertRequest(
     string? Password,
     string Role,
     bool IsActive = true,
-    Guid? LeagueId = null);
+    Guid? LeagueId = null,
+    string? WhatsAppNumber = null);
 
 public sealed record PlayerDto(
     Guid Id,

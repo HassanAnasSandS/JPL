@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             x:Class="JPL.Pages.GroundDiscoverPage"
+             x:Name="ThisPage"
+             x:DataType="vm:GroundDiscoverViewModel"
+             Title="Grounds"
+             HideSoftInputOnTapped="True">
+
+    <Grid>
+    <Grid RowDefinitions="Auto,*,Auto" Padding="14" RowSpacing="10">
+        <ScrollView MaximumHeightRequest="420">
+        <Border Style="{StaticResource CardBorder}" Padding="12">
+            <VerticalStackLayout Spacing="8">
+                <SearchBar Placeholder="Search name"
+                           Text="{Binding NameQuery}"
+                           SearchCommand="{Binding SearchCommand}" />
+                <Label Text="Advanced filter"
+                       FontAttributes="Bold"
+                       FontSize="13"
+                       TextColor="#D4AF37" />
+                <Label Text="Use a postal code, or pick country, state, city, and area."
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       LineBreakMode="WordWrap" />
+                <Entry Placeholder="Postal code (5 digits)"
+                       Text="{Binding PostalCode}"
+                       Keyboard="Numeric"
+                       MaxLength="5"
+                       IsEnabled="{Binding UsePostalFilter}" />
+                <Label Text="or"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       HorizontalTextAlignment="Center" />
+                <ctrl:SearchablePicker Title="Country"
+                                       Placeholder="Type to search country"
+                                       ItemsSource="{Binding Countries}"
+                                       SelectedItem="{Binding Country}"
+                                       IsEnabled="{Binding UseLocationFilter}" />
+                <ctrl:SearchablePicker Title="State"
+                                       Placeholder="Type to search state"
+                                       ItemsSource="{Binding States}"
+                                       SelectedItem="{Binding State}"
+                                       IsEnabled="{Binding UseLocationFilter}" />
+                <ctrl:SearchablePicker Title="City"
+                                       Placeholder="Type to search city"
+                                       ItemsSource="{Binding Cities}"
+                                       SelectedItem="{Binding City}"
+                                       IsEnabled="{Binding UseLocationFilter}" />
+                <ctrl:SearchablePicker Title="Area"
+                                       Placeholder="Type to search area"
+                                       ItemsSource="{Binding Areas}"
+                                       SelectedItem="{Binding Area}"
+                                       IsEnabled="{Binding UseLocationFilter}" />
+                <Label Text="{Binding ErrorMessage}"
+                       FontSize="12"
+                       TextColor="{StaticResource Danger}"
+                       LineBreakMode="WordWrap" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Entry Placeholder="Min Rs" Text="{Binding MinRateText}" Keyboard="Numeric" />
+                    <Entry Grid.Column="1" Placeholder="Max Rs" Text="{Binding MaxRateText}" Keyboard="Numeric" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Button Text="Search" Style="{StaticResource GoldButton}" Command="{Binding SearchCommand}" />
+                    <Button Grid.Column="1"
+                            Text="Clear"
+                            Style="{StaticResource GhostButton}"
+                            Command="{Binding ClearFiltersCommand}" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+        </ScrollView>
+
+        <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
+            <CollectionView ItemsSource="{Binding Items}"
+                            RemainingItemsThreshold="4"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
+                            EmptyView="No grounds yet.">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="svc:GroundCardDto">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="0">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer
+                                    Command="{Binding BindingContext.OpenCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                    CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+                            <Grid RowDefinitions="140,Auto">
+                                <Image Source="{Binding CoverImageUrl}" Aspect="AspectFill" HeightRequest="140" BackgroundColor="#152033" />
+                                <ImageButton Source="whatsapp.svg"
+                                             WidthRequest="44"
+                                             HeightRequest="44"
+                                             Aspect="AspectFit"
+                                             BackgroundColor="Transparent"
+                                             Margin="10"
+                                             HorizontalOptions="End"
+                                             VerticalOptions="Start"
+                                             IsVisible="{Binding HasWhatsApp}"
+                                             Command="{Binding BindingContext.ChatOwnerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                             CommandParameter="{Binding .}"
+                                             SemanticProperties.Description="Chat with ground owner on WhatsApp" />
+                                <VerticalStackLayout Grid.Row="1" Padding="14" Spacing="4">
+                                    <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="16" TextColor="{StaticResource Primary}" />
+                                    <Label Text="{Binding LocationLine}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding RateLabel}" FontSize="13" TextColor="{StaticResource Secondary}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Button Grid.Row="2"
+                Text="Register As Ground Owner"
+                FontAttributes="Bold"
+                FontSize="16"
+                HeightRequest="48"
+                BackgroundColor="#D4AF37"
+                TextColor="#0D1B2A"
+                CornerRadius="12"
+                IsVisible="{Binding ShowRegisterOwner}"
+                Command="{Binding OpenRegisterPopupCommand}" />
+    </Grid>
+
+    <Grid IsVisible="{Binding ShowRegisterPopup}" ZIndex="40">
+        <BoxView Color="#E60D1B2A">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseRegisterPopupCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Border StrokeThickness="0"
+                BackgroundColor="#152033"
+                Padding="22"
+                Margin="24"
+                VerticalOptions="Center"
+                HorizontalOptions="Fill"
+                StrokeShape="RoundRectangle 18">
+            <ScrollView MaximumHeightRequest="560">
+            <VerticalStackLayout Spacing="12">
+                <Label Text="List Your Ground on Cric360"
+                       FontSize="20"
+                       FontAttributes="Bold"
+                       TextColor="#D4AF37"
+                       LineBreakMode="WordWrap" />
+                <Label Text="Put your cricket ground in front of captains, leagues, and players looking to book. Cric360 handles listings, rates, and booking requests — you confirm and host."
+                       FontSize="14"
+                       TextColor="#E8EEF5"
+                       LineBreakMode="WordWrap" />
+                <Label Text="Share your ground name, city, and WhatsApp. Our team will set you up as a Ground Owner."
+                       FontSize="13"
+                       TextColor="#B8C4D4"
+                       LineBreakMode="WordWrap" />
+
+                <Border StrokeThickness="0"
+                        BackgroundColor="#0F1A28"
+                        Padding="14"
+                        StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="12">
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding WhatsAppRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="WhatsApp" FontSize="11" FontAttributes="Bold" TextColor="#8899AA" />
+                            <Label Text="0322 2857730" FontSize="16" FontAttributes="Bold" TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding EmailRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="Email" FontSize="11" FontAttributes="Bold" TextColor="#8899AA" />
+                            <Label Text="official.cric360@gmail.com"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding FacebookRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="Facebook" FontSize="11" FontAttributes="Bold" TextColor="#8899AA" />
+                            <Label Text="Official.Cric360" FontSize="15" FontAttributes="Bold" TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding InstagramRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="Instagram" FontSize="11" FontAttributes="Bold" TextColor="#8899AA" />
+                            <Label Text="@official.cric360" FontSize="15" FontAttributes="Bold" TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding TikTokRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="TikTok" FontSize="11" FontAttributes="Bold" TextColor="#8899AA" />
+                            <Label Text="@official.cric360" FontSize="15" FontAttributes="Bold" TextColor="#B6FF3B" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding YouTubeRegisterCommand}" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <Label Text="YouTube" FontSize="11" FontAttributes="Bold" TextColor="#8899AA" />
+                            <Label Text="cric360 Cricket Scoring"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   TextColor="#B6FF3B"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border StrokeThickness="0"
+                        BackgroundColor="#243447"
+                        Padding="12"
+                        StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Introductory offer"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="#D4AF37" />
+                        <Label Text="Registration is free for the first 6 months. After that, continue with a monthly or yearly subscription."
+                               FontSize="13"
+                               TextColor="#B8C4D4"
+                               LineBreakMode="WordWrap" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Button Text="WhatsApp Cric360"
+                        FontAttributes="Bold"
+                        FontSize="15"
+                        HeightRequest="46"
+                        BackgroundColor="#25D366"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding WhatsAppRegisterCommand}" />
+                <Button Text="Email Cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#243447"
+                        TextColor="#B6FF3B"
+                        CornerRadius="12"
+                        Command="{Binding EmailRegisterCommand}" />
+                <Button Text="Facebook — Official.Cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#1877F2"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding FacebookRegisterCommand}" />
+                <Button Text="Instagram — @official.cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#C13584"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding InstagramRegisterCommand}" />
+                <Button Text="TikTok — @official.cric360"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#111111"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding TikTokRegisterCommand}" />
+                <Button Text="YouTube — cric360 Cricket Scoring"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="#FF0000"
+                        TextColor="White"
+                        CornerRadius="12"
+                        Command="{Binding YouTubeRegisterCommand}" />
+                <Button Text="Close"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        HeightRequest="44"
+                        BackgroundColor="Transparent"
+                        TextColor="#B8C4D4"
+                        BorderColor="#5A6A7A"
+                        BorderWidth="1"
+                        CornerRadius="12"
+                        Command="{Binding CloseRegisterPopupCommand}" />
+            </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+    </Grid>
+    </Grid>
+</ContentPage>

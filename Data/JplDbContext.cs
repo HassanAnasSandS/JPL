@@ -65,7 +65,11 @@ public sealed class JplDbContext : DbContext
                 continue;
             if (entry.Entity is ILeagueScoped scoped && scoped.LeagueId == Guid.Empty)
                 scoped.LeagueId = leagueId;
-            if (entry.Entity is AppUser user && user.LeagueId is null && user.Role != AppRole.SuperAdmin)
+            if (entry.Entity is AppUser user && user.LeagueId is null
+                && user.Role != AppRole.SuperAdmin
+                && user.Role != AppRole.GroundOwner
+                && user.Role != AppRole.PublicUser
+                && user.Role != AppRole.Guest)
                 user.LeagueId = leagueId;
         }
     }
@@ -83,6 +87,7 @@ public sealed class JplDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Username).HasMaxLength(64).IsRequired();
             e.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
+            e.Property(x => x.WhatsAppNumber).HasMaxLength(30);
             e.HasIndex(x => x.Username).IsUnique();
             e.HasIndex(x => x.LeagueId);
             e.Ignore(x => x.LeagueName);

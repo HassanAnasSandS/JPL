@@ -1,0 +1,467 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             x:Class="JPL.Pages.OwnerGroundEditPage"
+             x:Name="ThisPage"
+             x:DataType="vm:OwnerGroundEditViewModel"
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
+    <ContentPage.Resources>
+        <Style x:Key="GroundTab" TargetType="Button">
+            <Setter Property="FontSize" Value="{OnIdiom Phone=12, Default=13}" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="MinimumHeightRequest" Value="{OnIdiom Phone=32, Default=36}" />
+            <Setter Property="BackgroundColor" Value="#E8EEF5" />
+            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+            <Setter Property="Padding">
+                <Setter.Value>
+                    <OnIdiom x:TypeArguments="Thickness" Phone="10,5" Default="14,6" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ContentPage.Resources>
+
+    <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="10">
+        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout Spacing="6">
+                <ctrl:TabChipButton Text="General"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectGeneralTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsGeneralTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Location"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectLocationTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenLocationTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsLocationTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Booking"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectBookingTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenBookingTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBookingTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Amenities"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectAmenitiesTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenAmenitiesTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsAmenitiesTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Services"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectServicesTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenServicesTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsServicesTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Gallery"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectGalleryTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenGalleryTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsGalleryTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Listing"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectListingTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenListingTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsListingTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout>
+                <VerticalStackLayout IsVisible="{Binding IsGeneralTab}" Spacing="12">
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="Ground name *" Text="{Binding Name}" />
+                        <Label Text="{Binding NameError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasNameError}" />
+                    </VerticalStackLayout>
+                    <Editor Placeholder="Description" Text="{Binding Description}" HeightRequest="80" />
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="Phone * (03XX XXXXXXX)" Text="{Binding ContactPhone}" Keyboard="Telephone" MaxLength="16" />
+                        <Label Text="{Binding PhoneError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasPhoneError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="WhatsApp * (03XX XXXXXXX)" Text="{Binding WhatsAppNumber}" Keyboard="Telephone" MaxLength="16" />
+                        <Label Text="{Binding WhatsAppError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasWhatsAppError}" />
+                    </VerticalStackLayout>
+                    <Label Text="Links" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Website, Facebook, Instagram, or any web page. Optional — tap Add for each link."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Links}" Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GroundLinkEdit">
+                                <Border Style="{StaticResource CardBorder}" Padding="12">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Entry Placeholder="Label (Facebook, Website…)"
+                                                   Text="{Binding Title}"
+                                                   MaxLength="80" />
+                                            <Button Grid.Column="1"
+                                                    Text="Remove"
+                                                    FontSize="11"
+                                                    Padding="8,4"
+                                                    Style="{StaticResource GhostButton}"
+                                                    Command="{Binding BindingContext.RemoveLinkCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                        </Grid>
+                                        <Entry Placeholder="https://…"
+                                               Text="{Binding Url}"
+                                               Keyboard="Url"
+                                               MaxLength="500" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Button Text="+ Add link"
+                            Style="{StaticResource GhostButton}"
+                            Command="{Binding AddLinkCommand}"
+                            IsEnabled="{Binding CanAddLink}" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsLocationTab}" Spacing="12">
+                    <Label Text="Google Maps location *" Style="{StaticResource SectionLabel}" />
+                    <VerticalStackLayout Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Editor Placeholder="Paste Google Maps link (Share → Copy link)"
+                                    Text="{Binding GoogleMapsUrl}"
+                                    AutoSize="TextChanges"
+                                    MinimumHeightRequest="64" />
+                            <Grid Grid.Column="1"
+                                  WidthRequest="100"
+                                  HeightRequest="48"
+                                  VerticalOptions="Start">
+                                <Button Text="{Binding FetchLabel}"
+                                        Style="{StaticResource GoldButton}"
+                                        Padding="12,0"
+                                        Command="{Binding FetchCommand}" />
+                                <ActivityIndicator IsRunning="{Binding IsFetching}"
+                                                   IsVisible="{Binding IsFetching}"
+                                                   Color="{StaticResource Primary}"
+                                                   WidthRequest="24"
+                                                   HeightRequest="24"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center"
+                                                   InputTransparent="True" />
+                            </Grid>
+                        </Grid>
+                        <Label Text="{Binding MapsFetchError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasMapsFetchError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="Postal code *" Text="{Binding PostalCode}" Keyboard="Numeric" MaxLength="5" />
+                        <Label Text="{Binding PostalError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasPostalError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="Country *" Text="{Binding CountryName}" />
+                        <Label Text="{Binding CountryError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasCountryError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="State / province *" Text="{Binding StateName}" />
+                        <Label Text="{Binding StateError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasStateError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="City *" Text="{Binding CityName}" />
+                        <Label Text="{Binding CityError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasCityError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="Area *" Text="{Binding AreaName}" />
+                        <Label Text="{Binding AreaError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasAreaError}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="4">
+                        <Entry Placeholder="Street / ground address *" Text="{Binding AddressLine}" />
+                        <Label Text="{Binding AddressError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12"
+                               LineBreakMode="WordWrap"
+                               IsVisible="{Binding HasAddressError}" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsBookingTab}" Spacing="12">
+                    <Label Text="Name, duration, and rates. Enable types you offer. Weekday / day is required. Night and weekend are optional. Duration 1 hour is billed hourly; longer duration is a package price for that slot."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <Label Text="Night hours" Style="{StaticResource SectionLabel}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="Night from" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                            <Picker Title="Night from"
+                                    ItemsSource="{Binding NightStartOptions}"
+                                    ItemDisplayBinding="{Binding Label}"
+                                    SelectedItem="{Binding SelectedNightStart}" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label Text="Night end" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                            <Picker Title="Night end"
+                                    ItemsSource="{Binding NightEndOptions}"
+                                    ItemDisplayBinding="{Binding Label}"
+                                    SelectedItem="{Binding SelectedNightEnd}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding BookingOffers}" Spacing="10">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BookingOfferEdit">
+                                <Border Style="{StaticResource CardBorder}" Padding="12">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                            <CheckBox IsChecked="{Binding IsEnabled}" VerticalOptions="Center" />
+                                            <Entry Grid.Column="1"
+                                                   Placeholder="Type name * (Hourly, Match, …)"
+                                                   Text="{Binding Title}"
+                                                   FontAttributes="Bold" />
+                                            <Button Grid.Column="2"
+                                                    Text="Remove"
+                                                    FontSize="11"
+                                                    Padding="8,4"
+                                                    Style="{StaticResource GhostButton}"
+                                                    Command="{Binding BindingContext.RemoveBookingTypeCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                        </Grid>
+                                        <Entry Placeholder="Duration (hours) *"
+                                               Text="{Binding DurationHoursText}"
+                                               Keyboard="Numeric"
+                                               IsReadOnly="{Binding IsDurationReadOnly}" />
+                                        <Entry Placeholder="Weekday / day (PKR) *"
+                                               Text="{Binding PriceText}"
+                                               Keyboard="Numeric" />
+                                        <Entry Placeholder="Night (PKR, optional)"
+                                               Text="{Binding NightPriceText}"
+                                               Keyboard="Numeric" />
+                                        <Entry Placeholder="Weekend (PKR, optional)"
+                                               Text="{Binding WeekendPriceText}"
+                                               Keyboard="Numeric" />
+                                        <Entry Placeholder="Weekend night (PKR, optional)"
+                                               Text="{Binding WeekendNightPriceText}"
+                                               Keyboard="Numeric" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Button Text="+ Add booking type"
+                            Style="{StaticResource GhostButton}"
+                            Command="{Binding AddBookingTypeCommand}" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsAmenitiesTab}" Spacing="12">
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding AmenityOptions}" Spacing="2">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AmenityChoice">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,2">
+                                    <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Code}"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="2"
+                                            Text="Remove"
+                                            FontSize="11"
+                                            Padding="8,4"
+                                            Style="{StaticResource GhostButton}"
+                                            IsVisible="{Binding IsCustom}"
+                                            Command="{Binding BindingContext.RemoveAmenityCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry Placeholder="Type your own (e.g. First aid, Changing rooms)"
+                               Text="{Binding CustomAmenity}"
+                               MaxLength="80"
+                               ReturnCommand="{Binding AddAmenityCommand}" />
+                        <Button Grid.Column="1"
+                                Text="Add"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding AddAmenityCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsServicesTab}" Spacing="12">
+                    <Label Text="These can be extra paid items, or 0 PKR if you offer them free. Amenities stay free."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServiceOptions}" Spacing="2">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ServiceChoice">
+                                <Grid ColumnDefinitions="Auto,*,90,Auto" ColumnSpacing="8" Padding="0,2">
+                                    <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Code}"
+                                           VerticalOptions="Center" />
+                                    <Entry Grid.Column="2"
+                                           Placeholder="PKR"
+                                           Text="{Binding AmountText}"
+                                           Keyboard="Numeric"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="3"
+                                            Text="Remove"
+                                            FontSize="11"
+                                            Padding="8,4"
+                                            Style="{StaticResource GhostButton}"
+                                            IsVisible="{Binding IsCustom}"
+                                            Command="{Binding BindingContext.RemoveServiceCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Grid ColumnDefinitions="*,90,Auto" ColumnSpacing="8">
+                        <Entry Placeholder="Type your own (e.g. Water bottles)"
+                               Text="{Binding CustomService}"
+                               MaxLength="40"
+                               ReturnCommand="{Binding AddServiceCommand}" />
+                        <Entry Grid.Column="1"
+                               Placeholder="PKR"
+                               Text="{Binding CustomServiceAmount}"
+                               Keyboard="Numeric"
+                               ReturnCommand="{Binding AddServiceCommand}" />
+                        <Button Grid.Column="2"
+                                Text="Add"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding AddServiceCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsGalleryTab}" Spacing="12">
+                    <Label Text="{Binding PhotoSummary}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                    <Button Text="Add photos"
+                            Style="{StaticResource GhostButton}"
+                            Command="{Binding AddPhotosCommand}"
+                            IsEnabled="{Binding CanAddMore}" />
+                    <FlexLayout BindableLayout.ItemsSource="{Binding Photos}"
+                                IsVisible="{Binding HasPhotos}"
+                                Wrap="Wrap"
+                                Direction="Row"
+                                JustifyContent="Start"
+                                AlignItems="Start">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GroundPhotoItem">
+                                <VerticalStackLayout WidthRequest="112" Spacing="6" Margin="0,0,8,10">
+                                    <Border StrokeShape="RoundRectangle 10"
+                                            StrokeThickness="0"
+                                            BackgroundColor="#152033">
+                                        <Image Source="{Binding Preview}"
+                                               HeightRequest="96"
+                                               Aspect="AspectFill" />
+                                    </Border>
+                                    <Button Text="Remove"
+                                            FontSize="11"
+                                            Padding="8,4"
+                                            Style="{StaticResource GhostButton}"
+                                            Command="{Binding BindingContext.DeletePhotoCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </VerticalStackLayout>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </FlexLayout>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsListingTab}" Spacing="12">
+                    <Label Text="Listing / Status" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Draft stays off public search. Publish only after Location and Booking are saved."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <Picker Title="Listing"
+                            ItemsSource="{Binding ListingOptions}"
+                            SelectedItem="{Binding SelectedListing}" />
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <VerticalStackLayout Grid.Row="2" Spacing="8">
+            <Label Text="{Binding TabLockHint}"
+                   FontSize="12"
+                   TextColor="{StaticResource TextSecondary}"
+                   IsVisible="{Binding HasTabLockHint}" />
+            <Button Text="{Binding SaveButtonText}" Style="{StaticResource GoldButton}" Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

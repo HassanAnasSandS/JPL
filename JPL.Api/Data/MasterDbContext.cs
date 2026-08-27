@@ -29,6 +29,7 @@ public sealed class MasterDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Username).HasMaxLength(64).IsRequired();
             e.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
+            e.Property(x => x.WhatsAppNumber).HasMaxLength(30);
             e.HasIndex(x => x.Username).IsUnique();
             e.HasIndex(x => x.LeagueId);
         });

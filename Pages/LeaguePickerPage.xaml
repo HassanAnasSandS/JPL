@@ -37,7 +37,7 @@
                    FontSize="22"
                    HorizontalTextAlignment="Center"
                    CharacterSpacing="2" />
-            <Label Text="Choose a league to continue"
+            <Label Text="{Binding PickerSubtitle}"
                    TextColor="#B8C4D4"
                    FontSize="14"
                    HorizontalTextAlignment="Center" />
@@ -46,14 +46,21 @@
         <RefreshView Grid.Row="2"
                      IsRefreshing="{Binding IsBusy, Mode=OneWay}"
                      Command="{Binding LoadCommand}">
-            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None">
-                <CollectionView.ItemTemplate>
+            <ScrollView>
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Items}">
+                <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="vm:LeaguePickRow">
                         <Border StrokeThickness="0"
                                 BackgroundColor="#152033"
                                 Padding="12"
                                 Margin="0,0,0,10"
                                 StrokeShape="RoundRectangle 16">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsHome}" Value="True">
+                                    <Setter Property="StrokeThickness" Value="2" />
+                                    <Setter Property="Stroke" Value="#D4AF37" />
+                                </DataTrigger>
+                            </Border.Triggers>
                             <VerticalStackLayout Spacing="10">
                                 <Grid ColumnDefinitions="72,*" ColumnSpacing="14">
                                     <Grid.GestureRecognizers>
@@ -66,10 +73,25 @@
                                            WidthRequest="64"
                                            Aspect="AspectFill" />
                                     <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="4">
-                                        <Label Text="{Binding Name}"
-                                               TextColor="White"
-                                               FontAttributes="Bold"
-                                               FontSize="18" />
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Label Text="{Binding Name}"
+                                                   TextColor="White"
+                                                   FontAttributes="Bold"
+                                                   FontSize="18"
+                                                   VerticalOptions="Center"
+                                                   LineBreakMode="TailTruncation" />
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="#D4AF37"
+                                                    Padding="8,3"
+                                                    StrokeShape="RoundRectangle 8"
+                                                    VerticalOptions="Center"
+                                                    IsVisible="{Binding HasBadge}">
+                                                <Label Text="{Binding Badge}"
+                                                       TextColor="#0D1B2A"
+                                                       FontAttributes="Bold"
+                                                       FontSize="10" />
+                                            </Border>
+                                        </HorizontalStackLayout>
                                         <Border StrokeThickness="0"
                                                 BackgroundColor="#C62828"
                                                 Padding="8,3"
@@ -81,7 +103,7 @@
                                                    FontAttributes="Bold"
                                                    FontSize="11" />
                                         </Border>
-                                        <Label Text="Tap to open"
+                                        <Label Text="{Binding Hint}"
                                                TextColor="#8899AA"
                                                FontSize="12" />
                                     </VerticalStackLayout>
@@ -114,8 +136,9 @@
                             </VerticalStackLayout>
                         </Border>
                     </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            </ScrollView>
         </RefreshView>
 
         <Label Grid.Row="3"

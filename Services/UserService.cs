@@ -6,7 +6,7 @@ public sealed record UserDraft(
     string Username,
     string? Password,
     AppRole Role,
-    Guid LeagueId,
+    Guid? LeagueId,
     bool IsActive = true);
 
 public interface IUserService
@@ -20,16 +20,19 @@ public interface IUserService
 }
 
 /// <summary>
-/// Users module is API-only (SQL Server). No local SQLite CRUD.
+/// Admin/User accounts: JPL.Api (jpl.shoptick.shop :5025).
+/// GroundOwner accounts: JPL.Grounds.Api (jplground.shoptick.shop :5026) writing the same Master Users table.
 /// </summary>
 public sealed class UserService : IUserService
 {
     private readonly IApiClient _api;
+    private readonly IGroundsApiClient _grounds;
     private readonly IAuthService _auth;
 
-    public UserService(IApiClient api, IAuthService auth)
+    public UserService(IApiClient api, IGroundsApiClient grounds, IAuthService auth)
     {
         _api = api;
+        _grounds = grounds;
         _auth = auth;
     }
 
@@ -54,8 +57,24 @@ public sealed class UserService : IUserService
         _auth.EnsureCanManageUsers();
         var username = RequireUsername(draft.Username);
         var password = RequirePassword(draft.Password);
-        if (draft.LeagueId == Guid.Empty)
+        if (draft.Role == AppRole.PublicUser)
+            throw new ArgumentException("Public users sign up from the login screen.");
+        if (draft.Role == AppRole.Guest)
+            throw new ArgumentException("Guest is a built-in account.");
+        if (draft.Role is not AppRole.GroundOwner
+            && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
             throw new ArgumentException("Select a league for this user.");
+
+        if (draft.Role == AppRole.GroundOwner)
+        {
+            var owner = await _grounds.CreateGroundOwnerAsync(new
+            {
+                username,
+                password,
+                isActive = draft.IsActive
+            }, ct).ConfigureAwait(false);
+            return ToEntity(owner);
+        }
 
         var remote = await _api.CreateUserAsync(new
         {
@@ -64,7 +83,9 @@ public sealed class UserService : IUserService
             password,
             role = draft.Role.ToString(),
             isActive = draft.IsActive,
-            leagueId = draft.LeagueId
+            leagueId = draft.Role is AppRole.GroundOwner or AppRole.PublicUser or AppRole.Guest
+                ? (Guid?)null
+                : draft.LeagueId
         }, ct).ConfigureAwait(false);
 
         return ToEntity(remote);
@@ -74,8 +95,20 @@ public sealed class UserService : IUserService
     {
         _auth.EnsureCanManageUsers();
         var username = RequireUsername(draft.Username);
-        if (draft.LeagueId == Guid.Empty)
+        if (draft.Role is not AppRole.GroundOwner and not AppRole.PublicUser and not AppRole.Guest
+            && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
             throw new ArgumentException("Select a league for this user.");
+
+        if (draft.Role == AppRole.GroundOwner)
+        {
+            var owner = await _grounds.UpdateGroundOwnerAsync(id, new
+            {
+                username,
+                password = string.IsNullOrWhiteSpace(draft.Password) ? null : draft.Password.Trim(),
+                isActive = draft.IsActive
+            }, ct).ConfigureAwait(false);
+            return ToEntity(owner);
+        }
 
         var remote = await _api.UpdateUserAsync(id, new
         {
@@ -84,7 +117,9 @@ public sealed class UserService : IUserService
             password = string.IsNullOrWhiteSpace(draft.Password) ? null : draft.Password.Trim(),
             role = draft.Role.ToString(),
             isActive = draft.IsActive,
-            leagueId = draft.LeagueId
+            leagueId = draft.Role is AppRole.GroundOwner or AppRole.PublicUser or AppRole.Guest
+                ? (Guid?)null
+                : draft.LeagueId
         }, ct).ConfigureAwait(false);
 
         return ToEntity(remote);
@@ -98,7 +133,7 @@ public sealed class UserService : IUserService
 
         await UpdateAsync(
                 id,
-                new UserDraft(user.Username, Password: null, user.Role, user.LeagueId ?? Guid.Empty, isActive),
+                new UserDraft(user.Username, Password: null, user.Role, user.LeagueId, isActive),
                 ct)
             .ConfigureAwait(false);
     }
@@ -108,6 +143,16 @@ public sealed class UserService : IUserService
         _auth.EnsureCanManageUsers();
         if (_auth.Current?.UserId == id)
             throw new InvalidOperationException("You cannot delete the account you are signed in with.");
+
+        var user = await GetAsync(id, ct).ConfigureAwait(false)
+                   ?? throw new InvalidOperationException("User not found.");
+        if (user.Role == AppRole.Guest || AppRoleLabels.IsGuestUsername(user.Username))
+            throw new InvalidOperationException("Cannot delete the Guest account.");
+        if (user.Role == AppRole.GroundOwner)
+        {
+            await _grounds.DeleteGroundOwnerAsync(id, ct).ConfigureAwait(false);
+            return;
+        }
 
         await _api.DeleteUserAsync(id, ct).ConfigureAwait(false);
     }

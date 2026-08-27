@@ -58,7 +58,10 @@ public sealed class SessionAuthMiddleware
             },
             authenticationType: "JplSession");
         if (user.LeagueId is Guid leagueId && leagueId != Guid.Empty)
+        {
             identity.AddClaim(new Claim("league_id", leagueId.ToString("D")));
+            context.Items["JplHomeLeagueId"] = leagueId;
+        }
         context.User = new ClaimsPrincipal(identity);
         context.Items["JplUserId"] = user.Id;
         context.Items["JplUsername"] = user.Username;
@@ -73,7 +76,8 @@ public sealed class SessionAuthMiddleware
             path.StartsWith("/api/health/", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase))
+        if (path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/api/auth/signup", StringComparison.OrdinalIgnoreCase))
             return true;
 
         if (path.StartsWith("/api/public/", StringComparison.OrdinalIgnoreCase))

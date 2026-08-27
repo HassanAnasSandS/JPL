@@ -4,7 +4,10 @@ public enum AppRole : byte
 {
     User = 0,
     Admin = 1,
-    SuperAdmin = 2
+    SuperAdmin = 2,
+    GroundOwner = 3,
+    PublicUser = 4,
+    Guest = 5
 }
 
 public sealed class League
@@ -25,6 +28,7 @@ public sealed class AppUser
     public string PasswordHash { get; set; } = string.Empty;
     public AppRole Role { get; set; } = AppRole.User;
     public Guid? LeagueId { get; set; }
+    public string? WhatsAppNumber { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
 }

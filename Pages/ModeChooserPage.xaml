@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.ModeChooserPage"
+             x:DataType="vm:ModeChooserViewModel"
+             Title="Cric360"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="#0D1B2A">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24,40" Spacing="18" MaximumWidthRequest="480" HorizontalOptions="Center">
+            <Image Source="cric360_logo.png" HeightRequest="110" Aspect="AspectFit" HorizontalOptions="Center" />
+            <Label Text="CRIC360"
+                   TextColor="#B6FF3B"
+                   FontAttributes="Bold"
+                   FontSize="22"
+                   HorizontalTextAlignment="Center"
+                   CharacterSpacing="2" />
+            <Label Text="Where do you want to go?"
+                   TextColor="#B8C4D4"
+                   FontSize="15"
+                   HorizontalTextAlignment="Center" />
+            <Label Text="{Binding SignedInLabel}"
+                   TextColor="#B6FF3B"
+                   FontSize="13"
+                   HorizontalTextAlignment="Center" />
+
+            <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Leagues" TextColor="White" FontAttributes="Bold" FontSize="20" />
+                    <Label Text="{Binding LeaguesSubtitle}"
+                           TextColor="#B8C4D4" FontSize="13" />
+                    <Button Text="Open Leagues"
+                            BackgroundColor="#B6FF3B"
+                            TextColor="#0D1B2A"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="48"
+                            Command="{Binding ChooseLeaguesCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Grounds" TextColor="White" FontAttributes="Bold" FontSize="20" />
+                    <Label Text="{Binding GroundsSubtitle}"
+                           TextColor="#B8C4D4" FontSize="13" />
+                    <Button Text="{Binding GroundsButton}"
+                            BackgroundColor="#B6FF3B"
+                            TextColor="#0D1B2A"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="48"
+                            Command="{Binding ChooseGroundsCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0"
+                    BackgroundColor="#152033"
+                    Padding="18"
+                    StrokeShape="RoundRectangle 16"
+                    IsVisible="{Binding ShowUsersOption}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Users" TextColor="White" FontAttributes="Bold" FontSize="20" />
+                    <Label Text="Create and manage League Admin, League User, and Ground Owner accounts."
+                           TextColor="#B8C4D4" FontSize="13" />
+                    <Button Text="Open Users"
+                            BackgroundColor="#B6FF3B"
+                            TextColor="#0D1B2A"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="48"
+                            Command="{Binding ChooseUsersCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0"
+                    BackgroundColor="#152033"
+                    Padding="18"
+                    StrokeShape="RoundRectangle 16"
+                    IsVisible="{Binding ShowSettingsOption}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Settings" TextColor="White" FontAttributes="Bold" FontSize="20" />
+                    <Label Text="Ground amenities and paid services that owners pick when listing a ground."
+                           TextColor="#B8C4D4" FontSize="13" />
+                    <Button Text="Open Settings"
+                            BackgroundColor="#B6FF3B"
+                            TextColor="#0D1B2A"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="48"
+                            Command="{Binding ChooseSettingsCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Logout"
+                    BackgroundColor="Transparent"
+                    TextColor="#B6FF3B"
+                    BorderColor="#B6FF3B"
+                    BorderWidth="1.5"
+                    CornerRadius="12"
+                    HeightRequest="44"
+                    Command="{Binding LogoutCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

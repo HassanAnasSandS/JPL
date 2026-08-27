@@ -25,6 +25,20 @@ public static class MauiProgram
             })
             .ConfigureMauiHandlers(handlers =>
             {
+                Microsoft.Maui.Handlers.ButtonHandler.Mapper.AppendToMapping(
+                    "AppBusyClick",
+                    static (_, view) =>
+                    {
+                        if (view is Button button)
+                            AppBusyClicks.Attach(button);
+                    });
+                Microsoft.Maui.Handlers.ImageButtonHandler.Mapper.AppendToMapping(
+                    "AppBusyClick",
+                    static (_, view) =>
+                    {
+                        if (view is ImageButton button)
+                            AppBusyClicks.Attach(button);
+                    });
 #if ANDROID
                 Microsoft.Maui.Handlers.ToolbarHandler.Mapper.AppendToMapping(
                     "JplToolbarTitlePad",
@@ -123,6 +137,7 @@ public static class MauiProgram
             });
 
         builder.Services.AddSingleton<ILeagueContext, LeagueContext>();
+        builder.Services.AddSingleton<IAppWorkspace, AppWorkspaceStore>();
         builder.Services.AddDbContextFactory<JplDbContext>((_, options) =>
         {
             options.ConfigureSqlite();
@@ -139,7 +154,11 @@ public static class MauiProgram
         {
             // Same hosted API for all platforms (Windows DEBUG used to hit localhost:5025,
             // while Android already used production — phones worked, Windows looked "offline").
-            options.BaseUrl = "https://jpl.shoptick.shop/";
+            options.BaseUrl = Cric360Hosts.LeagueApi;
+        });
+        builder.Services.Configure<GroundsApiOptions>(options =>
+        {
+            options.BaseUrl = Cric360Hosts.GroundsApi;
         });
 
         builder.Services.AddTransient<AuthHttpMessageHandler>();
@@ -152,7 +171,16 @@ public static class MauiProgram
             client.Timeout = TimeSpan.FromSeconds(15);
         }).AddHttpMessageHandler<AuthHttpMessageHandler>();
 
+        builder.Services.AddHttpClient(GroundsApiOptions.HttpClientName, (sp, client) =>
+        {
+            var baseUrl = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GroundsApiOptions>>().Value.BaseUrl
+                .TrimEnd('/') + "/";
+            client.BaseAddress = new Uri(baseUrl);
+            client.Timeout = TimeSpan.FromSeconds(20);
+        }).AddHttpMessageHandler<AuthHttpMessageHandler>();
+
         builder.Services.AddSingleton<IApiClient, ApiClient>();
+        builder.Services.AddSingleton<IGroundsApiClient, GroundsApiClient>();
         builder.Services.AddSingleton<ISqlServerSyncClient, HttpSyncClient>();
 
         builder.Services.AddSingleton<IOutboxWriter, OutboxWriter>();
@@ -184,6 +212,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFormatService, FormatService>();
 
         builder.Services.AddTransient<LoginViewModel>();
+        builder.Services.AddTransient<ModeChooserViewModel>();
         builder.Services.AddTransient<LeaguePickerViewModel>();
         builder.Services.AddSingleton<LeaguesViewModel>();
         builder.Services.AddTransient<LeagueEditViewModel>();
@@ -221,8 +250,19 @@ public static class MauiProgram
         builder.Services.AddSingleton<SeriesListViewModel>();
         builder.Services.AddTransient<SeriesEditViewModel>();
         builder.Services.AddTransient<SeriesDetailViewModel>();
+        builder.Services.AddTransient<GroundDiscoverViewModel>();
+        builder.Services.AddTransient<GroundDetailViewModel>();
+        builder.Services.AddTransient<GroundBookRequestViewModel>();
+        builder.Services.AddTransient<CustomerBookingsViewModel>();
+        builder.Services.AddTransient<OwnerGroundsViewModel>();
+        builder.Services.AddTransient<OwnerGroundEditViewModel>();
+        builder.Services.AddTransient<OwnerBookingsViewModel>();
+        builder.Services.AddTransient<OwnerBookingEditViewModel>();
+        builder.Services.AddTransient<OwnerAvailabilityViewModel>();
+        builder.Services.AddTransient<GroundSettingsViewModel>();
 
         builder.Services.AddTransient<LoginPage>();
+        builder.Services.AddTransient<ModeChooserPage>();
         builder.Services.AddTransient<LeaguePickerPage>();
         builder.Services.AddTransient<LeaguesPage>();
         builder.Services.AddTransient<LeagueEditPage>();
@@ -260,6 +300,16 @@ public static class MauiProgram
         builder.Services.AddTransient<SeriesPage>();
         builder.Services.AddTransient<SeriesEditPage>();
         builder.Services.AddTransient<SeriesDetailPage>();
+        builder.Services.AddTransient<GroundDiscoverPage>();
+        builder.Services.AddTransient<GroundDetailPage>();
+        builder.Services.AddTransient<GroundBookRequestPage>();
+        builder.Services.AddTransient<CustomerBookingsPage>();
+        builder.Services.AddTransient<OwnerGroundsPage>();
+        builder.Services.AddTransient<OwnerGroundEditPage>();
+        builder.Services.AddTransient<OwnerBookingsPage>();
+        builder.Services.AddTransient<OwnerBookingEditPage>();
+        builder.Services.AddTransient<OwnerAvailabilityPage>();
+        builder.Services.AddTransient<GroundSettingsPage>();
         builder.Services.AddTransient<AppShell>();
 
 #if DEBUG

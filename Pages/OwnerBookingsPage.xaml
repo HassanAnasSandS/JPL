@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.OwnerBookingsPage"
+             x:Name="ThisPage"
+             x:DataType="vm:OwnerBookingsViewModel"
+             Title="Bookings">
+    <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}" Padding="14">
+        <CollectionView ItemsSource="{Binding Items}"
+                        RemainingItemsThreshold="4"
+                        RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
+                        EmptyView="{Binding ErrorMessage}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="svc:GroundBookingDto">
+                    <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <VerticalStackLayout Spacing="4">
+                                <VerticalStackLayout.GestureRecognizers>
+                                    <TapGestureRecognizer
+                                        Command="{Binding BindingContext.OpenCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                        CommandParameter="{Binding .}" />
+                                </VerticalStackLayout.GestureRecognizers>
+                                <Label Text="{Binding GroundName}" FontAttributes="Bold" FontSize="16" />
+                                <Label Text="{Binding CustomerName}" FontSize="13" />
+                                <Label Text="{Binding WhenLabel}" FontSize="13" />
+                                <Label Text="{Binding Status}" TextColor="{StaticResource Secondary}" />
+                                <Label Text="{Binding MoneyLabel}" FontSize="12" />
+                                <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                            </VerticalStackLayout>
+                            <ImageButton Grid.Column="1"
+                                         Source="whatsapp.svg"
+                                         WidthRequest="44"
+                                         HeightRequest="44"
+                                         Aspect="AspectFit"
+                                         BackgroundColor="Transparent"
+                                         VerticalOptions="Center"
+                                         IsVisible="{Binding HasCustomerWhatsApp}"
+                                         Command="{Binding BindingContext.ChatCustomerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                         CommandParameter="{Binding .}"
+                                         SemanticProperties.Description="Chat with customer on WhatsApp" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </RefreshView>
+</ContentPage>

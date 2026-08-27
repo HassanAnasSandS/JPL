@@ -18,7 +18,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Api",
-        version = "1.8",
+        version = "1.9",
         time = DateTime.Now
     });
 }
@@ -39,24 +39,63 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
     {
         var username = request.Username?.Trim() ?? string.Empty;
         if (username.Length == 0 || string.IsNullOrEmpty(request.Password))
-            return Unauthorized();
+            return Unauthorized(new { code = "missing_credentials", message = "Enter your username and password." });
 
         var user = await _db.Users.AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Username == username && u.IsActive, ct)
+            .FirstOrDefaultAsync(u => u.Username == username, ct)
             .ConfigureAwait(false);
 
-        if (user is null)
-            return Unauthorized();
+        if (user is null || !user.IsActive)
+            return Unauthorized(new { code = "user_not_found", message = "This user does not exist." });
 
         var result = _hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (result == PasswordVerificationResult.Failed)
-            return Unauthorized();
+            return Unauthorized(new { code = "wrong_password", message = "Password is not correct." });
 
         // Lightweight opaque token for mobile clients (persist on device until logout).
         // Format: {opaque}.{userId:N} — middleware re-validates user IsActive on every API call.
         var token = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + "." + user.Id.ToString("N");
-        var needsPicker = user.LeagueId is null;
+        var needsPicker = user.Role is not AppRole.GroundOwner
+                          and not AppRole.PublicUser
+                          and not AppRole.Guest
+                          && user.LeagueId is null;
         return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, user.LeagueId, needsPicker));
+    }
+
+    [HttpPost("signup")]
+    public async Task<ActionResult<LoginResponse>> Signup([FromBody] SignupRequest request, CancellationToken ct)
+    {
+        var username = request.Username?.Trim() ?? string.Empty;
+        if (username.Length == 0)
+            return BadRequest("Name is required.");
+        if (username.Length > 64)
+            return BadRequest("Name must be 64 characters or fewer.");
+        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Trim().Length < 4)
+            return BadRequest("Password must be at least 4 characters.");
+        var whatsApp = request.WhatsApp;
+        if (!PakistanWhatsApp.TryNormalize(whatsApp, out var normalizedWhatsApp))
+            return BadRequest(PakistanWhatsApp.RequiredError);
+
+        if (await _db.Users.AsNoTracking().AnyAsync(u => u.Username == username, ct).ConfigureAwait(false))
+            return BadRequest($"Username \"{username}\" already exists.");
+        if (string.Equals(username, "user", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("That name is reserved.");
+
+        var user = new AppUser
+        {
+            Username = username,
+            Role = AppRole.PublicUser,
+            LeagueId = null,
+            WhatsAppNumber = normalizedWhatsApp,
+            IsActive = true,
+            CreatedAtUtc = DateTime.Now
+        };
+        user.PasswordHash = _hasher.HashPassword(user, request.Password.Trim());
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        var token = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + "." + user.Id.ToString("N");
+        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, null, false));
     }
 
     /// <summary>Current session user (requires Bearer token; inactive/deleted → 401 from middleware).</summary>
@@ -73,7 +112,11 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
             return Unauthorized();
 
         Guid? leagueId = Guid.TryParse(leagueText, out var lid) && lid != Guid.Empty ? lid : null;
-        return Ok(new LoginResponse(userId, username, role, string.Empty, leagueId, NeedsLeaguePicker: leagueId is null));
+        var needsPicker = !string.Equals(role, nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(role, nameof(AppRole.PublicUser), StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(role, nameof(AppRole.Guest), StringComparison.OrdinalIgnoreCase)
+                          && leagueId is null;
+        return Ok(new LoginResponse(userId, username, role, string.Empty, leagueId, NeedsLeaguePicker: needsPicker));
     }
 }
 
@@ -134,13 +177,26 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             return Forbid();
         if (!TryValidateUser(request, requirePassword: true, out var username, out var role, out var error))
             return BadRequest(error);
+        if (role == AppRole.PublicUser)
+            return BadRequest("Public users sign up from the login screen.");
+        if (role == AppRole.Guest)
+            return BadRequest("Guest is a built-in system account.");
 
         if (await UsernameTakenAsync(username, null, ct).ConfigureAwait(false))
             return BadRequest($"Username \"{username}\" already exists.");
 
-        var leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
-        if (leagueId is null)
-            return BadRequest("Select a league for this user.");
+        Guid? leagueId = null;
+        if (role == AppRole.PublicUser)
+            leagueId = null;
+        else if (role != AppRole.GroundOwner)
+        {
+            leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
+            if (leagueId is null)
+                return BadRequest("Select a league for this user.");
+        }
+
+        if (!PakistanWhatsApp.TryNormalizeOptional(request.WhatsAppNumber, out var whatsApp))
+            return BadRequest(PakistanWhatsApp.InvalidError);
 
         var user = new AppUser
         {
@@ -148,6 +204,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             Username = username,
             Role = role,
             LeagueId = leagueId,
+            WhatsAppNumber = whatsApp,
             IsActive = request.IsActive,
             CreatedAtUtc = DateTime.Now
         };
@@ -173,13 +230,32 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
         if (await UsernameTakenAsync(username, id, ct).ConfigureAwait(false))
             return BadRequest($"Username \"{username}\" already exists.");
 
-        var leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
-        if (leagueId is null)
-            return BadRequest("Select a league for this user.");
+        var isGuestAccount = user.Role == AppRole.Guest
+                             || string.Equals(user.Username, "user", StringComparison.OrdinalIgnoreCase);
+        if (isGuestAccount)
+        {
+            username = "user";
+            role = AppRole.Guest;
+        }
+        else if (role == AppRole.Guest)
+            return BadRequest("Guest is a built-in system account.");
+
+        Guid? leagueId = null;
+        if (role is AppRole.PublicUser or AppRole.Guest)
+            leagueId = null;
+        else if (role != AppRole.GroundOwner)
+        {
+            leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
+            if (leagueId is null)
+                return BadRequest("Select a league for this user.");
+        }
 
         user.Username = username;
         user.Role = role;
         user.LeagueId = leagueId;
+        if (!PakistanWhatsApp.TryNormalizeOptional(request.WhatsAppNumber, out var whatsApp))
+            return BadRequest(PakistanWhatsApp.InvalidError);
+        user.WhatsAppNumber = whatsApp ?? user.WhatsAppNumber;
         user.IsActive = request.IsActive;
         if (!string.IsNullOrWhiteSpace(request.Password))
             user.PasswordHash = _hasher.HashPassword(user, request.Password.Trim());
@@ -197,6 +273,8 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
         var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
         if (user is null || user.Role == AppRole.SuperAdmin)
             return NotFound();
+        if (user.Role == AppRole.Guest || string.Equals(user.Username, "user", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Cannot delete the Guest account.");
 
         if (user.LeagueId is Guid leagueId)
         {
@@ -258,9 +336,16 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
 
         var roleText = request.Role?.Trim() ?? string.Empty;
         if (!Enum.TryParse<AppRole>(roleText, ignoreCase: true, out role) ||
-            (role != AppRole.Admin && role != AppRole.User))
+            (role != AppRole.Admin && role != AppRole.User && role != AppRole.GroundOwner
+             && role != AppRole.PublicUser && role != AppRole.Guest))
         {
-            error = "Role must be Admin or User.";
+            error = "Role must be League Admin, League User, Ground Owner, Public User, or Guest.";
+            return false;
+        }
+
+        if (role == AppRole.Guest && !string.Equals(username, "user", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Guest is only the built-in continue-without-login account.";
             return false;
         }
 
@@ -315,7 +400,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
     }
 
     private static UserDto ToDto(AppUser u, string? leagueName = null)
-        => new(u.Id, u.Username, u.Role.ToString(), u.IsActive, u.CreatedAtUtc, u.LeagueId, leagueName);
+        => new(u.Id, u.Username, u.Role.ToString(), u.IsActive, u.CreatedAtUtc, u.LeagueId, leagueName, u.WhatsAppNumber);
 }
 
 [ApiController]
@@ -3481,9 +3566,25 @@ public sealed class VenueBookingsController : ControllerBase
         return userId != Guid.Empty && role.Length > 0;
     }
 
-    private static bool IsLeagueWriter(string role)
-        => string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase)
-           || IsSuperAdminRole(role);
+    private bool IsLeagueWriter(string role)
+    {
+        if (IsSuperAdminRole(role))
+            return true;
+        if (!string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!HttpContext.Items.TryGetValue("JplHomeLeagueId", out var homeObj)
+            || homeObj is not Guid home
+            || home == Guid.Empty)
+            return false;
+
+        if (HttpContext.Request.Headers.TryGetValue("X-League-Id", out var header)
+            && Guid.TryParse(header.ToString(), out var selected)
+            && selected != Guid.Empty)
+            return selected == home;
+
+        return true;
+    }
 
     private static bool IsSuperAdminRole(string role)
         => string.Equals(role, nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase);

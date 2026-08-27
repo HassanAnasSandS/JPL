@@ -13,6 +13,11 @@ public sealed class LeaguePickRow
     public ImageSource Image { get; init; } = "cric360_logo.png";
     public string LiveTag { get; init; } = string.Empty;
     public bool HasLive => !string.IsNullOrWhiteSpace(LiveTag);
+    public bool IsHome { get; init; }
+    public bool IsViewOnly { get; init; }
+    public string Badge { get; init; } = string.Empty;
+    public bool HasBadge => !string.IsNullOrWhiteSpace(Badge);
+    public string Hint { get; init; } = "Tap to open";
 }
 
 public partial class LeaguePickerViewModel : ObservableObject
@@ -24,13 +29,18 @@ public partial class LeaguePickerViewModel : ObservableObject
     private readonly IAuthService _auth;
 
     public ObservableCollection<LeaguePickRow> Items { get; } = new();
+    private int _loadGen;
 
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool canManageLeagues;
     [ObservableProperty] private bool showRegisterPopup;
+    [ObservableProperty] private bool hasHomeLeague;
 
     public bool ShowRegisterLeague => !CanManageLeagues;
+    public string PickerSubtitle => HasHomeLeague
+        ? "Your league is at the top. Other leagues are view only."
+        : "Choose a league to continue";
 
     public LeaguePickerViewModel(
         ILeagueService leagues,
@@ -51,9 +61,13 @@ public partial class LeaguePickerViewModel : ObservableObject
     partial void OnCanManageLeaguesChanged(bool value)
         => OnPropertyChanged(nameof(ShowRegisterLeague));
 
+    partial void OnHasHomeLeagueChanged(bool value)
+        => OnPropertyChanged(nameof(PickerSubtitle));
+
     [RelayCommand]
     public async Task LoadAsync()
     {
+        var gen = Interlocked.Increment(ref _loadGen);
         try
         {
             IsBusy = true;
@@ -61,17 +75,23 @@ public partial class LeaguePickerViewModel : ObservableObject
             CanManageLeagues = _auth.Current?.CanManageLeagues == true;
             OnPropertyChanged(nameof(ShowRegisterLeague));
             var list = await _leagues.GetAllAsync().ConfigureAwait(true);
+            if (gen != Volatile.Read(ref _loadGen))
+                return;
+
+            var homeId = _auth.Current?.HasHomeLeague == true ? _auth.Current.LeagueId : null;
+            var viewOthersReadOnly = homeId is Guid;
+            var rows = list
+                .DistinctBy(l => l.Id)
+                .Select(l => ToRow(l, isHome: homeId == l.Id, viewOthersReadOnly))
+                .OrderByDescending(r => r.IsHome)
+                .ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
             Items.Clear();
-            foreach (var l in list.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                Items.Add(new LeaguePickRow
-                {
-                    Id = l.Id,
-                    Name = l.Name,
-                    Image = LeagueImages.ToImageSource(l.ImageBytes),
-                    LiveTag = LiveTagFor(l)
-                });
-            }
+            foreach (var row in rows)
+                Items.Add(row);
+
+            HasHomeLeague = rows.Any(r => r.IsHome);
 
             if (Items.Count == 0)
                 ErrorMessage = CanManageLeagues
@@ -80,12 +100,34 @@ public partial class LeaguePickerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            if (gen == Volatile.Read(ref _loadGen))
+                ErrorMessage = ex.Message;
         }
         finally
         {
-            IsBusy = false;
+            if (gen == Volatile.Read(ref _loadGen))
+                IsBusy = false;
         }
+    }
+
+    private static LeaguePickRow ToRow(League l, bool isHome, bool viewOthersReadOnly)
+    {
+        var viewOnly = viewOthersReadOnly && !isHome;
+        return new LeaguePickRow
+        {
+            Id = l.Id,
+            Name = l.Name,
+            Image = LeagueImages.ToImageSource(l.ImageBytes),
+            LiveTag = LiveTagFor(l),
+            IsHome = isHome,
+            IsViewOnly = viewOnly,
+            Badge = isHome ? "Your league" : string.Empty,
+            Hint = isHome
+                ? "Tap to open your league"
+                : viewOnly
+                    ? "View only"
+                    : "Tap to open"
+        };
     }
 
     private static string LiveTagFor(League l)

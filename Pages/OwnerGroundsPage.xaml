@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.OwnerGroundsPage"
+             x:Name="ThisPage"
+             x:DataType="vm:OwnerGroundsViewModel"
+             Title="My Grounds">
+    <Grid RowDefinitions="Auto,*" Padding="14" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto">
+            <Label Text="My Grounds" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+            <Button Grid.Column="1" Text="+ Add" Style="{StaticResource GoldButton}" Command="{Binding AddCommand}" />
+        </Grid>
+        <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
+            <CollectionView ItemsSource="{Binding Items}"
+                            RemainingItemsThreshold="4"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
+                            EmptyView="{Binding ErrorMessage}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="svc:GroundCardDto">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="0">
+                            <Grid RowDefinitions="140,Auto">
+                                <Image Source="{Binding CoverImageUrl}" Aspect="AspectFill" HeightRequest="140" BackgroundColor="#152033" />
+                                <VerticalStackLayout Grid.Row="1" Padding="14" Spacing="4">
+                                    <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="16" />
+                                    <Label Text="{Binding LocationLine}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding RateLabel}" FontSize="13" TextColor="{StaticResource Secondary}" />
+                                    <HorizontalStackLayout Spacing="8" Margin="0,8,0,0">
+                                        <Button Text="View"
+                                                Padding="14,8"
+                                                FontSize="12"
+                                                Style="{StaticResource GhostButton}"
+                                                Command="{Binding BindingContext.ViewCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                CommandParameter="{Binding .}" />
+                                        <Button Text="Edit"
+                                                Padding="14,8"
+                                                FontSize="12"
+                                                Style="{StaticResource GoldButton}"
+                                                Command="{Binding BindingContext.EditCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                CommandParameter="{Binding .}" />
+                                        <Button Text="Delete"
+                                                Padding="14,8"
+                                                FontSize="12"
+                                                BackgroundColor="#B00020"
+                                                TextColor="White"
+                                                IsVisible="{Binding CanDelete}"
+                                                Command="{Binding BindingContext.DeleteCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                CommandParameter="{Binding .}" />
+                                    </HorizontalStackLayout>
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
+</ContentPage>

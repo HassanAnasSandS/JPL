@@ -20,22 +20,42 @@ public sealed class UserRow
     public string ToggleActiveLabel => IsActive ? "Deactivate" : "Activate";
 }
 
+public sealed class UserRoleOption
+{
+    public AppRole? Role { get; init; }
+    public string Name { get; init; } = string.Empty;
+}
+
 public partial class UsersViewModel : ObservableObject
 {
     private static readonly UserLeagueOption AllLeaguesOption = new() { Id = Guid.Empty, Name = "All leagues" };
+    private static readonly UserRoleOption AllRolesOption = new() { Role = null, Name = "All roles" };
+
+    private static readonly UserRoleOption[] RoleOptions =
+    [
+        AllRolesOption,
+        new() { Role = AppRole.User, Name = "League User" },
+        new() { Role = AppRole.Admin, Name = "League Admin" },
+        new() { Role = AppRole.GroundOwner, Name = "Ground Owner" },
+        new() { Role = AppRole.PublicUser, Name = "Public User" },
+        new() { Role = AppRole.Guest, Name = "Guest" }
+    ];
 
     private readonly IUserService _users;
     private readonly IAuthService _auth;
     private readonly IUsersModuleGate _gate;
     private readonly ILeagueService _leagues;
     private List<AppUser> _all = new();
+    private int _loadGen;
 
     public ObservableCollection<UserRow> Items { get; } = new();
     public ObservableCollection<UserLeagueOption> LeagueFilterOptions { get; } = new();
+    public ObservableCollection<UserRoleOption> RoleFilterOptions { get; } = new();
 
     /// <summary>0 = All, 1 = Active, 2 = Deactive</summary>
     [ObservableProperty] private int statusFilter;
     [ObservableProperty] private UserLeagueOption? selectedLeagueFilter;
+    [ObservableProperty] private UserRoleOption? selectedRoleFilter;
     [ObservableProperty] private bool isUnlocked;
     [ObservableProperty] private string modulePassword = string.Empty;
     [ObservableProperty] private string? unlockError;
@@ -53,10 +73,12 @@ public partial class UsersViewModel : ObservableObject
     public bool ShowLockPanel => !IsUnlocked;
 
     public bool HasActiveFilters =>
-        !string.IsNullOrWhiteSpace(NameFilter) || StatusFilter != 0 || HasLeagueFilter;
+        !string.IsNullOrWhiteSpace(NameFilter) || StatusFilter != 0 || HasLeagueFilter || HasRoleFilter;
 
     private bool HasLeagueFilter =>
         SelectedLeagueFilter is { } league && league.Id != Guid.Empty;
+
+    private bool HasRoleFilter => SelectedRoleFilter?.Role is not null;
 
     public bool IsAllFilter => StatusFilter == 0;
     public bool IsActiveFilter => StatusFilter == 1;
@@ -76,6 +98,9 @@ public partial class UsersViewModel : ObservableObject
         IsUnlocked = _gate.IsUnlocked;
         LeagueFilterOptions.Add(AllLeaguesOption);
         SelectedLeagueFilter = AllLeaguesOption;
+        foreach (var role in RoleOptions)
+            RoleFilterOptions.Add(role);
+        SelectedRoleFilter = AllRolesOption;
     }
 
     public void RefreshAuthState()
@@ -107,6 +132,12 @@ public partial class UsersViewModel : ObservableObject
     }
 
     partial void OnSelectedLeagueFilterChanged(UserLeagueOption? value)
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        ApplyFilters();
+    }
+
+    partial void OnSelectedRoleFilterChanged(UserRoleOption? value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
         ApplyFilters();
@@ -164,6 +195,7 @@ public partial class UsersViewModel : ObservableObject
             return;
         }
 
+        var gen = Interlocked.Increment(ref _loadGen);
         try
         {
             IsBusy = true;
@@ -171,13 +203,20 @@ public partial class UsersViewModel : ObservableObject
             CanWrite = _auth.Current?.CanManageUsers == true;
             IsUnlocked = true;
 
-            _all = (await _users.GetAllAsync().ConfigureAwait(true)).ToList();
+            var users = (await _users.GetAllAsync().ConfigureAwait(true)).ToList();
+            if (gen != Volatile.Read(ref _loadGen))
+                return;
+            _all = users;
             await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
+            if (gen != Volatile.Read(ref _loadGen))
+                return;
             RefreshCounts();
             ApplyFilters();
         }
         catch (Exception ex)
         {
+            if (gen != Volatile.Read(ref _loadGen))
+                return;
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — Users module needs internet / API."
                 : ex.Message;
@@ -185,12 +224,15 @@ public partial class UsersViewModel : ObservableObject
                 await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
             _all = new List<AppUser>();
             await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
+            if (gen != Volatile.Read(ref _loadGen))
+                return;
             RefreshCounts();
             ApplyFilters();
         }
         finally
         {
-            IsBusy = false;
+            if (gen == Volatile.Read(ref _loadGen))
+                IsBusy = false;
         }
     }
 
@@ -212,24 +254,33 @@ public partial class UsersViewModel : ObservableObject
         StatusFilter = 0;
         SelectedLeagueFilter = LeagueFilterOptions.FirstOrDefault(l => l.Id == Guid.Empty)
             ?? AllLeaguesOption;
+        SelectedRoleFilter = RoleFilterOptions.FirstOrDefault(r => r.Role is null)
+            ?? AllRolesOption;
     }
 
     private async Task LoadLeagueFilterOptionsAsync()
     {
         var previousId = SelectedLeagueFilter?.Id ?? Guid.Empty;
-        LeagueFilterOptions.Clear();
-        LeagueFilterOptions.Add(AllLeaguesOption);
-
+        IReadOnlyList<League> list = [];
         try
         {
-            var list = await _leagues.GetAllAsync().ConfigureAwait(true);
-            foreach (var league in list.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
-                LeagueFilterOptions.Add(new UserLeagueOption { Id = league.Id, Name = league.Name });
+            list = await _leagues.GetAllAsync().ConfigureAwait(true);
         }
         catch
         {
             // Keep All leagues even if catalog fetch fails; users still list by name search.
         }
+
+        var rows = list
+            .DistinctBy(l => l.Id)
+            .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(l => new UserLeagueOption { Id = l.Id, Name = l.Name })
+            .ToList();
+
+        LeagueFilterOptions.Clear();
+        LeagueFilterOptions.Add(AllLeaguesOption);
+        foreach (var row in rows)
+            LeagueFilterOptions.Add(row);
 
         SelectedLeagueFilter = LeagueFilterOptions.FirstOrDefault(l => l.Id == previousId)
             ?? AllLeaguesOption;
@@ -256,6 +307,9 @@ public partial class UsersViewModel : ObservableObject
         if (SelectedLeagueFilter is { } league && league.Id != Guid.Empty)
             q = q.Where(u => u.LeagueId == league.Id);
 
+        if (SelectedRoleFilter?.Role is AppRole role)
+            q = q.Where(u => u.Role == role);
+
         var name = NameFilter?.Trim();
         if (!string.IsNullOrWhiteSpace(name))
             q = q.Where(u =>
@@ -270,8 +324,12 @@ public partial class UsersViewModel : ObservableObject
                 Id = u.Id,
                 Username = u.Username,
                 Role = u.Role,
-                RoleLabel = u.Role.ToString(),
-                LeagueName = string.IsNullOrWhiteSpace(u.LeagueName) ? "No league" : u.LeagueName,
+                RoleLabel = AppRoleLabels.Of(u.Role),
+                LeagueName = u.Role is AppRole.PublicUser or AppRole.Guest or AppRole.GroundOwner || string.IsNullOrWhiteSpace(u.LeagueName)
+                    ? (u.Role == AppRole.PublicUser ? "Public"
+                        : u.Role == AppRole.Guest ? "Guest"
+                        : string.IsNullOrWhiteSpace(u.LeagueName) ? "No league" : u.LeagueName)
+                    : u.LeagueName,
                 IsActive = u.IsActive
             });
         }

@@ -8,7 +8,7 @@
     FlyoutWidth="280"
     FlyoutBackgroundColor="{StaticResource Primary}"
     FlyoutBackdrop="#99000000"
-    FlyoutVerticalScrollMode="Auto">
+    FlyoutVerticalScrollMode="Enabled">
     <!-- Custom FlyoutContent is the real menu. Hide the default Shell rows so
          Android does not paint separator lines on top of module names. -->
     <Shell.ItemTemplate>

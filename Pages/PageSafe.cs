@@ -9,7 +9,7 @@ internal static class PageSafe
         try
         {
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
-            await work().ConfigureAwait(true);
+            await AppBusy.RunAsync(work).ConfigureAwait(true);
         }
         catch (SessionExpiredException)
         {

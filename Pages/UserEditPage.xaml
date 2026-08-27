@@ -42,11 +42,12 @@
                             ItemsSource="{Binding RoleOptions}"
                             SelectedItem="{Binding SelectedRole}" />
 
-                    <Label Text="League *" Style="{StaticResource SectionLabel}" />
+                    <Label Text="{Binding LeagueLabel}" Style="{StaticResource SectionLabel}" />
                     <Picker Title="Select league"
                             ItemsSource="{Binding LeagueOptions}"
                             ItemDisplayBinding="{Binding Name, x:DataType=vm:UserLeagueOption}"
-                            SelectedItem="{Binding SelectedLeague}" />
+                            SelectedItem="{Binding SelectedLeague}"
+                            IsEnabled="{Binding ShowLeaguePicker}" />
 
                     <HorizontalStackLayout Spacing="10">
                         <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" />

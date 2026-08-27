@@ -149,11 +149,15 @@
                             ItemsSource="{Binding LeagueFilterOptions}"
                             ItemDisplayBinding="{Binding Name, x:DataType=vm:UserLeagueOption}"
                             SelectedItem="{Binding SelectedLeagueFilter}" />
+                    <Picker Title="Filter by role"
+                            ItemsSource="{Binding RoleFilterOptions}"
+                            ItemDisplayBinding="{Binding Name, x:DataType=vm:UserRoleOption}"
+                            SelectedItem="{Binding SelectedRoleFilter}" />
                 </VerticalStackLayout>
             </Border>
 
             <RefreshView Grid.Row="3"
-                         IsRefreshing="{Binding IsBusy}"
+                         IsRefreshing="{Binding IsBusy, Mode=OneWay}"
                          Command="{Binding LoadCommand}">
                 <CollectionView ItemsSource="{Binding Items}"
                                 SelectionMode="None"

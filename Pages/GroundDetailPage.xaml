@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             x:Class="JPL.Pages.GroundDetailPage"
+             x:Name="ThisPage"
+             x:DataType="vm:GroundDetailViewModel"
+             Title="Ground"
+             HideSoftInputOnTapped="True">
+    <ContentPage.Resources>
+        <Style x:Key="ViewerChromeButton" TargetType="Button">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinimumWidthRequest" Value="48" />
+            <Setter Property="MinimumHeightRequest" Value="48" />
+            <Setter Property="WidthRequest" Value="48" />
+            <Setter Property="HeightRequest" Value="48" />
+            <Setter Property="CornerRadius" Value="24" />
+            <Setter Property="BorderWidth" Value="0" />
+            <Setter Property="FontSize" Value="32" />
+            <Setter Property="TextColor" Value="White" />
+            <Setter Property="BackgroundColor" Value="#990D1B2A" />
+        </Style>
+        <Style x:Key="ViewerZoomButton" TargetType="Button">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinimumWidthRequest" Value="52" />
+            <Setter Property="MinimumHeightRequest" Value="52" />
+            <Setter Property="WidthRequest" Value="52" />
+            <Setter Property="HeightRequest" Value="52" />
+            <Setter Property="CornerRadius" Value="26" />
+            <Setter Property="BorderWidth" Value="0" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontAttributes" Value="Bold" />
+            <Setter Property="BackgroundColor" Value="{StaticResource Secondary}" />
+            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+        </Style>
+    </ContentPage.Resources>
+    <Grid>
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <ctrl:GroundImageSlider Images="{Binding Images}"
+                                    Position="{Binding GalleryIndex}"
+                                    OpenCommand="{Binding OpenViewerCommand}"
+                                    IsVisible="{Binding HasImages}" />
+            <Label Text="{Binding Ground.Name}" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+            <Label Text="{Binding LocationLine}" TextColor="{StaticResource TextSecondary}" />
+            <Label Text="{Binding RateLabel}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
+            <Label Text="Booking types" Style="{StaticResource SectionLabel}" IsVisible="{Binding HasOffers}" />
+            <Label Text="{Binding RateWindowsLine}"
+                   FontSize="12"
+                   TextColor="{StaticResource TextSecondary}"
+                   IsVisible="{Binding HasOffers}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding OfferedTypes}"
+                                 Spacing="6"
+                                 IsVisible="{Binding HasOffers}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="svc:GroundBookingOfferDto">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
+                                <Label Text="{Binding Title}" FontAttributes="Bold" />
+                                <Label Text="{Binding BandsLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                            </VerticalStackLayout>
+                            <Label Grid.Column="1"
+                                   Text="{Binding PriceLabel}"
+                                   TextColor="{StaticResource Secondary}"
+                                   VerticalOptions="Center" />
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <Label Text="{Binding Ground.AddressLine}" />
+            <Label Text="{Binding Ground.Description}" />
+            <Label Text="Links" Style="{StaticResource SectionLabel}" IsVisible="{Binding HasLinks}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Links}"
+                                 Spacing="6"
+                                 IsVisible="{Binding HasLinks}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="svc:GroundLinkDto">
+                        <Button Text="{Binding DisplayTitle}"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding BindingContext.OpenLinkCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                CommandParameter="{Binding .}" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <Label Text="{Binding AmenitiesLine}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
+            <Label Text="{Binding ServicesLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
+            <Button Text="Open in Google Maps" Style="{StaticResource GhostButton}" Command="{Binding OpenMapsCommand}" />
+            <Button Text="Request booking" Style="{StaticResource GoldButton}" Command="{Binding BookCommand}" />
+            <HorizontalStackLayout Spacing="10"
+                                   IsVisible="{Binding HasWhatsApp}">
+                <ImageButton Source="whatsapp.svg"
+                             WidthRequest="48"
+                             HeightRequest="48"
+                             Aspect="AspectFit"
+                             BackgroundColor="Transparent"
+                             Command="{Binding ContactCommand}"
+                             SemanticProperties.Description="Chat with ground owner on WhatsApp" />
+                <Label Text="Chat on WhatsApp"
+                       FontAttributes="Bold"
+                       FontSize="16"
+                       TextColor="#25D366"
+                       VerticalOptions="Center">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding ContactCommand}" />
+                    </Label.GestureRecognizers>
+                </Label>
+            </HorizontalStackLayout>
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+
+    <Grid IsVisible="{Binding IsViewerOpen}"
+          InputTransparent="False"
+          ZIndex="40">
+        <BoxView Color="#F2000000"
+                 HorizontalOptions="Fill"
+                 VerticalOptions="Fill">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseViewerCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Grid Padding="12" RowDefinitions="Auto,*,Auto" RowSpacing="10">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <Label Text="{Binding GalleryCounter}"
+                       TextColor="White"
+                       FontAttributes="Bold"
+                       FontSize="16"
+                       VerticalOptions="Center" />
+                <Button Grid.Column="1"
+                        Text="Close"
+                        BackgroundColor="#33FFFFFF"
+                        TextColor="White"
+                        FontSize="13"
+                        Padding="14,8"
+                        MinimumHeightRequest="40"
+                        CornerRadius="12"
+                        BorderWidth="0"
+                        Command="{Binding CloseViewerCommand}" />
+            </Grid>
+            <Grid Grid.Row="1">
+                <ctrl:ZoomableImageView x:Name="ViewerImage"
+                                        Source="{Binding CurrentImageUrl}"
+                                        HorizontalOptions="Fill"
+                                        VerticalOptions="Fill" />
+                <Button Text="‹"
+                        Style="{StaticResource ViewerChromeButton}"
+                        HorizontalOptions="Start"
+                        VerticalOptions="Center"
+                        Margin="4,0,0,0"
+                        IsVisible="{Binding HasMultipleImages}"
+                        Command="{Binding PreviousImageCommand}"
+                        SemanticProperties.Description="Previous photo" />
+                <Button Text="›"
+                        Style="{StaticResource ViewerChromeButton}"
+                        HorizontalOptions="End"
+                        VerticalOptions="Center"
+                        Margin="0,0,4,0"
+                        IsVisible="{Binding HasMultipleImages}"
+                        Command="{Binding NextImageCommand}"
+                        SemanticProperties.Description="Next photo" />
+            </Grid>
+            <VerticalStackLayout Grid.Row="2" Spacing="8">
+            <HorizontalStackLayout Spacing="10"
+                                   HorizontalOptions="Center">
+                <Button Text="−"
+                        Style="{StaticResource ViewerZoomButton}"
+                        Clicked="OnZoomOutClicked"
+                        SemanticProperties.Description="Zoom out" />
+                <Button Text="Reset"
+                        FontSize="13"
+                        Padding="16,8"
+                        MinimumHeightRequest="52"
+                        CornerRadius="26"
+                        BorderWidth="0"
+                        BackgroundColor="#33FFFFFF"
+                        TextColor="White"
+                        Clicked="OnZoomResetClicked"
+                        SemanticProperties.Description="Reset zoom" />
+                <Button Text="+"
+                        Style="{StaticResource ViewerZoomButton}"
+                        Clicked="OnZoomInClicked"
+                        SemanticProperties.Description="Zoom in" />
+            </HorizontalStackLayout>
+            <Label Text="Pinch, mouse wheel, or + / − to zoom"
+                   TextColor="#CCFFFFFF"
+                   FontSize="12"
+                   HorizontalOptions="Center" />
+            </VerticalStackLayout>
+        </Grid>
+    </Grid>
+    </Grid>
+</ContentPage>

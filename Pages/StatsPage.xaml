@@ -21,6 +21,26 @@
             <Setter Property="BackgroundColor" Value="#EEF1F5" />
             <Setter Property="TextColor" Value="{StaticResource Primary}" />
             <Setter Property="BorderWidth" Value="0" />
+            <Setter Property="VisualStateManager.VisualStateGroups">
+                <VisualStateGroupList>
+                    <VisualStateGroup x:Name="CommonStates">
+                        <VisualState x:Name="Normal" />
+                        <VisualState x:Name="PointerOver">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="#E8C84A" />
+                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                            </VisualState.Setters>
+                        </VisualState>
+                        <VisualState x:Name="Pressed">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="#D4AF37" />
+                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                <Setter Property="Scale" Value="0.96" />
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateGroupList>
+            </Setter>
         </Style>
         <Style x:Key="StatsSegment" TargetType="Button">
             <Setter Property="Padding" Value="10,8" />
@@ -31,6 +51,26 @@
             <Setter Property="BackgroundColor" Value="Transparent" />
             <Setter Property="TextColor" Value="White" />
             <Setter Property="BorderWidth" Value="0" />
+            <Setter Property="VisualStateManager.VisualStateGroups">
+                <VisualStateGroupList>
+                    <VisualStateGroup x:Name="CommonStates">
+                        <VisualState x:Name="Normal" />
+                        <VisualState x:Name="PointerOver">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="#33D4AF37" />
+                                <Setter Property="TextColor" Value="#D4AF37" />
+                            </VisualState.Setters>
+                        </VisualState>
+                        <VisualState x:Name="Pressed">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="#D4AF37" />
+                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                <Setter Property="Scale" Value="0.96" />
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateGroupList>
+            </Setter>
         </Style>
         <Style x:Key="StatsSortButton" TargetType="Button">
             <Setter Property="FontSize" Value="10" />
@@ -278,7 +318,7 @@
                     Padding="4"
                     StrokeShape="RoundRectangle 12">
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
-                    <Button Text="Matches"
+                    <ctrl:TabChipButton Text="Matches"
                             Style="{StaticResource StatsSegment}"
                             Command="{Binding SelectSourceCommand}"
                             CommandParameter="matches">
@@ -288,8 +328,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Primary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="1"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Grid.Column="1"
                             Text="Nets"
                             Style="{StaticResource StatsSegment}"
                             Command="{Binding SelectSourceCommand}"
@@ -300,13 +340,13 @@
                                 <Setter Property="TextColor" Value="{StaticResource Primary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
+                    </ctrl:TabChipButton>
                 </Grid>
             </Border>
 
             <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
                 <HorizontalStackLayout Spacing="6">
-                    <Button Text="Match"
+                    <ctrl:TabChipButton Text="Match"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="match"
@@ -317,8 +357,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Tournament"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Tournament"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="tournament"
@@ -329,8 +369,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Series"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Series"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="series"
@@ -341,8 +381,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Batting"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Batting"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="batting">
@@ -352,8 +392,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Bowling"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Bowling"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="bowling">
@@ -363,8 +403,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Fielding"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Fielding"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="fielding">
@@ -374,8 +414,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Captaincy"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Captaincy"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="captaincy"
@@ -386,8 +426,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Attendance"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Attendance"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="attendance"
@@ -398,8 +438,8 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
-                    <Button Text="Teams"
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Teams"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
                             CommandParameter="teams"
@@ -410,7 +450,7 @@
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
                         </Button.Triggers>
-                    </Button>
+                    </ctrl:TabChipButton>
                 </HorizontalStackLayout>
             </ScrollView>
 

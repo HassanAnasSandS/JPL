@@ -69,6 +69,8 @@ public static class CrashGuard
 #endif
     }
 
+    public static void Log(Exception ex, string source) => TryWriteCrashLog(ex, source);
+
     private static void TryWriteCrashLog(Exception ex, string source)
     {
         try

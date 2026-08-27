@@ -23,12 +23,15 @@ public partial class UserEditViewModel : ObservableObject
 
     public string? UserId { get; set; }
 
-    public IReadOnlyList<string> RoleOptions { get; } = new[] { "Admin", "User" };
+    private static readonly string[] AssignableRoles =
+        ["League Admin", "League User", "Ground Owner"];
+
+    public ObservableCollection<string> RoleOptions { get; } = new(AssignableRoles);
     public ObservableCollection<UserLeagueOption> LeagueOptions { get; } = new();
 
     [ObservableProperty] private string username = string.Empty;
     [ObservableProperty] private string password = string.Empty;
-    [ObservableProperty] private string selectedRole = "User";
+    [ObservableProperty] private string selectedRole = "League User";
     [ObservableProperty] private UserLeagueOption? selectedLeague;
     [ObservableProperty] private bool isActive = true;
     [ObservableProperty] private string title = "Add user";
@@ -38,9 +41,33 @@ public partial class UserEditViewModel : ObservableObject
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool isPasswordHidden = true;
 
+    public bool ShowLeaguePicker
+    {
+        get
+        {
+            var role = SelectedRole ?? string.Empty;
+            if (role.Length == 0)
+                return true;
+            return !role.Equals("Ground Owner", StringComparison.OrdinalIgnoreCase)
+                && !role.Equals(nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase)
+                && !role.Contains("Public", StringComparison.OrdinalIgnoreCase)
+                && !role.Contains("Guest", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public string LeagueLabel => ShowLeaguePicker ? "League *" : "League (not used for this role)";
+
     public Color StatusColor => StatusColors.For(IsActive);
 
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
+
+    partial void OnSelectedRoleChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            selectedRole = "League User";
+        OnPropertyChanged(nameof(ShowLeaguePicker));
+        OnPropertyChanged(nameof(LeagueLabel));
+    }
 
     partial void OnIsActiveChanged(bool value)
         => OnPropertyChanged(nameof(StatusColor));
@@ -85,6 +112,8 @@ public partial class UserEditViewModel : ObservableObject
         {
             Title = "Add user";
             PasswordHint = "Password (required)";
+            SetRoleOptions(includeExisting: null);
+            SelectedRole = "League User";
             SelectLeague(_league.CurrentLeagueId);
             return;
         }
@@ -101,17 +130,33 @@ public partial class UserEditViewModel : ObservableObject
         }
 
         Username = user.Username;
-        SelectedRole = user.Role.ToString();
+        SetRoleOptions(user.Role);
+        SelectedRole = AppRoleLabels.Of(user.Role);
         IsActive = user.IsActive;
         Password = string.Empty;
         SelectLeague(user.LeagueId);
     }
 
+    private void SetRoleOptions(AppRole? includeExisting)
+    {
+        RoleOptions.Clear();
+        foreach (var role in AssignableRoles)
+            RoleOptions.Add(role);
+
+        if (includeExisting is AppRole.PublicUser)
+            RoleOptions.Add("Public User");
+        else if (includeExisting is AppRole.Guest)
+            RoleOptions.Add("Guest");
+    }
+
     private async Task LoadLeaguesAsync()
     {
+        var list = (await _leagues.GetAllAsync().ConfigureAwait(true))
+            .DistinctBy(l => l.Id)
+            .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         LeagueOptions.Clear();
-        var list = await _leagues.GetAllAsync().ConfigureAwait(true);
-        foreach (var league in list.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
+        foreach (var league in list)
             LeagueOptions.Add(new UserLeagueOption { Id = league.Id, Name = league.Name });
     }
 
@@ -133,12 +178,21 @@ public partial class UserEditViewModel : ObservableObject
             IsBusy = true;
             ErrorMessage = null;
 
-            if (!Enum.TryParse<AppRole>(SelectedRole, ignoreCase: true, out var role))
-                throw new ArgumentException("Select Admin or User role.");
-            if (SelectedLeague is null || SelectedLeague.Id == Guid.Empty)
-                throw new ArgumentException("Select a league for this user.");
+            if (!AppRoleLabels.TryParseManaged(SelectedRole, out var role))
+                throw new ArgumentException("Select League Admin, League User, or Ground Owner.");
+            if (role == AppRole.PublicUser && _existingId is null)
+                throw new ArgumentException("Public users sign up from the login screen.");
+            if (role == AppRole.Guest && _existingId is null)
+                throw new ArgumentException("Guest is a built-in account.");
+            Guid? leagueId = null;
+            if (role is not AppRole.GroundOwner and not AppRole.PublicUser and not AppRole.Guest)
+            {
+                if (SelectedLeague is null || SelectedLeague.Id == Guid.Empty)
+                    throw new ArgumentException("Select a league for this user.");
+                leagueId = SelectedLeague.Id;
+            }
 
-            var draft = new UserDraft(Username, Password, role, SelectedLeague.Id, IsActive);
+            var draft = new UserDraft(Username, Password, role, leagueId, IsActive);
             if (_existingId is Guid id)
                 await _users.UpdateAsync(id, draft).ConfigureAwait(true);
             else

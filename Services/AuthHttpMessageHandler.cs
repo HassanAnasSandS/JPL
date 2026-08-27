@@ -73,7 +73,8 @@ public sealed class AuthHttpMessageHandler : DelegatingHandler
 
     private static bool IsAnonymous(string path)
     {
-        if (path.Contains("/api/auth/login", StringComparison.OrdinalIgnoreCase))
+        if (path.Contains("/api/auth/login", StringComparison.OrdinalIgnoreCase)
+            || path.Contains("/api/auth/signup", StringComparison.OrdinalIgnoreCase))
             return true;
         if (path.Contains("/api/health", StringComparison.OrdinalIgnoreCase))
             return true;

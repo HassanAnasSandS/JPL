@@ -356,13 +356,16 @@ public sealed class ApiSeriesStandingDto
 }
 
 /// <summary>
-/// Direct REST for master data (players/teams) and completed match/session lists.
+/// JPL.Api only (jpl.shoptick.shop → :5025).
+/// Login, GroundOwner/Admin/User accounts, leagues, matches, venues, live hub.
+/// Never send grounds catalog or ground-booking traffic here.
 /// Live scoring (matches + nets) uses local SQLite + outbox sync on complete — never POST create.
 /// </summary>
 public interface IApiClient
 {
     Task<bool> PingAsync(CancellationToken ct = default);
     Task<ApiLoginResult?> LoginAsync(string username, string password, CancellationToken ct = default);
+    Task<ApiLoginResult> SignupAsync(string username, string password, string whatsApp, CancellationToken ct = default);
     /// <summary>Validates current Bearer session; inactive/deleted account → SessionExpiredException.</summary>
     Task<ApiLoginResult?> GetMeAsync(CancellationToken ct = default);
 
@@ -521,12 +524,30 @@ public sealed class ApiClient : IApiClient
                     ct)
                 .ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode)
-                return null;
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<ApiLoginResult>(JsonOptions, ct)
+                    .ConfigureAwait(false);
+            }
 
-            return await response.Content.ReadFromJsonAsync<ApiLoginResult>(JsonOptions, ct)
-                .ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                if (AuthMessages.TryFromApiBody(body, out var authError))
+                    throw authError;
+                return null;
+            }
+
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return null;
         }, ct);
+
+    public Task<ApiLoginResult> SignupAsync(string username, string password, string whatsApp, CancellationToken ct = default)
+        => SendJsonAsync<ApiLoginResult>(
+            HttpMethod.Post,
+            "api/auth/signup",
+            new { username, password, whatsApp },
+            ct);
 
     public Task<ApiLoginResult?> GetMeAsync(CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1289,6 +1310,10 @@ public sealed class ApiClient : IApiClient
             return await work(http).ConfigureAwait(false);
         }
         catch (SessionExpiredException)
+        {
+            throw;
+        }
+        catch (AuthFailedException)
         {
             throw;
         }

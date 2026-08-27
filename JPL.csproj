@@ -28,8 +28,8 @@
 		<ApplicationId>com.jpl.cricketscorer</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>2.1</ApplicationDisplayVersion>
-		<ApplicationVersion>43</ApplicationVersion>
+		<ApplicationDisplayVersion>2.2</ApplicationDisplayVersion>
+		<ApplicationVersion>44</ApplicationVersion>
 
 		<!-- Unpackaged desktop exe — avoids MSIX packaging issues for local debug. -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -71,13 +71,19 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- Keep API project out of the MAUI compile. -->
+		<!-- Keep API projects out of the MAUI compile. -->
 		<Compile Remove="JPL.Api\**" />
 		<None Remove="JPL.Api\**" />
 		<None Include="JPL.Api\**" Exclude="JPL.Api\bin\**;JPL.Api\obj\**" />
 		<EmbeddedResource Remove="JPL.Api\**" />
 		<MauiXaml Remove="JPL.Api\**" />
 		<Content Remove="JPL.Api\**" />
+		<Compile Remove="JPL.Grounds.Api\**" />
+		<None Remove="JPL.Grounds.Api\**" />
+		<None Include="JPL.Grounds.Api\**" Exclude="JPL.Grounds.Api\bin\**;JPL.Grounds.Api\obj\**" />
+		<EmbeddedResource Remove="JPL.Grounds.Api\**" />
+		<MauiXaml Remove="JPL.Grounds.Api\**" />
+		<Content Remove="JPL.Grounds.Api\**" />
 	</ItemGroup>
 
 	<ItemGroup>

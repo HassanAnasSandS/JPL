@@ -178,12 +178,26 @@ public sealed class LeagueService : ILeagueService
         }
     }
 
+    private static byte[]? TryDecodeImage(string? imageBase64)
+    {
+        if (string.IsNullOrWhiteSpace(imageBase64))
+            return null;
+        try
+        {
+            return Convert.FromBase64String(imageBase64);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static League ToEntity(ApiLeagueDto dto)
         => new()
         {
             Id = dto.Id,
             Name = dto.Name,
-            ImageBytes = string.IsNullOrWhiteSpace(dto.ImageBase64) ? null : Convert.FromBase64String(dto.ImageBase64),
+            ImageBytes = TryDecodeImage(dto.ImageBase64),
             IsActive = dto.IsActive,
             CreatedAtUtc = dto.CreatedAtUtc,
             LiveMatchCount = dto.LiveMatchCount,

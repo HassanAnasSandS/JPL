@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.OwnerBookingEditPage"
+             x:DataType="vm:OwnerBookingEditViewModel"
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <Label Text="{Binding CustomerLine}" FontAttributes="Bold" VerticalOptions="Center" />
+                <ImageButton Grid.Column="1"
+                             Source="whatsapp.svg"
+                             WidthRequest="44"
+                             HeightRequest="44"
+                             Aspect="AspectFit"
+                             BackgroundColor="Transparent"
+                             IsVisible="{Binding CanChatCustomer}"
+                             Command="{Binding ChatCustomerCommand}"
+                             SemanticProperties.Description="Chat with customer on WhatsApp" />
+            </Grid>
+            <Label Text="{Binding WhenLine}" />
+            <Label Text="{Binding ServicesLine}"
+                   FontSize="13"
+                   TextColor="{StaticResource TextSecondary}" />
+            <Label Text="Status" Style="{StaticResource SectionLabel}" />
+            <Picker ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding SelectedStatus}" />
+            <Label Text="Booking amount (PKR)" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding BookingAmountText}" Keyboard="Numeric" />
+            <Label Text="Advance (PKR)" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding AdvanceText}" Keyboard="Numeric" />
+            <Label Text="Balance (auto)" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding BalanceText}" IsReadOnly="True" />
+            <Editor Placeholder="Payment note (cash / JazzCash number)" Text="{Binding PaymentNote}" HeightRequest="60" />
+            <Editor Placeholder="Notes" Text="{Binding Notes}" HeightRequest="60" />
+            <Button Text="Save" Style="{StaticResource GoldButton}" Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

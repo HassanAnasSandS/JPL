@@ -22,11 +22,27 @@ public static class LeagueRegistrationContact
         "League logo: (I will send the logo image)" + Environment.NewLine + Environment.NewLine +
         "Please share next steps. Thank you.";
 
-    public static Uri WhatsAppUri =>
-        new($"https://wa.me/{WhatsAppDigits}?text={Uri.EscapeDataString(PrefillMessage)}");
+    public static string GroundOwnerPrefillMessage =>
+        "Hello Cric360 team," + Environment.NewLine + Environment.NewLine +
+        "I would like to register as a Ground Owner on Cric360." + Environment.NewLine + Environment.NewLine +
+        "Ground name:" + Environment.NewLine +
+        "City / area:" + Environment.NewLine +
+        "WhatsApp:" + Environment.NewLine + Environment.NewLine +
+        "Please share next steps. Thank you.";
 
-    public static Uri EmailUri =>
-        new($"mailto:{EmailDisplay}?subject={Uri.EscapeDataString("Cric360 League Registration")}&body={Uri.EscapeDataString(PrefillMessage)}");
+    public static Uri WhatsAppUri => WhatsAppUriFor(PrefillMessage);
+
+    public static Uri GroundOwnerWhatsAppUri => WhatsAppUriFor(GroundOwnerPrefillMessage);
+
+    public static Uri EmailUri => EmailUriFor("Cric360 League Registration", PrefillMessage);
+
+    public static Uri GroundOwnerEmailUri => EmailUriFor("Cric360 Ground Owner Registration", GroundOwnerPrefillMessage);
+
+    private static Uri WhatsAppUriFor(string message)
+        => new($"https://wa.me/{WhatsAppDigits}?text={Uri.EscapeDataString(message)}");
+
+    private static Uri EmailUriFor(string subject, string body)
+        => new($"mailto:{EmailDisplay}?subject={Uri.EscapeDataString(subject)}&body={Uri.EscapeDataString(body)}");
 
     public static Uri FacebookUri => new(FacebookUrl);
 
@@ -39,8 +55,14 @@ public static class LeagueRegistrationContact
     public static Task OpenWhatsAppAsync()
         => Launcher.Default.OpenAsync(WhatsAppUri);
 
+    public static Task OpenGroundOwnerWhatsAppAsync()
+        => Launcher.Default.OpenAsync(GroundOwnerWhatsAppUri);
+
     public static Task OpenEmailAsync()
         => Launcher.Default.OpenAsync(EmailUri);
+
+    public static Task OpenGroundOwnerEmailAsync()
+        => Launcher.Default.OpenAsync(GroundOwnerEmailUri);
 
     public static Task OpenFacebookAsync()
         => Launcher.Default.OpenAsync(FacebookUri);

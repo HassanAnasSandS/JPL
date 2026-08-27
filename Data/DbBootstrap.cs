@@ -41,6 +41,19 @@ public static class DbBootstrap
             await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
         }
 
+        // Always run: phones already at SchemaVersion skip EnsureLegacyTables, so new
+        // Users columns must not wait for a version bump.
+        try
+        {
+            await EnsureColumnAsync(db, "Users", "WhatsAppNumber",
+                """ALTER TABLE "Users" ADD COLUMN "WhatsAppNumber" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* table may not exist yet */
+        }
+
         await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
             """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Matches", "IsLiveTelecast",
@@ -732,6 +745,17 @@ public static class DbBootstrap
             {
                 /* table may not exist yet on a brand-new DB */
             }
+        }
+
+        try
+        {
+            await EnsureColumnAsync(db, "Users", "WhatsAppNumber",
+                """ALTER TABLE "Users" ADD COLUMN "WhatsAppNumber" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* table may not exist yet */
         }
 
         foreach (var table in new[] { "Matches" })

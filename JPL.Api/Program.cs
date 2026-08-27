@@ -65,6 +65,7 @@ public class Program
         // Local is HTTP :5025; production HTTPS terminates at reverse proxy (jpl.shoptick.shop).
         // Do not force HTTPS redirect on the Kestrel app itself.
         app.UseMiddleware<JPL.Api.Middleware.SessionAuthMiddleware>();
+        app.UseMiddleware<JPL.Api.Middleware.LeagueWriteGuardMiddleware>();
         app.MapControllers();
         app.MapHub<JPL.Api.Hubs.LiveHub>("/hubs/live");
 
@@ -103,6 +104,10 @@ public class Program
                     ALTER TABLE Users ADD LeagueId uniqueidentifier NULL;
                 """).ConfigureAwait(false);
             await db.Database.ExecuteSqlRawAsync("""
+                IF COL_LENGTH('Users', 'WhatsAppNumber') IS NULL
+                    ALTER TABLE Users ADD WhatsAppNumber nvarchar(30) NULL;
+                """).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
                 IF OBJECT_ID(N'dbo.LeagueLiveIndexes', 'U') IS NULL
                 BEGIN
                     CREATE TABLE dbo.LeagueLiveIndexes (
@@ -127,6 +132,13 @@ public class Program
             {
                 await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Users" ADD COLUMN "LeagueId" TEXT NULL;""")
+                    .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Users" ADD COLUMN "WhatsAppNumber" TEXT NULL;""")
                     .ConfigureAwait(false);
             }
             catch { /* already exists */ }
@@ -177,8 +189,18 @@ public class Program
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        await EnsureUser("user", "user123", AppRole.User, null).ConfigureAwait(false);
+        await EnsureUser("user", "user123", AppRole.Guest, null).ConfigureAwait(false);
+        await EnsureUser("groundowner", "ground123", AppRole.GroundOwner, null).ConfigureAwait(false);
         await EnsureSoleSuperAdminAsync(db, hasher).ConfigureAwait(false);
+
+        var guest = await db.Users.FirstOrDefaultAsync(u => u.Username == "user").ConfigureAwait(false);
+        if (guest is not null)
+        {
+            guest.Role = AppRole.Guest;
+            guest.LeagueId = null;
+            guest.IsActive = true;
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
     }
 
     private static async Task EnsureSoleSuperAdminAsync(MasterDbContext db, PasswordHasher<AppUser> hasher)

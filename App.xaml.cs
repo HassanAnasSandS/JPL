@@ -23,6 +23,7 @@ public partial class App : Application
     {
         InitializeComponent();
         CrashGuard.Install();
+        PageAppearing += (_, page) => AppBusy.AttachToPage(page);
         _services = services;
         _auth = auth;
         _navigator = navigator;
@@ -83,10 +84,7 @@ public partial class App : Application
                     try
                     {
                         _startup.SetBusy("Opening…");
-                        if (_auth.Current?.NeedsLeaguePicker == true && !_league.HasSelection)
-                            await _navigator.ShowLeaguePickerAsync().ConfigureAwait(true);
-                        else
-                            await _navigator.ShowMainAsync().ConfigureAwait(true);
+                        await _navigator.ContinueAfterAuthAsync(freshLogin: false).ConfigureAwait(true);
                         return;
                     }
                     catch

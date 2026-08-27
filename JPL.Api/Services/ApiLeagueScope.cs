@@ -22,14 +22,16 @@ public sealed class ApiLeagueScope : IApiLeagueScope
             if (ctx is null)
                 return Guid.Empty;
 
-            var fromUser = ctx.User.FindFirst(LeagueClaim)?.Value;
-            if (Guid.TryParse(fromUser, out var bound) && bound != Guid.Empty)
-                return bound;
-
+            // Picker header first so a bound League Admin can *view* another league.
+            // Writes to a non-home league are rejected by LeagueWriteGuardMiddleware.
             if (ctx.Request.Headers.TryGetValue(HeaderName, out var header) &&
                 Guid.TryParse(header.ToString(), out var selected) &&
                 selected != Guid.Empty)
                 return selected;
+
+            var fromUser = ctx.User.FindFirst(LeagueClaim)?.Value;
+            if (Guid.TryParse(fromUser, out var bound) && bound != Guid.Empty)
+                return bound;
 
             return Guid.Empty;
         }

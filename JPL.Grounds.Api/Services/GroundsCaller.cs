@@ -1,0 +1,42 @@
+using System.Security.Claims;
+using JPL.Grounds.Api.Models;
+
+namespace JPL.Grounds.Api.Services;
+
+internal static class GroundsCaller
+{
+    public static Guid UserId(HttpContext http)
+    {
+        if (http.Items.TryGetValue("JplUserId", out var idObj) && idObj is Guid id)
+            return id;
+        var text = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(text, out var parsed) ? parsed : Guid.Empty;
+    }
+
+    public static string Username(HttpContext http)
+    {
+        if (http.Items.TryGetValue("JplUsername", out var nameObj) && nameObj is string n && n.Length > 0)
+            return n;
+        return http.User.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
+    }
+
+    public static string Role(HttpContext http)
+    {
+        if (http.Items.TryGetValue("JplRole", out var roleObj) && roleObj is string r && r.Length > 0)
+            return r;
+        return http.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+    }
+
+    public static bool IsGuest(HttpContext http)
+        => string.Equals(Role(http), nameof(AppRole.Guest), StringComparison.OrdinalIgnoreCase)
+           || string.Equals(Username(http), "user", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsGroundOwner(HttpContext http)
+        => string.Equals(Role(http), nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsSuperAdmin(HttpContext http)
+        => string.Equals(Role(http), nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase);
+
+    public static bool CanManageGround(HttpContext http, Guid ownerUserId)
+        => IsSuperAdmin(http) || (IsGroundOwner(http) && UserId(http) == ownerUserId);
+}

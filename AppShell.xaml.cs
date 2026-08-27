@@ -11,11 +11,14 @@ public partial class AppShell : Shell
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
     private readonly ILeagueContext _league;
+    private readonly IAppWorkspace _workspace;
     private readonly IServiceProvider _services;
     private readonly Label _pendingLabel;
     private readonly Label _leagueLabel;
     private readonly Dictionary<string, Border> _sidebarButtons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Label> _sidebarLabels = new(StringComparer.OrdinalIgnoreCase);
+    private View? _flyoutHeaderView;
+    private View? _flyoutFooterView;
     private int _flyoutNavBusy;
     private int _applyingFlyout;
     private const double SidebarWidth = 280;
@@ -27,12 +30,14 @@ public partial class AppShell : Shell
         IServiceProvider services,
         IAuthService auth,
         IAppNavigator navigator,
-        ILeagueContext league)
+        ILeagueContext league,
+        IAppWorkspace workspaceStore)
     {
         InitializeComponent();
         _auth = auth;
         _navigator = navigator;
         _league = league;
+        _workspace = workspaceStore;
         _services = services;
 
         EnsureRoutesRegistered(services);
@@ -51,33 +56,68 @@ public partial class AppShell : Shell
 
         Items.Clear();
 
-        var showLeagueCatalog = _auth.Current?.CanViewLeagueCatalog == true;
-        if (showLeagueCatalog)
+        var session = _auth.Current;
+        var currentWorkspace = _workspace.Current;
+        if (currentWorkspace == AppWorkspace.Users && session?.CanManagePlatform != true)
+            currentWorkspace = AppWorkspace.Leagues;
+        if (currentWorkspace == AppWorkspace.Settings && session?.CanManagePlatform != true)
+            currentWorkspace = AppWorkspace.Leagues;
+        if (currentWorkspace == AppWorkspace.GroundOwner && session?.IsGroundOwner != true && session?.CanManagePlatform != true)
+            currentWorkspace = AppWorkspace.Grounds;
+
+        if (currentWorkspace == AppWorkspace.GroundOwner)
         {
-            Items.Add(CreateFlyout("Players", "players", "playershome", () => services.GetRequiredService<PlayersPage>()));
-            Items.Add(CreateFlyout("Teams", "teams", "teamshome", () => services.GetRequiredService<TeamsPage>()));
+            Items.Add(CreateFlyout("My Grounds", "ownergrounds", "ownergroundshome", () => services.GetRequiredService<OwnerGroundsPage>()));
+            Items.Add(CreateFlyout("Bookings", "ownerbookings", "ownerbookingshome", () => services.GetRequiredService<OwnerBookingsPage>()));
+            Items.Add(CreateFlyout("Availability", "owneravailability", "owneravailabilityhome", () => services.GetRequiredService<OwnerAvailabilityPage>()));
         }
-        Items.Add(CreateFlyout("Matches", "matches", "matcheshome", () => services.GetRequiredService<MatchesPage>()));
-        Items.Add(CreateFlyout("Nets Practice", "nets", "netshome", () => services.GetRequiredService<NetSessionsPage>()));
-        Items.Add(CreateFlyout("Tournaments", "tournaments", "tournamentshome", () => services.GetRequiredService<TournamentsPage>()));
-        Items.Add(CreateFlyout("Series", "series", "serieshome", () => services.GetRequiredService<SeriesPage>()));
-        Items.Add(CreateFlyout("Auctions", "auctions", "auctionshome", () => services.GetRequiredService<AuctionsPage>()));
-        if (showLeagueCatalog)
+        else if (currentWorkspace == AppWorkspace.Grounds)
         {
-            Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
-            Items.Add(CreateFlyout("Formats", "formats", "formatshome", () => services.GetRequiredService<FormatsPage>()));
-            Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
+            Items.Add(CreateFlyout("Discover", "grounddiscover", "grounddiscoverhome", () => services.GetRequiredService<GroundDiscoverPage>()));
+            Items.Add(CreateFlyout("My Bookings", "customerbookings", "customerbookingshome", () => services.GetRequiredService<CustomerBookingsPage>()));
         }
-        Items.Add(CreateFlyout("Statistics", "stats", "statshome", () => services.GetRequiredService<StatsPage>()));
-        Items.Add(CreateFlyout("Rankings", "rankings", "rankingshome", () => services.GetRequiredService<RankingsPage>()));
-        Items.Add(CreateFlyout("Hall of Fame", "halloffame", "halloffamehome", () => services.GetRequiredService<HallOfFamePage>()));
-        Items.Add(CreateFlyout("Strength Meter", "strengthmeter", "strengthmeterhome", () => services.GetRequiredService<StrengthMeterPage>()));
-        if (_auth.Current?.CanManageUsers == true)
+        else if (currentWorkspace == AppWorkspace.Users)
+        {
             Items.Add(CreateFlyout("Users", "users", "usershome", () => services.GetRequiredService<UsersPage>()));
+        }
+        else if (currentWorkspace == AppWorkspace.Settings)
+        {
+            Items.Add(CreateFlyout("Settings", "groundsettings", "groundsettingshome", () => services.GetRequiredService<GroundSettingsPage>()));
+        }
+        else
+        {
+            var showLeagueCatalog = session?.CanViewCatalogFor(_league.CurrentLeagueId) == true;
+            if (showLeagueCatalog)
+            {
+                Items.Add(CreateFlyout("Players", "players", "playershome", () => services.GetRequiredService<PlayersPage>()));
+                Items.Add(CreateFlyout("Teams", "teams", "teamshome", () => services.GetRequiredService<TeamsPage>()));
+            }
+            Items.Add(CreateFlyout("Matches", "matches", "matcheshome", () => services.GetRequiredService<MatchesPage>()));
+            Items.Add(CreateFlyout("Nets Practice", "nets", "netshome", () => services.GetRequiredService<NetSessionsPage>()));
+            Items.Add(CreateFlyout("Tournaments", "tournaments", "tournamentshome", () => services.GetRequiredService<TournamentsPage>()));
+            Items.Add(CreateFlyout("Series", "series", "serieshome", () => services.GetRequiredService<SeriesPage>()));
+            Items.Add(CreateFlyout("Auctions", "auctions", "auctionshome", () => services.GetRequiredService<AuctionsPage>()));
+            if (showLeagueCatalog)
+            {
+                Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
+                Items.Add(CreateFlyout("Formats", "formats", "formatshome", () => services.GetRequiredService<FormatsPage>()));
+                Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
+            }
+            Items.Add(CreateFlyout("Statistics", "stats", "statshome", () => services.GetRequiredService<StatsPage>()));
+            Items.Add(CreateFlyout("Rankings", "rankings", "rankingshome", () => services.GetRequiredService<RankingsPage>()));
+            Items.Add(CreateFlyout("Hall of Fame", "halloffame", "halloffamehome", () => services.GetRequiredService<HallOfFamePage>()));
+            Items.Add(CreateFlyout("Strength Meter", "strengthmeter", "strengthmeterhome", () => services.GetRequiredService<StrengthMeterPage>()));
+        }
 
         _pendingLabel = new Label
         {
-            Text = "Live",
+            Text = currentWorkspace is AppWorkspace.Grounds or AppWorkspace.GroundOwner
+                ? "Pakistan"
+                : currentWorkspace == AppWorkspace.Users
+                    ? "Accounts"
+                    : currentWorkspace == AppWorkspace.Settings
+                        ? "Catalog"
+                        : "Live",
             FontSize = 12,
             TextColor = Color.FromArgb("#B8C4D4"),
             LineBreakMode = LineBreakMode.TailTruncation,
@@ -86,9 +126,17 @@ public partial class AppShell : Shell
 
         _leagueLabel = new Label
         {
-            Text = string.IsNullOrWhiteSpace(_league.CurrentLeagueName)
-                ? "Select a league"
-                : _league.CurrentLeagueName,
+            Text = currentWorkspace == AppWorkspace.GroundOwner
+                ? "Ground Owner"
+                : currentWorkspace == AppWorkspace.Grounds
+                    ? "Ground Bookings"
+                    : currentWorkspace == AppWorkspace.Users
+                        ? "Users"
+                        : currentWorkspace == AppWorkspace.Settings
+                            ? "Settings"
+                            : string.IsNullOrWhiteSpace(_league.CurrentLeagueName)
+                            ? "Select a league"
+                            : _league.CurrentLeagueName,
             FontSize = 16,
             FontAttributes = FontAttributes.Bold,
             TextColor = Color.FromArgb("#B6FF3B"),
@@ -98,7 +146,7 @@ public partial class AppShell : Shell
             MaxLines = 1
         };
 
-        FlyoutHeader = new VerticalStackLayout
+        var header = new VerticalStackLayout
         {
             Padding = new Thickness(16, 20, 16, 12),
             Spacing = 6,
@@ -126,11 +174,11 @@ public partial class AppShell : Shell
                 _pendingLabel
             }
         };
+        _flyoutHeaderView = header;
 
         _pendingLabel.HorizontalOptions = LayoutOptions.Center;
         _pendingLabel.HorizontalTextAlignment = TextAlignment.Center;
 
-        var session = _auth.Current;
         var nameLabel = new Label
         {
             Text = session?.SignedInName ?? string.Empty,
@@ -158,6 +206,7 @@ public partial class AppShell : Shell
         var logoutBtn = new Button
         {
             Text = "Logout",
+            StyleId = "SkipBusy",
             Margin = new Thickness(16, 8, 16, 16),
             BackgroundColor = Color.FromArgb("#B00020"),
             TextColor = Colors.White,
@@ -171,20 +220,19 @@ public partial class AppShell : Shell
             if (!ok)
                 return;
 
-            await _auth.LogoutAsync();
-            await _navigator.ShowLoginAsync();
+            await AppBusy.RunAsync(async () =>
+            {
+                await _auth.LogoutAsync();
+                await _navigator.ShowLoginAsync();
+            }).ConfigureAwait(true);
         };
 
-        var footer = new VerticalStackLayout
+        if (session is not null)
         {
-            HorizontalOptions = LayoutOptions.Fill
-        };
-        if (_auth.Current?.CanSwitchLeague == true)
-        {
-            var changeBtn = new Button
+            var homeBtn = new Button
             {
-                Text = "Change League",
-                Margin = new Thickness(16, 8, 16, 0),
+                Text = "Home",
+                Margin = new Thickness(0, 10, 0, 0),
                 BackgroundColor = Colors.Transparent,
                 TextColor = Color.FromArgb("#B6FF3B"),
                 BorderColor = Color.FromArgb("#B6FF3B"),
@@ -193,13 +241,21 @@ public partial class AppShell : Shell
                 CornerRadius = 12,
                 HeightRequest = 44
             };
-            changeBtn.Clicked += async (_, _) =>
+            homeBtn.Clicked += async (_, _) =>
             {
-                _league.Clear();
-                await _navigator.ShowLeaguePickerAsync();
+                await AppBusy.RunAsync(async () =>
+                {
+                    _workspace.Clear();
+                    await _navigator.ShowModeChooserAsync();
+                }).ConfigureAwait(true);
             };
-            footer.Children.Add(changeBtn);
+            header.Children.Add(homeBtn);
         }
+
+        var footer = new VerticalStackLayout
+        {
+            HorizontalOptions = LayoutOptions.Fill
+        };
 
         if (!string.IsNullOrWhiteSpace(nameLabel.Text))
             footer.Children.Add(nameLabel);
@@ -207,7 +263,9 @@ public partial class AppShell : Shell
             !string.Equals(roleLabel.Text, nameLabel.Text, StringComparison.OrdinalIgnoreCase))
             footer.Children.Add(roleLabel);
         footer.Children.Add(logoutBtn);
-        FlyoutFooter = footer;
+        _flyoutFooterView = footer;
+        FlyoutHeader = null;
+        FlyoutFooter = null;
         BuildSidebarContent();
 
         Appearing += async (_, _) =>
@@ -251,10 +309,16 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(SeriesEditPage), new DiRouteFactory<SeriesEditPage>(services));
         Routing.RegisterRoute(nameof(SeriesDetailPage), new DiRouteFactory<SeriesDetailPage>(services));
         Routing.RegisterRoute(nameof(LeagueEditPage), new DiRouteFactory<LeagueEditPage>(services));
+        Routing.RegisterRoute(nameof(GroundDetailPage), new DiRouteFactory<GroundDetailPage>(services));
+        Routing.RegisterRoute(nameof(GroundBookRequestPage), new DiRouteFactory<GroundBookRequestPage>(services));
+        Routing.RegisterRoute(nameof(OwnerGroundEditPage), new DiRouteFactory<OwnerGroundEditPage>(services));
+        Routing.RegisterRoute(nameof(OwnerBookingEditPage), new DiRouteFactory<OwnerBookingEditPage>(services));
     }
 
     private async Task RefreshLeagueNameAsync()
     {
+        if (_workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings)
+            return;
         if (_league.CurrentLeagueId is not Guid id)
             return;
         try
@@ -281,6 +345,21 @@ public partial class AppShell : Shell
 
     private async Task RefreshPendingAsync()
     {
+        if (_workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner)
+        {
+            _pendingLabel.Text = "Pakistan";
+            return;
+        }
+        if (_workspace.Current == AppWorkspace.Users)
+        {
+            _pendingLabel.Text = "Accounts";
+            return;
+        }
+        if (_workspace.Current == AppWorkspace.Settings)
+        {
+            _pendingLabel.Text = "Catalog";
+            return;
+        }
         try
         {
             var live = _services.GetRequiredService<ILivePublisher>();
@@ -413,7 +492,8 @@ public partial class AppShell : Shell
                 Content = label
             };
             var tap = new TapGestureRecognizer();
-            tap.Tapped += async (_, _) => await GoToFlyoutRootAsync(route, title).ConfigureAwait(true);
+            tap.Tapped += async (_, _) =>
+                await AppBusy.RunAsync(() => GoToFlyoutRootAsync(route, title)).ConfigureAwait(true);
             border.GestureRecognizers.Add(tap);
             if (!string.IsNullOrWhiteSpace(route))
             {
@@ -423,14 +503,65 @@ public partial class AppShell : Shell
             menu.Children.Add(border);
         }
 
-        FlyoutContent = new ScrollView
+        var scroll = new ScrollView
         {
             Content = menu,
+            Orientation = ScrollOrientation.Vertical,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Always,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Never,
+            VerticalOptions = LayoutOptions.Fill,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+        scroll.HandlerChanged += OnFlyoutScrollHandlerChanged;
+
+        var root = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition(GridLength.Auto),
+                new RowDefinition(GridLength.Star),
+                new RowDefinition(GridLength.Auto)
+            },
             VerticalOptions = LayoutOptions.Fill,
             HorizontalOptions = LayoutOptions.Fill,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Never
+            BackgroundColor = Color.FromArgb("#0D1B2A")
         };
+        if (_flyoutHeaderView is not null)
+            root.Add(_flyoutHeaderView, 0, 0);
+        root.Add(scroll, 0, 1);
+        if (_flyoutFooterView is not null)
+            root.Add(_flyoutFooterView, 0, 2);
+
+        var busyLayer = AppBusy.CreateLayer();
+        Grid.SetRowSpan(busyLayer, 3);
+        root.Add(busyLayer, 0, 0);
+
+        AppBusy.Changed += visible =>
+        {
+            if (_flyoutHeaderView is not null)
+                _flyoutHeaderView.IsEnabled = !visible;
+            scroll.IsEnabled = !visible;
+            if (_flyoutFooterView is not null)
+                _flyoutFooterView.IsEnabled = !visible;
+        };
+
+        FlyoutContent = root;
         UpdateSidebarSelection();
+    }
+
+    private static void OnFlyoutScrollHandlerChanged(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        if (sender is not ScrollView scroll)
+            return;
+        if (scroll.Handler?.PlatformView is not Microsoft.UI.Xaml.Controls.ScrollViewer win)
+            return;
+
+        win.VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Visible;
+        win.VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Enabled;
+        win.HorizontalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled;
+        win.HorizontalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Hidden;
+#endif
     }
 
     private void UpdateSidebarSelection()

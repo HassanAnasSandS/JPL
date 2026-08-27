@@ -17,22 +17,29 @@ public partial class LoginViewModel : ObservableObject
     private string password = string.Empty;
 
     [ObservableProperty]
+    private string whatsApp = string.Empty;
+
+    [ObservableProperty]
     private string? errorMessage;
 
     [ObservableProperty]
     private bool isBusy;
 
     [ObservableProperty]
+    private bool showSignup;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PasswordToggleIcon))]
     private bool isPasswordHidden = true;
 
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
+    public bool ShowLogin => !ShowSignup;
 
     public bool ShowBusyOverlay => IsBusy || _startup.IsBusy;
     public bool IsFormEnabled => !ShowBusyOverlay;
     public string BusyOverlayMessage =>
         IsBusy
-            ? "Signing in…"
+            ? (ShowSignup ? "Creating account…" : "Signing in…")
             : string.IsNullOrWhiteSpace(_startup.Message) ? "Please wait…" : _startup.Message;
 
     private bool CanSubmit => IsFormEnabled;
@@ -46,12 +53,26 @@ public partial class LoginViewModel : ObservableObject
         NotifyOverlay();
     }
 
+    public void PrepareSignup()
+    {
+        ShowSignup = true;
+        Username = string.Empty;
+        Password = string.Empty;
+        WhatsApp = string.Empty;
+        ErrorMessage = null;
+    }
+
     public void Detach() => _startup.Changed -= OnStartupChanged;
 
     private void OnStartupChanged(object? sender, EventArgs e)
         => MainThread.BeginInvokeOnMainThread(NotifyOverlay);
 
     partial void OnIsBusyChanged(bool value) => NotifyOverlay();
+    partial void OnShowSignupChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowLogin));
+        NotifyOverlay();
+    }
 
     private void NotifyOverlay()
     {
@@ -59,11 +80,50 @@ public partial class LoginViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFormEnabled));
         OnPropertyChanged(nameof(BusyOverlayMessage));
         LoginCommand.NotifyCanExecuteChanged();
+        SignupCommand.NotifyCanExecuteChanged();
         ContinueWithoutLoginCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
     private void TogglePasswordVisibility() => IsPasswordHidden = !IsPasswordHidden;
+
+    [RelayCommand]
+    private void ToggleSignup()
+    {
+        ShowSignup = !ShowSignup;
+        ErrorMessage = null;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSubmit))]
+    private async Task SignupAsync()
+    {
+        if (!CanSubmit)
+            return;
+
+        try
+        {
+            IsBusy = true;
+            ErrorMessage = null;
+            await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
+            if (!PakistanWhatsApp.TryNormalize(WhatsApp, out _))
+            {
+                ErrorMessage = PakistanWhatsApp.RequiredError;
+                return;
+            }
+            await _auth.SignupAsync(Username, Password, WhatsApp).ConfigureAwait(true);
+            Password = string.Empty;
+            WhatsApp = string.Empty;
+            await _navigator.ContinueAfterAuthAsync(freshLogin: true).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = AuthMessages.ForSignup(ex);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanSubmit))]
     private Task ContinueWithoutLoginAsync()
@@ -89,19 +149,16 @@ public partial class LoginViewModel : ObservableObject
             var ok = await _auth.LoginAsync(Username, Password).ConfigureAwait(true);
             if (!ok)
             {
-                ErrorMessage = "Invalid username or password.";
+                ErrorMessage = AuthMessages.Generic;
                 return;
             }
 
             Password = string.Empty;
-            if (_auth.Current?.NeedsLeaguePicker == true)
-                await _navigator.ShowLeaguePickerAsync().ConfigureAwait(true);
-            else
-                await _navigator.ShowMainAsync().ConfigureAwait(true);
+            await _navigator.ContinueAfterAuthAsync(freshLogin: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = AuthMessages.ForLogin(ex);
         }
         finally
         {
