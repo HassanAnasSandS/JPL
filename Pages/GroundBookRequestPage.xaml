@@ -49,6 +49,48 @@
                 </VerticalStackLayout>
             </VerticalStackLayout>
 
+            <VerticalStackLayout IsVisible="{Binding HasShopItems}" Spacing="6">
+                <Label Text="Ground shop" Style="{StaticResource SectionLabel}" />
+                <Label Text="Add quantity for items you want to rent or buy. Qty 0 skips the item."
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ShopChoices}" Spacing="4">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BookableShopChoice">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Padding="0,2">
+                                <VerticalStackLayout>
+                                    <Label Text="{Binding Name}" VerticalOptions="Center" />
+                                    <Label Text="{Binding LineLabel}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                </VerticalStackLayout>
+                                <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                                    <Button Text="−"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="10,4"
+                                            FontSize="16"
+                                            Command="{Binding DecreaseCommand}" />
+                                    <Label Text="{Binding Qty}"
+                                           WidthRequest="28"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalOptions="Center"
+                                           FontAttributes="Bold" />
+                                    <Button Text="+"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="10,4"
+                                            FontSize="16"
+                                            Command="{Binding IncreaseCommand}" />
+                                </HorizontalStackLayout>
+                                <Label Grid.Column="2"
+                                       Text="{Binding KindLabel}"
+                                       TextColor="{StaticResource Secondary}"
+                                       VerticalOptions="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+
             <Label Text="{Binding WindowLine}" FontAttributes="Bold" />
             <Label Text="{Binding BandLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
             <Label Text="{Binding ExtrasLine}"
@@ -57,8 +99,10 @@
                    IsVisible="{Binding HasExtras}" />
             <Label Text="{Binding QuoteLine}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
 
-            <Entry Placeholder="Your name" Text="{Binding CustomerName}" />
-            <Entry Placeholder="WhatsApp * (03XX XXXXXXX)" Text="{Binding CustomerPhone}" Keyboard="Telephone" MaxLength="16" />
+            <Label Text="Your name" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding CustomerName}" IsReadOnly="True" />
+            <Label Text="WhatsApp" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding CustomerPhone}" IsReadOnly="True" Keyboard="Telephone" />
             <Editor Placeholder="Notes" Text="{Binding Notes}" HeightRequest="80" />
             <Button Text="Send request" Style="{StaticResource GoldButton}" Command="{Binding SubmitCommand}" />
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />

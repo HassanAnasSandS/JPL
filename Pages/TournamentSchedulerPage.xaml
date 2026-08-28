@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             x:Class="JPL.Pages.TournamentSchedulerPage"
+             x:Name="ThisPage"
+             x:DataType="vm:TournamentSchedulerViewModel"
+             Title="Tournament Scheduler"
+             HideSoftInputOnTapped="True">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                <Label Text="Tournament Scheduler"
+                       FontSize="22"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="Manual groups, round robin, and knockout — no live scoring"
+                       Style="{StaticResource MutedLabel}"
+                       FontSize="12" />
+            </VerticalStackLayout>
+            <Button Grid.Column="1"
+                    Text="+ New"
+                    Style="{StaticResource GoldButton}"
+                    Padding="16,10"
+                    VerticalOptions="Center"
+                    IsVisible="{Binding CanWrite}"
+                    Clicked="OnAddClicked" />
+        </Grid>
+
+        <ctrl:FilterDrawer Grid.Row="1"
+                           HasActiveFilters="{Binding HasFilter}"
+                           ClearCommand="{Binding ClearFilterCommand}">
+            <VerticalStackLayout Spacing="8">
+                <SearchBar Placeholder="Filter name / status"
+                           Text="{Binding NameFilter}"
+                           CancelButtonColor="{StaticResource Primary}" />
+                <Picker Title="Filter by user"
+                        IsVisible="{Binding ShowUserFilter}"
+                        ItemsSource="{Binding UserFilterOptions}"
+                        ItemDisplayBinding="{Binding Name, x:DataType=vm:SchedulerUserOption}"
+                        SelectedItem="{Binding SelectedUserFilter}" />
+            </VerticalStackLayout>
+        </ctrl:FilterDrawer>
+
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsBusy}"
+                     Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+                            EmptyView="No scheduled tournaments yet. Create one, add teams, then record results by hand.">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SchedulerRow">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
+                            <VerticalStackLayout Spacing="8">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label Text="{Binding Name}"
+                                               FontAttributes="Bold"
+                                               FontSize="17"
+                                               TextColor="{StaticResource Primary}" />
+                                        <Label Text="{Binding MetaLine}"
+                                               FontSize="12"
+                                               Style="{StaticResource MutedLabel}" />
+                                        <Label Text="{Binding OwnerLine}"
+                                               IsVisible="{Binding HasOwner}"
+                                               FontSize="12"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </VerticalStackLayout>
+                                    <Border Grid.Column="1"
+                                            StrokeThickness="0"
+                                            BackgroundColor="#E8EEF5"
+                                            Padding="10,6"
+                                            StrokeShape="RoundRectangle 8"
+                                            VerticalOptions="Start">
+                                        <Label Text="{Binding StatusText}"
+                                               FontSize="11"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Primary}" />
+                                    </Border>
+                                </Grid>
+                                <Label Text="{Binding WinnerLine}"
+                                       IsVisible="{Binding HasWinner}"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}" />
+                                <HorizontalStackLayout Spacing="8">
+                                    <Button Text="Open"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            Style="{StaticResource GoldButton}"
+                                            Clicked="OnOpenClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Edit"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            BackgroundColor="#E8EEF5"
+                                            TextColor="{StaticResource Primary}"
+                                            IsVisible="{Binding CanEdit}"
+                                            Clicked="OnEditClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Delete"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            BackgroundColor="#FFE8EC"
+                                            TextColor="{StaticResource Danger}"
+                                            IsVisible="{Binding CanEdit}"
+                                            Clicked="OnDeleteClicked"
+                                            CommandParameter="{Binding .}" />
+                                </HorizontalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Label Grid.Row="3"
+               Text="{Binding ErrorMessage}"
+               TextColor="{StaticResource Danger}"
+               FontSize="12" />
+    </Grid>
+</ContentPage>

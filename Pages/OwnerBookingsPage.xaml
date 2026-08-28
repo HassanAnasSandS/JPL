@@ -7,43 +7,53 @@
              x:Name="ThisPage"
              x:DataType="vm:OwnerBookingsViewModel"
              Title="Bookings">
-    <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}" Padding="14">
-        <CollectionView ItemsSource="{Binding Items}"
-                        RemainingItemsThreshold="4"
-                        RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
-                        EmptyView="{Binding ErrorMessage}">
-            <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="svc:GroundBookingDto">
-                    <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                            <VerticalStackLayout Spacing="4">
-                                <VerticalStackLayout.GestureRecognizers>
-                                    <TapGestureRecognizer
-                                        Command="{Binding BindingContext.OpenCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                        CommandParameter="{Binding .}" />
-                                </VerticalStackLayout.GestureRecognizers>
-                                <Label Text="{Binding GroundName}" FontAttributes="Bold" FontSize="16" />
-                                <Label Text="{Binding CustomerName}" FontSize="13" />
-                                <Label Text="{Binding WhenLabel}" FontSize="13" />
-                                <Label Text="{Binding Status}" TextColor="{StaticResource Secondary}" />
-                                <Label Text="{Binding MoneyLabel}" FontSize="12" />
-                                <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
-                            </VerticalStackLayout>
-                            <ImageButton Grid.Column="1"
-                                         Source="whatsapp.svg"
-                                         WidthRequest="44"
-                                         HeightRequest="44"
-                                         Aspect="AspectFit"
-                                         BackgroundColor="Transparent"
-                                         VerticalOptions="Center"
-                                         IsVisible="{Binding HasCustomerWhatsApp}"
-                                         Command="{Binding BindingContext.ChatCustomerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                         CommandParameter="{Binding .}"
-                                         SemanticProperties.Description="Chat with customer on WhatsApp" />
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
-    </RefreshView>
+    <Grid RowDefinitions="Auto,*" Padding="14" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto">
+            <Label Text="Bookings" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+            <Button Grid.Column="1" Text="+ Book" Style="{StaticResource GoldButton}" Command="{Binding AddCommand}" />
+        </Grid>
+        <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
+            <CollectionView ItemsSource="{Binding Items}"
+                            RemainingItemsThreshold="4"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
+                            EmptyView="{Binding ErrorMessage}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="svc:GroundBookingDto">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <VerticalStackLayout Spacing="4">
+                                    <VerticalStackLayout.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding BindingContext.OpenCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    </VerticalStackLayout.GestureRecognizers>
+                                    <Label Text="{Binding GroundName}" FontAttributes="Bold" FontSize="16" />
+                                    <Label Text="{Binding CustomerName}" FontSize="13" />
+                                    <Label Text="{Binding WhenLabel}" FontSize="13" />
+                                    <Label Text="{Binding Status}" TextColor="{StaticResource Secondary}" />
+                                    <Label Text="{Binding MoneyLabel}" FontSize="12" />
+                                    <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding ReviewLine}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Secondary}"
+                                           IsVisible="{Binding HasReview}" />
+                                </VerticalStackLayout>
+                                <ImageButton Grid.Column="1"
+                                             Source="whatsapp.svg"
+                                             WidthRequest="44"
+                                             HeightRequest="44"
+                                             Aspect="AspectFit"
+                                             BackgroundColor="Transparent"
+                                             VerticalOptions="Center"
+                                             IsVisible="{Binding HasCustomerWhatsApp}"
+                                             Command="{Binding BindingContext.ChatCustomerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                             CommandParameter="{Binding .}"
+                                             SemanticProperties.Description="Chat with customer on WhatsApp" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
 </ContentPage>

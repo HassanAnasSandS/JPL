@@ -16,7 +16,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Grounds.Api",
-        version = "1.1",
+        version = "1.5",
         time = DateTime.Now
     });
 }
@@ -177,6 +177,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         }
 
         var rows = await query
+            .AsSplitQuery()
             .Include(g => g.Amenities)
             .Include(g => g.Services)
             .Include(g => g.Offers)
@@ -190,7 +191,9 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         if (hasMore)
             rows.RemoveAt(rows.Count - 1);
 
-        var items = rows.Select(g => GroundsMap.ToCard(g, Request)).ToList();
+        var stats = await GroundsMap.LoadStatsAsync(_db, rows.Select(g => g.Id).ToList(), ct)
+            .ConfigureAwait(false);
+        var items = rows.Select(g => GroundsMap.ToCard(g, Request, stats: stats.GetValueOrDefault(g.Id))).ToList();
         string? next = null;
         if (hasMore && rows.Count > 0)
         {
@@ -205,11 +208,14 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
     public async Task<ActionResult<GroundDetailDto>> Get(Guid id, CancellationToken ct)
     {
         var g = await _db.Grounds.AsNoTracking()
+            .AsSplitQuery()
             .Include(x => x.Amenities)
             .Include(x => x.Services)
+            .Include(x => x.ShopItems)
             .Include(x => x.Images)
             .Include(x => x.Offers)
             .Include(x => x.Links)
+            .Include(x => x.Videos)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct)
             .ConfigureAwait(false);
         if (g is null)
@@ -219,7 +225,54 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         if (g.ListingStatus != GroundListingStatus.Published && !canSeeDraft)
             return NotFound();
 
-        return Ok(GroundsMap.ToDetail(g, Request));
+        var stats = await GroundsMap.LoadStatsAsync(_db, [g.Id], ct).ConfigureAwait(false);
+        return Ok(GroundsMap.ToDetail(g, Request, stats.GetValueOrDefault(g.Id)));
+    }
+
+    [HttpGet("{id:guid}/reviews")]
+    public async Task<ActionResult<GroundReviewPage>> Reviews(
+        Guid id, string? cursor, int take = 20, CancellationToken ct = default)
+    {
+        var exists = await _db.Grounds.AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == id && !g.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (exists is null)
+            return NotFound();
+        var canSeeDraft = GroundsCaller.CanManageGround(HttpContext, exists.OwnerUserId);
+        if (exists.ListingStatus != GroundListingStatus.Published && !canSeeDraft)
+            return NotFound();
+
+        take = Math.Clamp(take, 1, 50);
+        var query = _db.Reviews.AsNoTracking()
+            .Include(r => r.Booking)
+            .Where(r => r.GroundId == id && !r.Booking.IsDeleted);
+
+        if (GroundsMap.TryDecodeCursor(cursor, out var created, out var reviewId))
+        {
+            query = query.Where(r =>
+                r.CreatedAtUtc < created ||
+                (r.CreatedAtUtc == created && string.Compare(r.Id.ToString(), reviewId.ToString()) < 0));
+        }
+
+        var rows = await query
+            .OrderByDescending(r => r.CreatedAtUtc)
+            .ThenByDescending(r => r.Id)
+            .Take(take + 1)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var hasMore = rows.Count > take;
+        if (hasMore)
+            rows.RemoveAt(rows.Count - 1);
+
+        string? next = null;
+        if (hasMore && rows.Count > 0)
+        {
+            var last = rows[^1];
+            next = GroundsMap.EncodeCursor(last.CreatedAtUtc, last.Id);
+        }
+
+        return Ok(new GroundReviewPage(rows.Select(GroundsMap.ToReview).ToList(), next, hasMore));
     }
 
     [HttpGet("{id:guid}/images/{fileName}")]
@@ -237,96 +290,35 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
             return BadRequest("Ground owners book from the owner dashboard.");
         if (GroundsCaller.IsGuest(HttpContext))
             return StatusCode(StatusCodes.Status403Forbidden, "Sign up with your own account to book a ground.");
-        if (!PakistanWhatsApp.TryNormalize(request.CustomerPhone, out var customerPhone))
+        var accountPhone = GroundsCaller.WhatsAppNumber(HttpContext);
+        var phoneSource = !string.IsNullOrWhiteSpace(accountPhone) ? accountPhone : request.CustomerPhone;
+        if (!PakistanWhatsApp.TryNormalize(phoneSource, out var customerPhone))
             return BadRequest(PakistanWhatsApp.RequiredError);
 
         var ground = await _db.Grounds
             .Include(g => g.Offers)
             .Include(g => g.Services)
+            .Include(g => g.ShopItems)
             .FirstOrDefaultAsync(g => g.Id == id && !g.IsDeleted && g.ListingStatus == GroundListingStatus.Published, ct)
             .ConfigureAwait(false);
         if (ground is null)
             return NotFound("Ground not found.");
 
-        var kind = request.BookingKind?.Trim() ?? string.Empty;
-        GroundBookingOffer? offer;
-        if (kind.Length == 0)
-        {
-            offer = ground.Offers
-                .Where(o => o.IsEnabled && o.Price > 0)
-                .OrderBy(o => o.SortOrder)
-                .FirstOrDefault();
-        }
-        else
-        {
-            offer = ground.Offers.FirstOrDefault(o =>
-                o.IsEnabled && string.Equals(o.Kind, kind, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (offer is null)
-            return BadRequest("This ground does not offer that booking type. Pick another type.");
-
-        var start = request.StartAt;
-        decimal requestedHours = request.Hours;
-        if (requestedHours <= 0 && request.EndAt > request.StartAt)
-            requestedHours = (decimal)(request.EndAt - request.StartAt).TotalHours;
-
-        DateTime end;
-        decimal amount;
-        decimal hours;
-        try
-        {
-            (end, amount, hours) = GroundBookingKinds.Quote(offer, start, requestedHours, ground.NightStartsHour, ground.NightEndsHour);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-
-        if (end <= start)
-            return BadRequest("End time must be after start time.");
-        if (start < DateTime.Now.AddMinutes(-2))
-            return BadRequest("Choose a future date and time.");
-
-        var clash = await GroundsMap.FindSlotClashAsync(_db, ground.Id, start, end, Guid.Empty, ct)
-            .ConfigureAwait(false);
-        if (clash is not null)
-            return Conflict(GroundsMap.SlotConflictMessage(clash.StartAt, clash.EndAt));
-
-        var extras = GroundsMap.PickRequested(ground, request.Services);
-        amount += extras.Sum(s => s.Amount);
-
         var customerId = GroundsCaller.UserId(HttpContext);
-        var name = string.IsNullOrWhiteSpace(request.CustomerName)
-            ? GroundsCaller.Username(HttpContext)
-            : request.CustomerName.Trim();
+        var accountName = GroundsCaller.Username(HttpContext);
+        var name = !string.IsNullOrWhiteSpace(accountName)
+            ? accountName
+            : (request.CustomerName?.Trim() ?? string.Empty);
 
-        var booking = new GroundBooking
-        {
-            GroundId = ground.Id,
-            CustomerUserId = customerId,
-            CustomerName = Trim(name, 120),
-            CustomerPhone = customerPhone,
-            StartAt = start,
-            EndAt = end,
-            BookingKind = offer.Kind,
-            BookedHours = hours,
-            Status = GroundBookingStatus.Pending,
-            BookingAmount = amount,
-            Notes = Trim(request.Notes, 1000)
-        };
-        foreach (var extra in extras)
-        {
-            booking.Services.Add(new GroundBookingService
-            {
-                BookingId = booking.Id,
-                Code = extra.Code,
-                Amount = extra.Amount
-            });
-        }
-        _db.Bookings.Add(booking);
+        var (booking, error) = await GroundBookingBuilder.TryBuildAsync(
+                _db, ground, request, customerId, name, customerPhone, GroundBookingStatus.Pending, ct)
+            .ConfigureAwait(false);
+        if (error is { } e)
+            return e.StatusCode == 409 ? Conflict(e.Message) : BadRequest(e.Message);
+
+        _db.Bookings.Add(booking!);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Ok(GroundsMap.ToBooking(booking, ground));
+        return Ok(GroundsMap.ToBooking(booking!, ground));
     }
 
     private static List<string> ParseAmenities(string? csv)

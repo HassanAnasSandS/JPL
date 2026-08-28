@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.ShopCatalogPage"
+             x:Name="ThisPage"
+             x:DataType="vm:GroundCatalogListViewModel"
+             Title="Shop"
+             HideSoftInputOnTapped="True">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Label Text="{Binding Title}"
+                   FontSize="22"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center"
+                   TextColor="{StaticResource Primary}" />
+            <Button Grid.Column="1"
+                    Text="+ Add"
+                    Style="{StaticResource GoldButton}"
+                    Padding="16,10"
+                    IsVisible="{Binding CanWrite}"
+                    Clicked="OnAddClicked" />
+        </Grid>
+
+        <SearchBar Grid.Row="1"
+                   Placeholder="{Binding FilterPlaceholder}"
+                   Text="{Binding NameFilter}"
+                   CancelButtonColor="{StaticResource Primary}" />
+
+        <RefreshView Grid.Row="2" IsRefreshing="{Binding IsBusy}" Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+                            EmptyView="{Binding EmptyView}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CatalogRow">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" RowDefinitions="Auto,Auto">
+                                <Label Text="{Binding Name}"
+                                       FontAttributes="Bold"
+                                       FontSize="16"
+                                       VerticalOptions="Center"
+                                       TextColor="{StaticResource Primary}" />
+                                <Button Grid.Column="1"
+                                        Text="Edit"
+                                        Padding="12,6"
+                                        FontSize="12"
+                                        Style="{StaticResource GoldButton}"
+                                        IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                        Clicked="OnEditClicked"
+                                        CommandParameter="{Binding .}" />
+                                <Button Grid.Column="2"
+                                        Text="Delete"
+                                        Padding="12,6"
+                                        FontSize="12"
+                                        BackgroundColor="#FFE8EC"
+                                        TextColor="{StaticResource Danger}"
+                                        IsVisible="{Binding BindingContext.CanWrite, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                        Clicked="OnDeleteClicked"
+                                        CommandParameter="{Binding .}" />
+                                <Label Grid.Row="1"
+                                       Grid.ColumnSpan="3"
+                                       Text="{Binding DetailsLine}"
+                                       IsVisible="{Binding HasDetails}"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12"
+                                       Margin="0,4,0,0" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Label Grid.Row="3" Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+    </Grid>
+</ContentPage>

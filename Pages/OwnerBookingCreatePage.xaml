@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.OwnerBookingCreatePage"
+             x:DataType="vm:OwnerBookingCreateViewModel"
+             Title="Confirm booking"
+             HideSoftInputOnTapped="True">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="Ground *" Style="{StaticResource SectionLabel}" />
+            <Picker Title="Select ground"
+                    ItemsSource="{Binding GroundChoices}"
+                    ItemDisplayBinding="{Binding Name, x:DataType=svc:GroundCardDto}"
+                    SelectedItem="{Binding SelectedGround}"
+                    IsEnabled="{Binding HasGrounds}" />
+
+            <Label Text="Booking type *" Style="{StaticResource SectionLabel}" />
+            <Picker Title="Select type"
+                    ItemsSource="{Binding OfferChoices}"
+                    ItemDisplayBinding="{Binding Display, x:DataType=svc:GroundBookingOfferDto}"
+                    SelectedItem="{Binding SelectedOffer}" />
+
+            <Label Text="Date *" Style="{StaticResource SectionLabel}" />
+            <DatePicker Date="{Binding StartDate}" />
+            <Label Text="Start time *" Style="{StaticResource SectionLabel}" />
+            <TimePicker Time="{Binding StartTime}" />
+
+            <VerticalStackLayout IsVisible="{Binding ShowHours}" Spacing="8">
+                <Label Text="Hours *" Style="{StaticResource SectionLabel}" />
+                <Picker Title="Hours"
+                        ItemsSource="{Binding HourChoices}"
+                        SelectedItem="{Binding SelectedHoursText}" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout IsVisible="{Binding HasPaidServices}" Spacing="6">
+                <Label Text="Extra services" Style="{StaticResource SectionLabel}" />
+                <Label Text="Optional extras. 0 PKR is free; paid amounts are added to the booking total."
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServiceChoices}" Spacing="2">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BookableServiceChoice">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,2">
+                                <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding Name}"
+                                       VerticalOptions="Center" />
+                                <Label Grid.Column="2"
+                                       Text="{Binding AmountLabel}"
+                                       TextColor="{StaticResource Secondary}"
+                                       VerticalOptions="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout IsVisible="{Binding HasShopItems}" Spacing="6">
+                <Label Text="Ground shop" Style="{StaticResource SectionLabel}" />
+                <Label Text="Add quantity for items this customer wants to rent or buy. Qty 0 skips the item."
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ShopChoices}" Spacing="4">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BookableShopChoice">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Padding="0,2">
+                                <VerticalStackLayout>
+                                    <Label Text="{Binding Name}" VerticalOptions="Center" />
+                                    <Label Text="{Binding LineLabel}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                </VerticalStackLayout>
+                                <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                                    <Button Text="−"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="10,4"
+                                            FontSize="16"
+                                            Command="{Binding DecreaseCommand}" />
+                                    <Label Text="{Binding Qty}"
+                                           WidthRequest="28"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalOptions="Center"
+                                           FontAttributes="Bold" />
+                                    <Button Text="+"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="10,4"
+                                            FontSize="16"
+                                            Command="{Binding IncreaseCommand}" />
+                                </HorizontalStackLayout>
+                                <Label Grid.Column="2"
+                                       Text="{Binding KindLabel}"
+                                       TextColor="{StaticResource Secondary}"
+                                       VerticalOptions="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+
+            <Label Text="{Binding WindowLine}" FontAttributes="Bold" />
+            <Label Text="{Binding BandLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
+            <Label Text="{Binding ExtrasLine}"
+                   FontSize="12"
+                   TextColor="{StaticResource TextSecondary}"
+                   IsVisible="{Binding HasExtras}" />
+            <Label Text="{Binding QuoteLine}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
+
+            <Entry Placeholder="Customer name *" Text="{Binding CustomerName}" />
+            <Entry Placeholder="Customer WhatsApp * (03XX XXXXXXX)" Text="{Binding CustomerPhone}" Keyboard="Telephone" MaxLength="16" />
+            <Editor Placeholder="Notes" Text="{Binding Notes}" HeightRequest="80" />
+            <Button Text="Confirm booking" Style="{StaticResource GoldButton}" Command="{Binding SubmitCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

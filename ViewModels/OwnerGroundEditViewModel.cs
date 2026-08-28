@@ -115,6 +115,32 @@ public sealed class ServiceChoice : ObservableObject
     }
 }
 
+public sealed class ShopChoice : ObservableObject
+{
+    public string Code { get; init; } = string.Empty;
+    public bool IsCustom { get; init; }
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    private string _kind = "Rent";
+    public string Kind
+    {
+        get => _kind;
+        set => SetProperty(ref _kind, value);
+    }
+
+    private string _priceText = "0";
+    public string PriceText
+    {
+        get => _priceText;
+        set => SetProperty(ref _priceText, value);
+    }
+}
+
 public sealed class GroundLinkEdit : ObservableObject
 {
     public const int MaxPerGround = 8;
@@ -148,6 +174,42 @@ public sealed class GroundLinkEdit : ObservableObject
         url = uri.AbsoluteUri;
         return url.Length is > 0 and <= 500;
     }
+}
+
+public sealed class GroundVideoEdit : ObservableObject
+{
+    private string _title = string.Empty;
+    public string Title
+    {
+        get => _title;
+        set
+        {
+            if (SetProperty(ref _title, value))
+                OnPropertyChanged(nameof(DisplayTitle));
+        }
+    }
+
+    private string _url = string.Empty;
+    public string Url
+    {
+        get => _url;
+        set
+        {
+            if (!SetProperty(ref _url, value))
+                return;
+            OnPropertyChanged(nameof(DisplayTitle));
+            OnPropertyChanged(nameof(Provider));
+            OnPropertyChanged(nameof(ThumbnailUrl));
+            OnPropertyChanged(nameof(HasThumbnail));
+        }
+    }
+
+    public string DisplayTitle => string.IsNullOrWhiteSpace(Title)
+        ? GroundVideoUrls.FallbackTitle(Url)
+        : Title.Trim();
+    public string Provider => GroundVideoUrls.Provider(Url);
+    public string? ThumbnailUrl => GroundVideoUrls.ThumbnailUrl(Url);
+    public bool HasThumbnail => !string.IsNullOrWhiteSpace(ThumbnailUrl);
 }
 
 public sealed class GroundPhotoItem
@@ -191,6 +253,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     public string? GroundId { get; set; }
 
     public ObservableCollection<GroundPhotoItem> Photos { get; } = new();
+    public ObservableCollection<GroundVideoEdit> Videos { get; } = new();
     public IReadOnlyList<string> ListingOptions { get; } = new[] { "Draft", "Published", "Paused" };
     public IReadOnlyList<NightStartOption> NightStartOptions { get; } =
     [
@@ -218,6 +281,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     ];
     public ObservableCollection<AmenityChoice> AmenityOptions { get; } = new();
     public ObservableCollection<ServiceChoice> ServiceOptions { get; } = new();
+    public ObservableCollection<ShopChoice> ShopOptions { get; } = new();
     public ObservableCollection<BookingOfferEdit> BookingOffers { get; } = new();
     public ObservableCollection<GroundLinkEdit> Links { get; } = new();
     public bool CanAddLink => Links.Count < GroundLinkEdit.MaxPerGround;
@@ -226,6 +290,11 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     public string PhotoSummary => Photos.Count == 0
         ? "Add up to 10 photos. Save this tab to continue."
         : $"{Photos.Count} / {GroundPhotoItem.MaxPerGround} photos";
+    public bool HasVideos => Videos.Count > 0;
+    public bool CanAddVideo => Videos.Count < GroundVideoUrls.MaxPerGround;
+    public string VideoSummary => Videos.Count == 0
+        ? "Paste any video URL. Videos stay on their site — we only save the link."
+        : $"{Videos.Count} / {GroundVideoUrls.MaxPerGround} videos";
     public string FetchLabel => IsFetching ? " " : "Fetch";
     public bool HasMapsFetchError => !string.IsNullOrWhiteSpace(MapsFetchError);
     public bool HasNameError => !string.IsNullOrWhiteSpace(NameError);
@@ -272,17 +341,23 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     public const string TabBooking = "booking";
     public const string TabAmenities = "amenities";
     public const string TabServices = "services";
+    public const string TabShop = "shop";
     public const string TabGallery = "gallery";
     public const string TabListing = "listing";
 
     public static readonly string[] TabOrder =
     [
-        TabGeneral, TabLocation, TabBooking, TabAmenities, TabServices, TabGallery, TabListing
+        TabGeneral, TabLocation, TabBooking, TabAmenities, TabServices, TabShop, TabGallery, TabListing
     ];
 
     [ObservableProperty] private string customAmenity = string.Empty;
     [ObservableProperty] private string customService = string.Empty;
     [ObservableProperty] private string customServiceAmount = string.Empty;
+    [ObservableProperty] private string customShop = string.Empty;
+    [ObservableProperty] private string customShopPrice = string.Empty;
+    [ObservableProperty] private string customShopKind = "Rent";
+    [ObservableProperty] private string customVideoTitle = string.Empty;
+    [ObservableProperty] private string customVideoUrl = string.Empty;
     [ObservableProperty] private string selectedTab = TabGeneral;
     [ObservableProperty] private int unlockedCount = 1;
 
@@ -291,21 +366,25 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     public bool IsBookingTab => SelectedTab == TabBooking;
     public bool IsAmenitiesTab => SelectedTab == TabAmenities;
     public bool IsServicesTab => SelectedTab == TabServices;
+    public bool IsShopTab => SelectedTab == TabShop;
     public bool IsGalleryTab => SelectedTab == TabGallery;
     public bool IsListingTab => SelectedTab == TabListing;
+    public IReadOnlyList<string> ShopKinds { get; } = ["Rent", "Sell"];
     public bool CanOpenGeneralTab => UnlockedCount >= 1;
     public bool CanOpenLocationTab => UnlockedCount >= 2;
     public bool CanOpenBookingTab => UnlockedCount >= 3;
     public bool CanOpenAmenitiesTab => UnlockedCount >= 4;
     public bool CanOpenServicesTab => UnlockedCount >= 5;
-    public bool CanOpenGalleryTab => UnlockedCount >= 6;
-    public bool CanOpenListingTab => UnlockedCount >= 7;
+    public bool CanOpenShopTab => UnlockedCount >= 6;
+    public bool CanOpenGalleryTab => UnlockedCount >= 7;
+    public bool CanOpenListingTab => UnlockedCount >= 8;
     public string SaveButtonText => SelectedTab switch
     {
         TabLocation => "Save Location",
         TabBooking => "Save Booking",
         TabAmenities => "Save Amenities",
         TabServices => "Save Services",
+        TabShop => "Save Shop",
         TabGallery => "Save Gallery",
         TabListing => "Save listing",
         _ => "Save General"
@@ -319,6 +398,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     {
         _api = api;
         Photos.CollectionChanged += (_, _) => NotifyPhotoState();
+        Videos.CollectionChanged += (_, _) => NotifyVideoState();
         ApplyNightStart(18);
         ApplyNightEnd(6);
         AddBookingType();
@@ -392,6 +472,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBookingTab));
         OnPropertyChanged(nameof(IsAmenitiesTab));
         OnPropertyChanged(nameof(IsServicesTab));
+        OnPropertyChanged(nameof(IsShopTab));
         OnPropertyChanged(nameof(IsGalleryTab));
         OnPropertyChanged(nameof(IsListingTab));
         OnPropertyChanged(nameof(SaveButtonText));
@@ -403,6 +484,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         OnPropertyChanged(nameof(CanOpenBookingTab));
         OnPropertyChanged(nameof(CanOpenAmenitiesTab));
         OnPropertyChanged(nameof(CanOpenServicesTab));
+        OnPropertyChanged(nameof(CanOpenShopTab));
         OnPropertyChanged(nameof(CanOpenGalleryTab));
         OnPropertyChanged(nameof(CanOpenListingTab));
         OnPropertyChanged(nameof(TabLockHint));
@@ -412,6 +494,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         SelectBookingTabCommand.NotifyCanExecuteChanged();
         SelectAmenitiesTabCommand.NotifyCanExecuteChanged();
         SelectServicesTabCommand.NotifyCanExecuteChanged();
+        SelectShopTabCommand.NotifyCanExecuteChanged();
         SelectGalleryTabCommand.NotifyCanExecuteChanged();
         SelectListingTabCommand.NotifyCanExecuteChanged();
     }
@@ -430,6 +513,9 @@ public partial class OwnerGroundEditViewModel : ObservableObject
 
     [RelayCommand(CanExecute = nameof(CanOpenServicesTab))]
     private void SelectServicesTab() => SelectedTab = TabServices;
+
+    [RelayCommand(CanExecute = nameof(CanOpenShopTab))]
+    private void SelectShopTab() => SelectedTab = TabShop;
 
     [RelayCommand(CanExecute = nameof(CanOpenGalleryTab))]
     private void SelectGalleryTab() => SelectedTab = TabGallery;
@@ -482,6 +568,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         _hydrate--;
         ApplySavedAmenities(g.Amenities);
         ApplySavedServices(g.Services);
+        ApplySavedShop(g.Shop);
         ApplySavedOffers(g.Offers, g.HourlyRate);
         ApplyNightStart(g.NightStartsHour);
         ApplyNightEnd(g.NightEndsHour);
@@ -489,6 +576,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         Photos.Clear();
         foreach (var img in g.Images ?? [])
             Photos.Add(GroundPhotoItem.FromRemote(img));
+        ApplySavedVideos(g.Videos);
         UnlockedCount = InferUnlockedCount(g);
     }
 
@@ -510,8 +598,10 @@ public partial class OwnerGroundEditViewModel : ObservableObject
             n = 5;
         if (g.Services is { Count: > 0 })
             n = Math.Max(n, 6);
-        if (g.Images is { Count: > 0 })
+        if (g.Shop is { Count: > 0 })
             n = Math.Max(n, 7);
+        if (g.Images is { Count: > 0 })
+            n = Math.Max(n, 8);
         if (!string.IsNullOrWhiteSpace(g.ListingStatus)
             && !string.Equals(g.ListingStatus, "Draft", StringComparison.OrdinalIgnoreCase))
             n = TabOrder.Length;
@@ -522,10 +612,12 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     {
         IReadOnlyList<CatalogItemDto> amenities = [];
         IReadOnlyList<CatalogItemDto> services = [];
+        IReadOnlyList<ShopCatalogItemDto> shop = [];
         try
         {
             amenities = await _api.GetAmenityCatalogAsync().ConfigureAwait(true);
             services = await _api.GetServiceCatalogAsync().ConfigureAwait(true);
+            shop = await _api.GetShopCatalogAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -538,6 +630,9 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         ServiceOptions.Clear();
         foreach (var row in services)
             ServiceOptions.Add(new ServiceChoice { Code = row.Name });
+        ShopOptions.Clear();
+        foreach (var row in shop)
+            ShopOptions.Add(new ShopChoice { Code = row.Name });
     }
 
     [RelayCommand]
@@ -650,6 +745,15 @@ public partial class OwnerGroundEditViewModel : ObservableObject
                     if (Links.Count(l => !string.IsNullOrWhiteSpace(l.Url)) > GroundLinkEdit.MaxPerGround)
                         throw new ArgumentException($"At most {GroundLinkEdit.MaxPerGround} links.");
                     break;
+                case TabGallery:
+                    if (Videos.Count > GroundVideoUrls.MaxPerGround)
+                        throw new ArgumentException($"At most {GroundVideoUrls.MaxPerGround} videos.");
+                    foreach (var row in Videos)
+                    {
+                        if (!GroundVideoUrls.TryNormalize(row.Url, out _))
+                            throw new ArgumentException($"Not a valid video link: {row.Url.Trim()}");
+                    }
+                    break;
             }
 
             if (SelectedTab == TabGallery)
@@ -657,8 +761,6 @@ public partial class OwnerGroundEditViewModel : ObservableObject
                 if (_existingId is not Guid galleryId)
                     throw new ArgumentException("Save General first.");
                 await UploadPendingPhotosAsync(galleryId).ConfigureAwait(true);
-                await FinishTabSaveAsync().ConfigureAwait(true);
-                return;
             }
 
             var offers = SelectedTab == TabBooking
@@ -714,11 +816,26 @@ public partial class OwnerGroundEditViewModel : ObservableObject
                         amount = decimal.TryParse(s.AmountText, out var n) && n >= 0 ? n : 0
                     }).ToList()
                     : null,
+                shop = SelectedTab == TabShop
+                    ? ShopOptions.Where(s => s.IsSelected).Select(s => new
+                    {
+                        name = s.Code,
+                        price = decimal.TryParse(s.PriceText, out var p) && p >= 0 ? p : 0,
+                        kind = s.Kind
+                    }).ToList()
+                    : null,
                 links = SelectedTab == TabGeneral
                     ? Links.Where(l => GroundLinkEdit.TryNormalizeUrl(l.Url, out _)).Select(l =>
                     {
                         GroundLinkEdit.TryNormalizeUrl(l.Url, out var url);
                         return new { title = (l.Title ?? string.Empty).Trim(), url };
+                    }).ToList()
+                    : null,
+                videos = SelectedTab == TabGallery
+                    ? Videos.Where(v => GroundVideoUrls.TryNormalize(v.Url, out _)).Select(v =>
+                    {
+                        GroundVideoUrls.TryNormalize(v.Url, out var url);
+                        return new { title = (v.Title ?? string.Empty).Trim(), url };
                     }).ToList()
                     : null,
                 offers
@@ -741,10 +858,14 @@ public partial class OwnerGroundEditViewModel : ObservableObject
                 ApplySavedOffers(saved.Offers, saved.HourlyRate);
             if (SelectedTab == TabServices)
                 ApplySavedServices(saved.Services);
+            if (SelectedTab == TabShop)
+                ApplySavedShop(saved.Shop);
             if (SelectedTab == TabAmenities)
                 ApplySavedAmenities(saved.Amenities);
             if (SelectedTab == TabGeneral)
                 ApplySavedLinks(saved.Links);
+            if (SelectedTab == TabGallery)
+                ApplySavedVideos(saved.Videos);
             if (!string.IsNullOrWhiteSpace(saved.ListingStatus))
                 SelectedListing = saved.ListingStatus;
             ApplyNightStart(saved.NightStartsHour);
@@ -790,6 +911,7 @@ public partial class OwnerGroundEditViewModel : ObservableObject
             TabBooking => "Booking",
             TabAmenities => "Amenities",
             TabServices => "Services",
+            TabShop => "Shop",
             TabGallery => "Gallery",
             TabListing => "Listing",
             _ => "General"
@@ -1007,6 +1129,72 @@ public partial class OwnerGroundEditViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AddShop()
+    {
+        var name = CustomShop?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+            return;
+        TryAddShop(name, CustomShopPrice, CustomShopKind);
+        CustomShop = string.Empty;
+        CustomShopPrice = string.Empty;
+    }
+
+    [RelayCommand]
+    private void RemoveShop(ShopChoice? item)
+    {
+        if (item is { IsCustom: true })
+            ShopOptions.Remove(item);
+    }
+
+    private void ApplySavedShop(IReadOnlyList<GroundShopItemDto>? saved)
+    {
+        foreach (var extra in ShopOptions.Where(s => s.IsCustom).ToList())
+            ShopOptions.Remove(extra);
+        foreach (var choice in ShopOptions)
+        {
+            choice.IsSelected = false;
+            choice.PriceText = "0";
+        }
+
+        foreach (var row in saved ?? [])
+            TryAddShop(row.Name, row.Price.ToString("0"), row.Kind);
+    }
+
+    private void TryAddShop(string? rawName, string? rawPrice, string? rawKind)
+    {
+        var name = (rawName ?? string.Empty).Trim();
+        if (name.Length == 0)
+            return;
+        if (name.Length > 40)
+            name = name[..40];
+
+        ErrorMessage = null;
+        var priceText = decimal.TryParse(rawPrice, out var price) && price >= 0
+            ? price.ToString("0")
+            : "0";
+        var kind = string.Equals(rawKind, "Sell", StringComparison.OrdinalIgnoreCase) ? "Sell" : "Rent";
+
+        var existing = ShopOptions.FirstOrDefault(s =>
+            string.Equals(s.Code, name, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            existing.IsSelected = true;
+            existing.PriceText = priceText;
+            existing.Kind = kind;
+            return;
+        }
+
+        ShopOptions.Add(new ShopChoice
+        {
+            Code = name,
+            IsCustom = true,
+            IsSelected = true,
+            PriceText = priceText,
+            Kind = kind
+        });
+    }
+
+    [RelayCommand]
     private void AddLink()
     {
         if (Links.Count >= GroundLinkEdit.MaxPerGround)
@@ -1043,6 +1231,68 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(CanAddLink));
+    }
+
+    [RelayCommand]
+    private void AddVideo()
+    {
+        if (!CanAddVideo)
+        {
+            ErrorMessage = $"At most {GroundVideoUrls.MaxPerGround} videos.";
+            return;
+        }
+
+        var raw = CustomVideoUrl?.Trim() ?? string.Empty;
+        if (raw.Length == 0)
+        {
+            ErrorMessage = "Paste a video link.";
+            return;
+        }
+        if (!GroundVideoUrls.TryNormalize(raw, out var url))
+        {
+            ErrorMessage = "Not a valid video link. Paste any http or https URL (or iframe src).";
+            return;
+        }
+
+        ErrorMessage = null;
+        if (Videos.Any(v => string.Equals(v.Url, url, StringComparison.OrdinalIgnoreCase)))
+        {
+            ErrorMessage = "That video is already on this ground.";
+            return;
+        }
+
+        Videos.Add(new GroundVideoEdit
+        {
+            Title = (CustomVideoTitle ?? string.Empty).Trim(),
+            Url = url
+        });
+        CustomVideoTitle = string.Empty;
+        CustomVideoUrl = string.Empty;
+    }
+
+    [RelayCommand]
+    private void RemoveVideo(GroundVideoEdit? row)
+    {
+        if (row is null)
+            return;
+        Videos.Remove(row);
+    }
+
+    private void ApplySavedVideos(IReadOnlyList<GroundVideoDto>? rows)
+    {
+        Videos.Clear();
+        foreach (var saved in rows ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(saved.Url))
+                continue;
+            Videos.Add(new GroundVideoEdit
+            {
+                Title = saved.Title ?? string.Empty,
+                Url = saved.Url
+            });
+        }
+
+        NotifyVideoState();
     }
 
     [RelayCommand]
@@ -1129,6 +1379,13 @@ public partial class OwnerGroundEditViewModel : ObservableObject
         OnPropertyChanged(nameof(HasPhotos));
         OnPropertyChanged(nameof(CanAddMore));
         OnPropertyChanged(nameof(PhotoSummary));
+    }
+
+    private void NotifyVideoState()
+    {
+        OnPropertyChanged(nameof(HasVideos));
+        OnPropertyChanged(nameof(CanAddVideo));
+        OnPropertyChanged(nameof(VideoSummary));
     }
 
     private void ClearLocationErrors()

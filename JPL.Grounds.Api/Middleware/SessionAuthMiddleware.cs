@@ -55,6 +55,11 @@ public sealed class SessionAuthMiddleware
                 new Claim(ClaimTypes.Role, user.Role.ToString())
             },
             authenticationType: "JplSession");
+        if (!string.IsNullOrWhiteSpace(user.WhatsAppNumber))
+        {
+            identity.AddClaim(new Claim("whatsapp", user.WhatsAppNumber));
+            context.Items["JplWhatsApp"] = user.WhatsAppNumber;
+        }
         context.User = new ClaimsPrincipal(identity);
         context.Items["JplUserId"] = user.Id;
         context.Items["JplUsername"] = user.Username;

@@ -69,7 +69,9 @@ public static class LiveStreamUrls
     {
         var qs = "autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&fs=1";
         if (!string.IsNullOrWhiteSpace(pageOrigin)
-            && Uri.TryCreate(pageOrigin, UriKind.Absolute, out var origin))
+            && Uri.TryCreate(pageOrigin, UriKind.Absolute, out var origin)
+            && !origin.Host.Contains("youtube", StringComparison.OrdinalIgnoreCase)
+            && !origin.Host.Contains("youtu.be", StringComparison.OrdinalIgnoreCase))
         {
             qs += "&origin=" + Uri.EscapeDataString(origin.GetLeftPart(UriPartial.Authority));
             qs += "&widget_referrer=" + Uri.EscapeDataString(origin.GetLeftPart(UriPartial.Authority));
@@ -90,11 +92,17 @@ public static class LiveStreamUrls
 
         embed = YouTubeEmbedUrl(yt.Groups["id"].Value, pageOrigin);
 
+        var origin = pageOrigin;
+        if (string.IsNullOrWhiteSpace(origin)
+            || origin.Contains("youtube.com", StringComparison.OrdinalIgnoreCase)
+            || origin.Contains("youtu.be", StringComparison.OrdinalIgnoreCase))
+            origin = Cric360Hosts.GroundsApi.TrimEnd('/') + "/";
+
         var safe = System.Net.WebUtility.HtmlEncode(embed);
-        // BaseUrl + referrerpolicy so YouTube Error 153 does not appear in the in-app player.
+        // Load from a real https origin — YouTube Error 153 if Referer is about:blank / youtube.com.
         return new HtmlWebViewSource
         {
-            BaseUrl = "https://www.youtube.com/",
+            BaseUrl = origin.EndsWith('/') ? origin : origin + "/",
             Html =
                 "<!DOCTYPE html><html><head><meta charset=\"utf-8\" />" +
                 "<meta name=\"referrer\" content=\"strict-origin-when-cross-origin\" />" +

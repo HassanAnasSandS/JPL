@@ -70,9 +70,12 @@ public sealed class GroundsDatabase : IGroundsDbFactory
         await EnsureGroundMapsColumnsAsync(db, ct).ConfigureAwait(false);
         await EnsureBookingTypesAsync(db, ct).ConfigureAwait(false);
         await EnsureGroundServicesAsync(db, ct).ConfigureAwait(false);
+        await EnsureGroundShopAsync(db, ct).ConfigureAwait(false);
         await EnsureRateWindowsAsync(db, ct).ConfigureAwait(false);
         await EnsureCatalogAsync(db, ct).ConfigureAwait(false);
         await EnsureGroundLinksAsync(db, ct).ConfigureAwait(false);
+        await EnsureGroundVideosAsync(db, ct).ConfigureAwait(false);
+        await EnsureReviewsAsync(db, ct).ConfigureAwait(false);
     }
 
     private async Task EnsureRateWindowsAsync(GroundsDbContext db, CancellationToken ct)
@@ -229,6 +232,73 @@ public sealed class GroundsDatabase : IGroundsDbFactory
                 "BookingId" TEXT NOT NULL,
                 "Code" TEXT NOT NULL,
                 "Amount" TEXT NOT NULL,
+                PRIMARY KEY ("BookingId", "Code"),
+                FOREIGN KEY ("BookingId") REFERENCES "Bookings" ("Id") ON DELETE CASCADE
+            );
+            """
+        })
+        {
+            try { await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false); }
+            catch { /* already exists */ }
+        }
+    }
+
+    private async Task EnsureGroundShopAsync(GroundsDbContext db, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.GroundShopItems', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[GroundShopItems] (
+                        [GroundId] uniqueidentifier NOT NULL,
+                        [Code] nvarchar(40) NOT NULL,
+                        [Price] decimal(12,2) NOT NULL,
+                        [Kind] nvarchar(16) NOT NULL,
+                        CONSTRAINT [PK_GroundShopItems] PRIMARY KEY ([GroundId], [Code]),
+                        CONSTRAINT [FK_GroundShopItems_Grounds] FOREIGN KEY ([GroundId])
+                            REFERENCES [dbo].[Grounds] ([Id]) ON DELETE CASCADE
+                    );
+                END
+                """, ct).ConfigureAwait(false);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.GroundBookingShopItems', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[GroundBookingShopItems] (
+                        [BookingId] uniqueidentifier NOT NULL,
+                        [Code] nvarchar(40) NOT NULL,
+                        [Price] decimal(12,2) NOT NULL,
+                        [Kind] nvarchar(16) NOT NULL,
+                        [Qty] int NOT NULL,
+                        CONSTRAINT [PK_GroundBookingShopItems] PRIMARY KEY ([BookingId], [Code]),
+                        CONSTRAINT [FK_GroundBookingShopItems_Bookings] FOREIGN KEY ([BookingId])
+                            REFERENCES [dbo].[Bookings] ([Id]) ON DELETE CASCADE
+                    );
+                END
+                """, ct).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var sql in new[]
+        {
+            """
+            CREATE TABLE IF NOT EXISTS "GroundShopItems" (
+                "GroundId" TEXT NOT NULL,
+                "Code" TEXT NOT NULL,
+                "Price" TEXT NOT NULL,
+                "Kind" TEXT NOT NULL,
+                PRIMARY KEY ("GroundId", "Code"),
+                FOREIGN KEY ("GroundId") REFERENCES "Grounds" ("Id") ON DELETE CASCADE
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS "GroundBookingShopItems" (
+                "BookingId" TEXT NOT NULL,
+                "Code" TEXT NOT NULL,
+                "Price" TEXT NOT NULL,
+                "Kind" TEXT NOT NULL,
+                "Qty" INTEGER NOT NULL,
                 PRIMARY KEY ("BookingId", "Code"),
                 FOREIGN KEY ("BookingId") REFERENCES "Bookings" ("Id") ON DELETE CASCADE
             );
@@ -421,6 +491,27 @@ public sealed class GroundsDatabase : IGroundsDbFactory
                     CREATE INDEX [IX_ServiceCatalog_SortOrder] ON [dbo].[ServiceCatalog] ([SortOrder]);
                 END
                 """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.ShopCatalog', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[ShopCatalog] (
+                        [Id] uniqueidentifier NOT NULL,
+                        [Name] nvarchar(40) NOT NULL,
+                        [Kind] nvarchar(16) NOT NULL,
+                        [Price] decimal(12,2) NOT NULL CONSTRAINT [DF_ShopCatalog_Price] DEFAULT 0,
+                        [SortOrder] int NOT NULL,
+                        CONSTRAINT [PK_ShopCatalog] PRIMARY KEY ([Id])
+                    );
+                    CREATE UNIQUE INDEX [IX_ShopCatalog_Name] ON [dbo].[ShopCatalog] ([Name]);
+                    CREATE INDEX [IX_ShopCatalog_SortOrder] ON [dbo].[ShopCatalog] ([SortOrder]);
+                END
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.ShopCatalog', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ShopCatalog', N'Price') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.ShopCatalog ADD Price decimal(12,2) NOT NULL CONSTRAINT DF_ShopCatalog_Price DEFAULT 0;
+                END
+                """, ct).ConfigureAwait(false);
         }
         else
         {
@@ -441,7 +532,18 @@ public sealed class GroundsDatabase : IGroundsDbFactory
                     "SortOrder" INTEGER NOT NULL
                 );
                 """,
-                """CREATE UNIQUE INDEX IF NOT EXISTS "IX_ServiceCatalog_Name" ON "ServiceCatalog" ("Name");"""
+                """CREATE UNIQUE INDEX IF NOT EXISTS "IX_ServiceCatalog_Name" ON "ServiceCatalog" ("Name");""",
+                """
+                CREATE TABLE IF NOT EXISTS "ShopCatalog" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_ShopCatalog" PRIMARY KEY,
+                    "Name" TEXT NOT NULL,
+                    "Kind" TEXT NOT NULL,
+                    "Price" TEXT NOT NULL DEFAULT '0',
+                    "SortOrder" INTEGER NOT NULL
+                );
+                """,
+                """CREATE UNIQUE INDEX IF NOT EXISTS "IX_ShopCatalog_Name" ON "ShopCatalog" ("Name");""",
+                """ALTER TABLE "ShopCatalog" ADD COLUMN "Price" TEXT NOT NULL DEFAULT '0';"""
             })
             {
                 try { await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false); }
@@ -461,6 +563,13 @@ public sealed class GroundsDatabase : IGroundsDbFactory
             var order = 0;
             foreach (var name in GroundCatalogSeed.Services)
                 db.ServiceCatalog.Add(new ServiceCatalog { Name = name, SortOrder = order++ });
+        }
+
+        if (!await db.ShopCatalog.AnyAsync(ct).ConfigureAwait(false))
+        {
+            var order = 0;
+            foreach (var (name, kind) in GroundCatalogSeed.Shop)
+                db.ShopCatalog.Add(new ShopCatalog { Name = name, Kind = kind, Price = 0, SortOrder = order++ });
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -501,6 +610,109 @@ public sealed class GroundsDatabase : IGroundsDbFactory
             );
             """,
             """CREATE INDEX IF NOT EXISTS "IX_GroundLinks_GroundId_SortOrder" ON "GroundLinks" ("GroundId", "SortOrder");"""
+        })
+        {
+            try { await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false); }
+            catch { /* already exists */ }
+        }
+    }
+
+    private async Task EnsureGroundVideosAsync(GroundsDbContext db, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.GroundVideos', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[GroundVideos] (
+                        [Id] uniqueidentifier NOT NULL,
+                        [GroundId] uniqueidentifier NOT NULL,
+                        [Title] nvarchar(80) NOT NULL,
+                        [Url] nvarchar(1000) NOT NULL,
+                        [SortOrder] int NOT NULL,
+                        CONSTRAINT [PK_GroundVideos] PRIMARY KEY ([Id]),
+                        CONSTRAINT [FK_GroundVideos_Grounds_GroundId] FOREIGN KEY ([GroundId]) REFERENCES [dbo].[Grounds] ([Id]) ON DELETE CASCADE
+                    );
+                    CREATE INDEX [IX_GroundVideos_GroundId_SortOrder] ON [dbo].[GroundVideos] ([GroundId], [SortOrder]);
+                END
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                IF COL_LENGTH(N'dbo.GroundVideos', N'Url') IS NOT NULL
+                    ALTER TABLE dbo.GroundVideos ALTER COLUMN [Url] nvarchar(1000) NOT NULL;
+                """, ct).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var sql in new[]
+        {
+            """
+            CREATE TABLE IF NOT EXISTS "GroundVideos" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_GroundVideos" PRIMARY KEY,
+                "GroundId" TEXT NOT NULL,
+                "Title" TEXT NOT NULL,
+                "Url" TEXT NOT NULL,
+                "SortOrder" INTEGER NOT NULL,
+                FOREIGN KEY ("GroundId") REFERENCES "Grounds" ("Id") ON DELETE CASCADE
+            );
+            """,
+            """CREATE INDEX IF NOT EXISTS "IX_GroundVideos_GroundId_SortOrder" ON "GroundVideos" ("GroundId", "SortOrder");"""
+        })
+        {
+            try { await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false); }
+            catch { /* already exists */ }
+        }
+    }
+
+    private async Task EnsureReviewsAsync(GroundsDbContext db, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.GroundReviews', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[GroundReviews] (
+                        [Id] uniqueidentifier NOT NULL,
+                        [GroundId] uniqueidentifier NOT NULL,
+                        [BookingId] uniqueidentifier NOT NULL,
+                        [CustomerUserId] uniqueidentifier NOT NULL,
+                        [CustomerName] nvarchar(120) NOT NULL,
+                        [Rating] int NOT NULL,
+                        [Comment] nvarchar(1000) NULL,
+                        [CreatedAtUtc] datetimeoffset NOT NULL,
+                        [UpdatedAtUtc] datetimeoffset NOT NULL,
+                        CONSTRAINT [PK_GroundReviews] PRIMARY KEY ([Id]),
+                        CONSTRAINT [FK_GroundReviews_Grounds_GroundId] FOREIGN KEY ([GroundId])
+                            REFERENCES [dbo].[Grounds] ([Id]) ON DELETE NO ACTION,
+                        CONSTRAINT [FK_GroundReviews_Bookings_BookingId] FOREIGN KEY ([BookingId])
+                            REFERENCES [dbo].[Bookings] ([Id]) ON DELETE CASCADE
+                    );
+                    CREATE UNIQUE INDEX [IX_GroundReviews_BookingId] ON [dbo].[GroundReviews] ([BookingId]);
+                    CREATE INDEX [IX_GroundReviews_GroundId_CreatedAtUtc_Id]
+                        ON [dbo].[GroundReviews] ([GroundId], [CreatedAtUtc], [Id]);
+                END
+                """, ct).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var sql in new[]
+        {
+            """
+            CREATE TABLE IF NOT EXISTS "GroundReviews" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_GroundReviews" PRIMARY KEY,
+                "GroundId" TEXT NOT NULL,
+                "BookingId" TEXT NOT NULL,
+                "CustomerUserId" TEXT NOT NULL,
+                "CustomerName" TEXT NOT NULL,
+                "Rating" INTEGER NOT NULL,
+                "Comment" TEXT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL,
+                FOREIGN KEY ("GroundId") REFERENCES "Grounds" ("Id") ON DELETE RESTRICT,
+                FOREIGN KEY ("BookingId") REFERENCES "Bookings" ("Id") ON DELETE CASCADE
+            );
+            """,
+            """CREATE UNIQUE INDEX IF NOT EXISTS "IX_GroundReviews_BookingId" ON "GroundReviews" ("BookingId");""",
+            """CREATE INDEX IF NOT EXISTS "IX_GroundReviews_GroundId_CreatedAtUtc_Id" ON "GroundReviews" ("GroundId", "CreatedAtUtc", "Id");"""
         })
         {
             try { await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false); }

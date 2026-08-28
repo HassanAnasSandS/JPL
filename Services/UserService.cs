@@ -7,7 +7,8 @@ public sealed record UserDraft(
     string? Password,
     AppRole Role,
     Guid? LeagueId,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? WhatsAppNumber = null);
 
 public interface IUserService
 {
@@ -71,7 +72,8 @@ public sealed class UserService : IUserService
             {
                 username,
                 password,
-                isActive = draft.IsActive
+                isActive = draft.IsActive,
+                whatsAppNumber = RequireWhatsApp(draft.WhatsAppNumber)
             }, ct).ConfigureAwait(false);
             return ToEntity(owner);
         }
@@ -85,7 +87,8 @@ public sealed class UserService : IUserService
             isActive = draft.IsActive,
             leagueId = draft.Role is AppRole.GroundOwner or AppRole.PublicUser or AppRole.Guest
                 ? (Guid?)null
-                : draft.LeagueId
+                : draft.LeagueId,
+            whatsAppNumber = RequireWhatsApp(draft.WhatsAppNumber)
         }, ct).ConfigureAwait(false);
 
         return ToEntity(remote);
@@ -105,7 +108,8 @@ public sealed class UserService : IUserService
             {
                 username,
                 password = string.IsNullOrWhiteSpace(draft.Password) ? null : draft.Password.Trim(),
-                isActive = draft.IsActive
+                isActive = draft.IsActive,
+                whatsAppNumber = NormalizeWhatsAppOrNull(draft.WhatsAppNumber)
             }, ct).ConfigureAwait(false);
             return ToEntity(owner);
         }
@@ -119,7 +123,8 @@ public sealed class UserService : IUserService
             isActive = draft.IsActive,
             leagueId = draft.Role is AppRole.GroundOwner or AppRole.PublicUser or AppRole.Guest
                 ? (Guid?)null
-                : draft.LeagueId
+                : draft.LeagueId,
+            whatsAppNumber = NormalizeWhatsAppOrNull(draft.WhatsAppNumber)
         }, ct).ConfigureAwait(false);
 
         return ToEntity(remote);
@@ -133,7 +138,7 @@ public sealed class UserService : IUserService
 
         await UpdateAsync(
                 id,
-                new UserDraft(user.Username, Password: null, user.Role, user.LeagueId, isActive),
+                new UserDraft(user.Username, Password: null, user.Role, user.LeagueId, isActive, user.WhatsAppNumber),
                 ct)
             .ConfigureAwait(false);
     }
@@ -169,10 +174,25 @@ public sealed class UserService : IUserService
             Role = role,
             LeagueId = dto.LeagueId,
             LeagueName = dto.LeagueName ?? string.Empty,
+            WhatsAppNumber = dto.WhatsAppNumber,
             IsActive = dto.IsActive,
             CreatedAtUtc = dto.CreatedAtUtc,
             PasswordHash = string.Empty
         };
+    }
+
+    private static string? NormalizeWhatsAppOrNull(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+        return RequireWhatsApp(raw);
+    }
+
+    private static string RequireWhatsApp(string? raw)
+    {
+        if (!PakistanWhatsApp.TryNormalize(raw, out var whatsApp))
+            throw new ArgumentException(PakistanWhatsApp.RequiredError);
+        return whatsApp;
     }
 
     private static string RequireUsername(string? username)

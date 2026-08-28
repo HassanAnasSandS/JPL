@@ -37,6 +37,13 @@
                                 BorderWidth="0" />
                     </Grid>
 
+                    <Label Text="WhatsApp *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="WhatsApp * (03XX XXXXXXX)"
+                           Text="{Binding WhatsAppNumber}"
+                           Keyboard="Telephone"
+                           MaxLength="16"
+                           FontSize="16" />
+
                     <Label Text="Role *" Style="{StaticResource SectionLabel}" />
                     <Picker Title="Select role"
                             ItemsSource="{Binding RoleOptions}"

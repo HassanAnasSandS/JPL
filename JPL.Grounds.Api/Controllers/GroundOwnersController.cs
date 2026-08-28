@@ -14,12 +14,14 @@ public sealed record GroundOwnerUserDto(
     bool IsActive,
     DateTime CreatedAtUtc,
     Guid? LeagueId = null,
-    string? LeagueName = null);
+    string? LeagueName = null,
+    string? WhatsAppNumber = null);
 
 public sealed record GroundOwnerUpsertRequest(
     string Username,
     string? Password,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? WhatsAppNumber = null);
 
 /// <summary>
 /// GroundOwner accounts live in Master Users (same table as JPL.Api).
@@ -46,12 +48,15 @@ public sealed class GroundOwnersController : ControllerBase, IAsyncDisposable
 
         if (await _db.Users.AnyAsync(u => u.Username == username, ct).ConfigureAwait(false))
             return BadRequest($"Username \"{username}\" already exists.");
+        if (!PakistanWhatsApp.TryNormalize(request.WhatsAppNumber, out var whatsApp))
+            return BadRequest(PakistanWhatsApp.RequiredError);
 
         var user = new MasterUser
         {
             Username = username,
             Role = AppRole.GroundOwner,
             LeagueId = null,
+            WhatsAppNumber = whatsApp,
             IsActive = request.IsActive,
             CreatedAtUtc = DateTime.Now
         };
@@ -75,6 +80,12 @@ public sealed class GroundOwnersController : ControllerBase, IAsyncDisposable
 
         if (await _db.Users.AnyAsync(u => u.Username == username && u.Id != id, ct).ConfigureAwait(false))
             return BadRequest($"Username \"{username}\" already exists.");
+        if (!string.IsNullOrWhiteSpace(request.WhatsAppNumber))
+        {
+            if (!PakistanWhatsApp.TryNormalize(request.WhatsAppNumber, out var whatsApp))
+                return BadRequest(PakistanWhatsApp.InvalidError);
+            user.WhatsAppNumber = whatsApp;
+        }
 
         user.Username = username;
         user.Role = AppRole.GroundOwner;
@@ -135,5 +146,5 @@ public sealed class GroundOwnersController : ControllerBase, IAsyncDisposable
     }
 
     private static GroundOwnerUserDto ToDto(MasterUser u)
-        => new(u.Id, u.Username, u.Role.ToString(), u.IsActive, u.CreatedAtUtc, u.LeagueId, null);
+        => new(u.Id, u.Username, u.Role.ToString(), u.IsActive, u.CreatedAtUtc, u.LeagueId, null, u.WhatsAppNumber);
 }

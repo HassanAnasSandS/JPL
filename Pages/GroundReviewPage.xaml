@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.GroundReviewPage"
+             x:Name="ThisPage"
+             x:DataType="vm:GroundReviewViewModel"
+             Title="Review"
+             HideSoftInputOnTapped="True">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="{Binding GroundName}" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+            <Label Text="{Binding WhenLine}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
+            <Label Text="One review per completed booking."
+                   FontSize="12"
+                   TextColor="{StaticResource TextSecondary}" />
+
+            <Label Text="Your rating *" Style="{StaticResource SectionLabel}" />
+            <Label Text="{Binding RatingHint}" FontSize="13" TextColor="{StaticResource Secondary}" />
+            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Stars}" Spacing="6">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ReviewStarVm">
+                        <Button Text="{Binding Glyph}"
+                                FontSize="28"
+                                Padding="8,4"
+                                MinimumWidthRequest="48"
+                                MinimumHeightRequest="48"
+                                BorderWidth="0"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource Secondary}"
+                                Command="{Binding BindingContext.PickRatingCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                CommandParameter="{Binding Value}" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalStackLayout>
+
+            <Label Text="Comment" Style="{StaticResource SectionLabel}" />
+            <Editor Placeholder="How was the ground, lights, and staff?"
+                    Text="{Binding Comment}"
+                    AutoSize="TextChanges"
+                    MaxLength="1000"
+                    HeightRequest="120" />
+
+            <Button Text="{Binding SubmitText}"
+                    Style="{StaticResource GoldButton}"
+                    Command="{Binding SubmitCommand}"
+                    IsEnabled="{Binding CanSubmit}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -48,7 +48,7 @@ public partial class OwnerGroundsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = NetworkUi.UserMessage(ex);
         }
         finally
         {

@@ -88,6 +88,19 @@
                         </DataTrigger>
                     </Button.Triggers>
                 </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Shop"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectShopTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding CanOpenShopTab}" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </DataTrigger>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsShopTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
                 <ctrl:TabChipButton Text="Gallery"
                                     Style="{StaticResource GroundTab}"
                                     Command="{Binding SelectGalleryTabCommand}">
@@ -408,6 +421,61 @@
                     </Grid>
                 </VerticalStackLayout>
 
+                <VerticalStackLayout IsVisible="{Binding IsShopTab}" Spacing="12">
+                    <Label Text="Shop items customers can rent or buy when they book. Set a PKR price and choose Rent or Sell."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ShopOptions}" Spacing="2">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ShopChoice">
+                                <Grid ColumnDefinitions="Auto,*,80,90,Auto" ColumnSpacing="6" Padding="0,2">
+                                    <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Code}"
+                                           VerticalOptions="Center" />
+                                    <Picker Grid.Column="2"
+                                            ItemsSource="{Binding BindingContext.ShopKinds, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            SelectedItem="{Binding Kind}"
+                                            VerticalOptions="Center"
+                                            FontSize="12" />
+                                    <Entry Grid.Column="3"
+                                           Placeholder="PKR"
+                                           Text="{Binding PriceText}"
+                                           Keyboard="Numeric"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="4"
+                                            Text="Remove"
+                                            FontSize="11"
+                                            Padding="8,4"
+                                            Style="{StaticResource GhostButton}"
+                                            IsVisible="{Binding IsCustom}"
+                                            Command="{Binding BindingContext.RemoveShopCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Grid ColumnDefinitions="*,80,90,Auto" ColumnSpacing="6">
+                        <Entry Placeholder="Type your own (e.g. Helmet)"
+                               Text="{Binding CustomShop}"
+                               MaxLength="40"
+                               ReturnCommand="{Binding AddShopCommand}" />
+                        <Picker Grid.Column="1"
+                                ItemsSource="{Binding ShopKinds}"
+                                SelectedItem="{Binding CustomShopKind}"
+                                FontSize="12" />
+                        <Entry Grid.Column="2"
+                               Placeholder="PKR"
+                               Text="{Binding CustomShopPrice}"
+                               Keyboard="Numeric"
+                               ReturnCommand="{Binding AddShopCommand}" />
+                        <Button Grid.Column="3"
+                                Text="Add"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding AddShopCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+
                 <VerticalStackLayout IsVisible="{Binding IsGalleryTab}" Spacing="12">
                     <Label Text="{Binding PhotoSummary}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
                     <Button Text="Add photos"
@@ -440,6 +508,65 @@
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </FlexLayout>
+                    <Label Text="{Binding VideoSummary}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                    <Entry Placeholder="Video title (optional)"
+                           Text="{Binding CustomVideoTitle}"
+                           MaxLength="80" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry Placeholder="Paste any video link"
+                               Text="{Binding CustomVideoUrl}"
+                               Keyboard="Url"
+                               ReturnCommand="{Binding AddVideoCommand}" />
+                        <Button Grid.Column="1"
+                                Text="Add"
+                                Style="{StaticResource GhostButton}"
+                                Command="{Binding AddVideoCommand}"
+                                IsEnabled="{Binding CanAddVideo}" />
+                    </Grid>
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Videos}"
+                                         IsVisible="{Binding HasVideos}"
+                                         Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GroundVideoEdit">
+                                <Border StrokeShape="RoundRectangle 12"
+                                        StrokeThickness="0"
+                                        BackgroundColor="#152033"
+                                        Padding="10">
+                                    <Grid ColumnDefinitions="88,*" ColumnSpacing="10">
+                                        <Grid HeightRequest="56" BackgroundColor="#0D1B2A">
+                                            <Image Source="{Binding ThumbnailUrl}"
+                                                   Aspect="AspectFill"
+                                                   IsVisible="{Binding HasThumbnail}" />
+                                            <Label Text="▶"
+                                                   FontSize="22"
+                                                   TextColor="#D4AF37"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center" />
+                                        </Grid>
+                                        <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                            <Label Text="{Binding DisplayTitle}"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation" />
+                                            <Label Text="{Binding Provider}"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource Secondary}" />
+                                            <Label Text="{Binding Url}"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource TextSecondary}"
+                                                   LineBreakMode="TailTruncation" />
+                                            <Button Text="Remove"
+                                                    FontSize="11"
+                                                    Padding="8,4"
+                                                    Style="{StaticResource GhostButton}"
+                                                    HorizontalOptions="Start"
+                                                    Command="{Binding BindingContext.RemoveVideoCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                        </VerticalStackLayout>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
                 </VerticalStackLayout>
 
                 <VerticalStackLayout IsVisible="{Binding IsListingTab}" Spacing="12">

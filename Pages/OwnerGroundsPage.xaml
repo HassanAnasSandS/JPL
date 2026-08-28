@@ -26,6 +26,7 @@
                                     <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="16" />
                                     <Label Text="{Binding LocationLine}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding RateLabel}" FontSize="13" TextColor="{StaticResource Secondary}" />
+                                    <Label Text="{Binding RatingLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
                                     <HorizontalStackLayout Spacing="8" Margin="0,8,0,0">
                                         <Button Text="View"
                                                 Padding="14,8"

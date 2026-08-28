@@ -20,6 +20,14 @@ internal static class GroundsCaller
         return http.User.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
     }
 
+    public static string? WhatsAppNumber(HttpContext http)
+    {
+        if (http.Items.TryGetValue("JplWhatsApp", out var waObj) && waObj is string wa && wa.Length > 0)
+            return wa;
+        var claim = http.User.FindFirstValue("whatsapp");
+        return string.IsNullOrWhiteSpace(claim) ? null : claim;
+    }
+
     public static string Role(HttpContext http)
     {
         if (http.Items.TryGetValue("JplRole", out var roleObj) && roleObj is string r && r.Length > 0)

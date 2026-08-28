@@ -32,6 +32,14 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
             .Select(x => new CatalogItemDto(x.Id, x.Name, x.SortOrder))
             .ToListAsync(ct)
             .ConfigureAwait(false));
+
+    [HttpGet("shop")]
+    public async Task<ActionResult<IReadOnlyList<ShopCatalogItemDto>>> Shop(CancellationToken ct)
+        => Ok(await _db.ShopCatalog.AsNoTracking()
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Select(x => new ShopCatalogItemDto(x.Id, x.Name, x.Kind, x.Price, x.SortOrder))
+            .ToListAsync(ct)
+            .ConfigureAwait(false));
 }
 
 [ApiController]
@@ -152,6 +160,69 @@ public sealed class ServiceCatalogController : ControllerBase, IAsyncDisposable
         if (row is null)
             return NotFound();
         _db.ServiceCatalog.Remove(row);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return NoContent();
+    }
+
+    private bool IsPlatformAdmin()
+        => GroundsCaller.IsSuperAdmin(HttpContext) && PlatformAdmin.Is(GroundsCaller.Username(HttpContext));
+}
+
+[ApiController]
+[Route("api/platform/shop")]
+public sealed class ShopCatalogController : ControllerBase, IAsyncDisposable
+{
+    private readonly GroundsDbContext _db;
+
+    public ShopCatalogController(IGroundsDbFactory dbs) => _db = dbs.CreateGrounds();
+
+    public ValueTask DisposeAsync() => _db.DisposeAsync();
+
+    [HttpPost]
+    public async Task<ActionResult<ShopCatalogItemDto>> Create([FromBody] ShopCatalogItemUpsert request, CancellationToken ct)
+    {
+        if (!IsPlatformAdmin())
+            return Forbid();
+        if (!CatalogNames.TryNormalize(request.Name, out var name, out var error))
+            return BadRequest(error);
+        if (await _db.ShopCatalog.AnyAsync(x => x.Name == name, ct).ConfigureAwait(false))
+            return BadRequest($"Shop item \"{name}\" already exists.");
+
+        var max = await _db.ShopCatalog.Select(x => (int?)x.SortOrder).MaxAsync(ct).ConfigureAwait(false) ?? -1;
+        var row = new ShopCatalog { Name = name, SortOrder = max + 1 };
+        _db.ShopCatalog.Add(row);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Ok(new ShopCatalogItemDto(row.Id, row.Name, row.Kind, row.Price, row.SortOrder));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ShopCatalogItemDto>> Update(Guid id, [FromBody] ShopCatalogItemUpsert request, CancellationToken ct)
+    {
+        if (!IsPlatformAdmin())
+            return Forbid();
+        if (!CatalogNames.TryNormalize(request.Name, out var name, out var error))
+            return BadRequest(error);
+
+        var row = await _db.ShopCatalog.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
+        if (row is null)
+            return NotFound();
+        if (await _db.ShopCatalog.AnyAsync(x => x.Name == name && x.Id != id, ct).ConfigureAwait(false))
+            return BadRequest($"Shop item \"{name}\" already exists.");
+
+        row.Name = name;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Ok(new ShopCatalogItemDto(row.Id, row.Name, row.Kind, row.Price, row.SortOrder));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        if (!IsPlatformAdmin())
+            return Forbid();
+        var row = await _db.ShopCatalog.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false);
+        if (row is null)
+            return NotFound();
+        _db.ShopCatalog.Remove(row);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return NoContent();
     }

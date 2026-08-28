@@ -22,6 +22,14 @@
                                 <Label Text="{Binding Status}" TextColor="{StaticResource Secondary}" />
                                 <Label Text="{Binding MoneyLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
                                 <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                                <Button Text="{Binding ReviewButtonText}"
+                                        Padding="14,8"
+                                        FontSize="13"
+                                        Style="{StaticResource GoldButton}"
+                                        HorizontalOptions="Start"
+                                        IsVisible="{Binding CanOpenReview}"
+                                        Command="{Binding BindingContext.WriteReviewCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                        CommandParameter="{Binding .}" />
                             </VerticalStackLayout>
                             <ImageButton Grid.Column="1"
                                          Source="whatsapp.svg"

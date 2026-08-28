@@ -42,7 +42,18 @@ public partial class ModeChooserViewModel : ObservableObject
     [RelayCommand]
     private async Task ChooseGroundsAsync()
     {
+        if (!await SchedulerGate.EnsureCanOpenAsync(_auth, _navigator, "Grounds").ConfigureAwait(true))
+            return;
         _workspace.Set(_auth.Current?.IsGroundOwner == true ? AppWorkspace.GroundOwner : AppWorkspace.Grounds);
+        await _navigator.ShowMainAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task ChooseSchedulerAsync()
+    {
+        if (!await SchedulerGate.EnsureCanOpenAsync(_auth, _navigator).ConfigureAwait(true))
+            return;
+        _workspace.Set(AppWorkspace.Scheduler);
         await _navigator.ShowMainAsync().ConfigureAwait(true);
     }
 

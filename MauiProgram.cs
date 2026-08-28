@@ -208,6 +208,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVenueService, VenueService>();
         builder.Services.AddSingleton<ITournamentService, TournamentService>();
         builder.Services.AddSingleton<ISeriesService, SeriesService>();
+        builder.Services.AddSingleton<ITournamentSchedulerService, TournamentSchedulerService>();
         builder.Services.AddSingleton<ILeagueService, LeagueService>();
         builder.Services.AddSingleton<IFormatService, FormatService>();
 
@@ -250,16 +251,26 @@ public static class MauiProgram
         builder.Services.AddSingleton<SeriesListViewModel>();
         builder.Services.AddTransient<SeriesEditViewModel>();
         builder.Services.AddTransient<SeriesDetailViewModel>();
+        builder.Services.AddSingleton<TournamentSchedulerViewModel>();
+        builder.Services.AddTransient<TournamentSchedulerEditViewModel>();
+        builder.Services.AddTransient<TournamentSchedulerDetailViewModel>();
         builder.Services.AddTransient<GroundDiscoverViewModel>();
         builder.Services.AddTransient<GroundDetailViewModel>();
         builder.Services.AddTransient<GroundBookRequestViewModel>();
+        builder.Services.AddTransient<GroundReviewViewModel>();
         builder.Services.AddTransient<CustomerBookingsViewModel>();
         builder.Services.AddTransient<OwnerGroundsViewModel>();
         builder.Services.AddTransient<OwnerGroundEditViewModel>();
         builder.Services.AddTransient<OwnerBookingsViewModel>();
+        builder.Services.AddTransient<OwnerBookingCreateViewModel>();
         builder.Services.AddTransient<OwnerBookingEditViewModel>();
         builder.Services.AddTransient<OwnerAvailabilityViewModel>();
-        builder.Services.AddTransient<GroundSettingsViewModel>();
+        builder.Services.AddSingleton<AmenitiesViewModel>();
+        builder.Services.AddTransient<AmenityEditViewModel>();
+        builder.Services.AddSingleton<ServicesViewModel>();
+        builder.Services.AddTransient<ServiceEditViewModel>();
+        builder.Services.AddSingleton<ShopCatalogViewModel>();
+        builder.Services.AddTransient<ShopCatalogEditViewModel>();
 
         builder.Services.AddTransient<LoginPage>();
         builder.Services.AddTransient<ModeChooserPage>();
@@ -300,16 +311,26 @@ public static class MauiProgram
         builder.Services.AddTransient<SeriesPage>();
         builder.Services.AddTransient<SeriesEditPage>();
         builder.Services.AddTransient<SeriesDetailPage>();
+        builder.Services.AddTransient<TournamentSchedulerPage>();
+        builder.Services.AddTransient<TournamentSchedulerEditPage>();
+        builder.Services.AddTransient<TournamentSchedulerDetailPage>();
         builder.Services.AddTransient<GroundDiscoverPage>();
         builder.Services.AddTransient<GroundDetailPage>();
         builder.Services.AddTransient<GroundBookRequestPage>();
+        builder.Services.AddTransient<GroundReviewPage>();
         builder.Services.AddTransient<CustomerBookingsPage>();
         builder.Services.AddTransient<OwnerGroundsPage>();
         builder.Services.AddTransient<OwnerGroundEditPage>();
         builder.Services.AddTransient<OwnerBookingsPage>();
+        builder.Services.AddTransient<OwnerBookingCreatePage>();
         builder.Services.AddTransient<OwnerBookingEditPage>();
         builder.Services.AddTransient<OwnerAvailabilityPage>();
-        builder.Services.AddTransient<GroundSettingsPage>();
+        builder.Services.AddTransient<AmenitiesPage>();
+        builder.Services.AddTransient<AmenityEditPage>();
+        builder.Services.AddTransient<ServicesPage>();
+        builder.Services.AddTransient<ServiceEditPage>();
+        builder.Services.AddTransient<ShopCatalogPage>();
+        builder.Services.AddTransient<ShopCatalogEditPage>();
         builder.Services.AddTransient<AppShell>();
 
 #if DEBUG
@@ -345,6 +366,7 @@ public static class MauiProgram
                     {
                         await DbBootstrap.EnsureNetSessionTablesAsync(db).ConfigureAwait(false);
                         await DbBootstrap.EnsureLiveOutboxTableAsync(db).ConfigureAwait(false);
+                        await DbBootstrap.EnsureSchedulerTablesAsync(db).ConfigureAwait(false);
                     }
                     catch
                     {

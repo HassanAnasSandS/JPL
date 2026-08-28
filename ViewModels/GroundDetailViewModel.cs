@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Options;
 using JPL.Services;
 
 namespace JPL.ViewModels;
@@ -12,6 +13,7 @@ public partial class GroundDetailViewModel : ObservableObject
     private readonly IGroundsApiClient _api;
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
+    private readonly IOptions<GroundsApiOptions> _groundsApi;
 
     public string? GroundId { get; set; }
 
@@ -23,6 +25,11 @@ public partial class GroundDetailViewModel : ObservableObject
     [ObservableProperty] private bool isViewerOpen;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string? errorMessage;
+    [ObservableProperty] private IReadOnlyList<GroundReviewDto> reviews = [];
+    [ObservableProperty] private bool hasReviews;
+    [ObservableProperty] private bool reviewsHasMore;
+    [ObservableProperty] private bool reviewsBusy;
+    [ObservableProperty] private bool reviewsEmpty;
 
     [ObservableProperty] private bool hasImages;
     [ObservableProperty] private bool hasMultipleImages;
@@ -55,6 +62,10 @@ public partial class GroundDetailViewModel : ObservableObject
         ? GroundServiceDto.Summarize(list)
         : "Services not listed";
 
+    public string ShopLine => Ground?.Shop is { Count: > 0 } list
+        ? GroundShopItemDto.Summarize(list)
+        : "Shop not listed";
+
     public bool HasWhatsApp => PakistanWhatsApp.TryNormalize(Ground?.WhatsAppNumber ?? Ground?.ContactPhone, out _);
 
     public IReadOnlyList<GroundLinkDto> Links
@@ -62,11 +73,31 @@ public partial class GroundDetailViewModel : ObservableObject
 
     public bool HasLinks => Links.Count > 0;
 
-    public GroundDetailViewModel(IGroundsApiClient api, IAuthService auth, IAppNavigator navigator)
+    public IReadOnlyList<GroundVideoDto> Videos
+        => Ground?.Videos?.Where(v => !string.IsNullOrWhiteSpace(v.Url)).ToList() ?? [];
+
+    public bool HasVideos => Videos.Count > 0;
+
+    [ObservableProperty] private bool isVideoPlayerOpen;
+    [ObservableProperty] private GroundVideoDto? playingVideo;
+    [ObservableProperty] private WebViewSource? videoPlayerSource;
+
+    public string PlayingVideoTitle => PlayingVideo?.DisplayTitle ?? "Video";
+
+    public bool CanRequestBooking => _auth.Current?.CanBookGrounds == true;
+
+    public string RatingLine => Ground?.RatingLine ?? string.Empty;
+
+    private string? _reviewsCursor;
+    private int _reviewsLoadBusy;
+
+    public GroundDetailViewModel(
+        IGroundsApiClient api, IAuthService auth, IAppNavigator navigator, IOptions<GroundsApiOptions> groundsApi)
     {
         _api = api;
         _auth = auth;
         _navigator = navigator;
+        _groundsApi = groundsApi;
     }
 
     public async Task LoadAsync()
@@ -85,6 +116,8 @@ public partial class GroundDetailViewModel : ObservableObject
             NotifyGroundFields();
             if (Ground is null)
                 ErrorMessage = "Ground not found.";
+            else
+                await LoadReviewsAsync(reset: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -118,12 +151,64 @@ public partial class GroundDetailViewModel : ObservableObject
         OnPropertyChanged(nameof(RateLabel));
         OnPropertyChanged(nameof(AmenitiesLine));
         OnPropertyChanged(nameof(ServicesLine));
+        OnPropertyChanged(nameof(ShopLine));
         OnPropertyChanged(nameof(OfferedTypes));
         OnPropertyChanged(nameof(HasOffers));
         OnPropertyChanged(nameof(RateWindowsLine));
         OnPropertyChanged(nameof(HasWhatsApp));
         OnPropertyChanged(nameof(Links));
         OnPropertyChanged(nameof(HasLinks));
+        OnPropertyChanged(nameof(Videos));
+        OnPropertyChanged(nameof(HasVideos));
+        OnPropertyChanged(nameof(RatingLine));
+    }
+
+    [RelayCommand]
+    private Task LoadMoreReviewsAsync() => LoadReviewsAsync(reset: false);
+
+    private async Task LoadReviewsAsync(bool reset)
+    {
+        if (Ground is null)
+            return;
+        if (!reset && (!ReviewsHasMore || Interlocked.Exchange(ref _reviewsLoadBusy, 1) == 1))
+            return;
+        if (reset)
+            Interlocked.Exchange(ref _reviewsLoadBusy, 1);
+        try
+        {
+            if (reset)
+            {
+                _reviewsCursor = null;
+                ReviewsHasMore = true;
+                Reviews = [];
+            }
+
+            if (!ReviewsHasMore)
+                return;
+
+            ReviewsBusy = Reviews.Count == 0;
+            var page = await _api.GetGroundReviewsAsync(Ground.Id, _reviewsCursor).ConfigureAwait(true);
+            var next = reset ? page.Items.ToList() : Reviews.Concat(page.Items).ToList();
+            Reviews = next;
+            HasReviews = Reviews.Count > 0;
+            ReviewsEmpty = !HasReviews;
+            ReviewsHasMore = page.HasMore;
+            _reviewsCursor = page.NextCursor;
+        }
+        catch
+        {
+            if (reset)
+            {
+                Reviews = [];
+                HasReviews = false;
+                ReviewsEmpty = true;
+            }
+        }
+        finally
+        {
+            ReviewsBusy = false;
+            Interlocked.Exchange(ref _reviewsLoadBusy, 0);
+        }
     }
 
     [RelayCommand]
@@ -155,11 +240,33 @@ public partial class GroundDetailViewModel : ObservableObject
     {
         if (!HasImages)
             return;
+        CloseVideo();
         IsViewerOpen = true;
     }
 
     [RelayCommand]
     private void CloseViewer() => IsViewerOpen = false;
+
+    [RelayCommand]
+    private void OpenVideo(GroundVideoDto? video)
+    {
+        if (video is null || string.IsNullOrWhiteSpace(video.Url))
+            return;
+        IsViewerOpen = false;
+        PlayingVideo = video;
+        VideoPlayerSource = GroundVideoUrls.ToPlayerSource(video.Url, _groundsApi.Value.BaseUrl);
+        OnPropertyChanged(nameof(PlayingVideoTitle));
+        IsVideoPlayerOpen = VideoPlayerSource is not null;
+    }
+
+    [RelayCommand]
+    private void CloseVideo()
+    {
+        IsVideoPlayerOpen = false;
+        VideoPlayerSource = null;
+        PlayingVideo = null;
+        OnPropertyChanged(nameof(PlayingVideoTitle));
+    }
 
     [RelayCommand]
     private async Task OpenMapsAsync()

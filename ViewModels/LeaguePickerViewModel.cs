@@ -25,6 +25,7 @@ public partial class LeaguePickerViewModel : ObservableObject
     private readonly ILeagueService _leagues;
     private readonly ILeagueContext _league;
     private readonly IAppNavigator _navigator;
+    private readonly IAppWorkspace _workspace;
     private readonly MasterDataCache _cache;
     private readonly IAuthService _auth;
 
@@ -46,12 +47,14 @@ public partial class LeaguePickerViewModel : ObservableObject
         ILeagueService leagues,
         ILeagueContext league,
         IAppNavigator navigator,
+        IAppWorkspace workspace,
         MasterDataCache cache,
         IAuthService auth)
     {
         _leagues = leagues;
         _league = league;
         _navigator = navigator;
+        _workspace = workspace;
         _cache = cache;
         _auth = auth;
         CanManageLeagues = _auth.Current?.CanManageLeagues == true;
@@ -81,7 +84,8 @@ public partial class LeaguePickerViewModel : ObservableObject
             var homeId = _auth.Current?.HasHomeLeague == true ? _auth.Current.LeagueId : null;
             var viewOthersReadOnly = homeId is Guid;
             var rows = list
-                .DistinctBy(l => l.Id)
+                .GroupBy(l => l.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => PreferOneLeague(g, homeId))
                 .Select(l => ToRow(l, isHome: homeId == l.Id, viewOthersReadOnly))
                 .OrderByDescending(r => r.IsHome)
                 .ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
@@ -108,6 +112,22 @@ public partial class LeaguePickerViewModel : ObservableObject
             if (gen == Volatile.Read(ref _loadGen))
                 IsBusy = false;
         }
+    }
+
+    private static League PreferOneLeague(IGrouping<string, League> group, Guid? homeId)
+    {
+        if (homeId is Guid hid)
+        {
+            var home = group.FirstOrDefault(x => x.Id == hid);
+            if (home is not null)
+                return home;
+        }
+
+        var canonical = group.FirstOrDefault(x => x.Id == LeagueIds.Jpl);
+        if (canonical is not null)
+            return canonical;
+
+        return group.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id).First();
     }
 
     private static LeaguePickRow ToRow(League l, bool isHome, bool viewOthersReadOnly)
@@ -138,6 +158,13 @@ public partial class LeaguePickerViewModel : ObservableObject
         if (l.LiveMatchCount > 0)
             parts.Add(l.LiveMatchCount == 1 ? "1 match" : $"{l.LiveMatchCount} matches");
         return "LIVE · " + string.Join(" · ", parts);
+    }
+
+    [RelayCommand]
+    private async Task HomeAsync()
+    {
+        _workspace.Clear();
+        await _navigator.ShowModeChooserAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]

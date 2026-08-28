@@ -20,6 +20,10 @@ public partial class OwnerBookingsViewModel : ObservableObject
     public OwnerBookingsViewModel(IGroundsApiClient api) => _api = api;
 
     [RelayCommand]
+    private async Task AddAsync()
+        => await Shell.Current.GoToAsync(nameof(Pages.OwnerBookingCreatePage)).ConfigureAwait(true);
+
+    [RelayCommand]
     private Task ReloadAsync()
     {
         _cursor = null;
@@ -46,7 +50,7 @@ public partial class OwnerBookingsViewModel : ObservableObject
                 ? Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{page[^1].CreatedAtUtc.Ticks:D20}|{page[^1].Id:N}"))
                 : null;
             if (Items.Count == 0)
-                ErrorMessage = "No booking requests yet.";
+                ErrorMessage = "No bookings yet. Tap + Book to confirm a slot.";
         }
         catch (Exception ex)
         {
@@ -182,49 +186,4 @@ public partial class OwnerBookingEditViewModel : ObservableObject
             string.IsNullOrWhiteSpace(CustomerName)
                 ? $"Assalam o Alaikum, regarding your booking at {Title}."
                 : $"Assalam o Alaikum {CustomerName}, regarding your booking at {Title}.");
-}
-
-public partial class OwnerAvailabilityViewModel : ObservableObject
-{
-    private readonly IGroundsApiClient _api;
-
-    public ObservableCollection<GroundBookingDto> Items { get; } = new();
-
-    [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private string? errorMessage;
-
-    public OwnerAvailabilityViewModel(IGroundsApiClient api) => _api = api;
-
-    [RelayCommand]
-    private async Task LoadAsync()
-    {
-        try
-        {
-            IsBusy = true;
-            ErrorMessage = null;
-            var page = await _api.GetOwnerBookingsAsync(null, null, 50).ConfigureAwait(true);
-            Items.Clear();
-            foreach (var row in page.Where(b =>
-                         string.Equals(b.Status, "Confirmed", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(b.Status, "Pending", StringComparison.OrdinalIgnoreCase))
-                         .OrderBy(b => b.StartAt))
-                Items.Add(row);
-            if (Items.Count == 0)
-                ErrorMessage = "No upcoming pending or confirmed slots.";
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    [RelayCommand]
-    private Task ChatCustomerAsync(GroundBookingDto? row)
-        => PakistanWhatsApp.OpenChatAsync(
-            row?.CustomerPhone,
-            row is null ? null : $"Assalam o Alaikum {row.CustomerName}, regarding your booking at {row.GroundName}.");
 }

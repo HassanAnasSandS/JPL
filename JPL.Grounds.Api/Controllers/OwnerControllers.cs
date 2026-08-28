@@ -45,6 +45,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
         }
 
         var rows = await query
+            .AsSplitQuery()
             .Include(g => g.Amenities)
             .Include(g => g.Services)
             .Include(g => g.Offers)
@@ -75,8 +76,10 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
                 .ToListAsync(ct)
                 .ConfigureAwait(false)).ToHashSet();
 
+        var stats = await GroundsMap.LoadStatsAsync(_db, ids, ct).ConfigureAwait(false);
         return Ok(new GroundSearchPage(
-            rows.Select(g => GroundsMap.ToCard(g, Request, canDelete: !booked.Contains(g.Id))).ToList(),
+            rows.Select(g => GroundsMap.ToCard(
+                g, Request, canDelete: !booked.Contains(g.Id), stats: stats.GetValueOrDefault(g.Id))).ToList(),
             next,
             hasMore));
     }
@@ -132,6 +135,8 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
             ApplyAmenities(ground, request.Amenities);
         if (request.Services is not null)
             ApplyServices(ground, request.Services);
+        if (request.Shop is not null)
+            ApplyShop(ground, request.Shop);
         if (request.Offers is not null)
         {
             try
@@ -154,6 +159,17 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
                 return BadRequest(ex.Message);
             }
         }
+        if (request.Videos is not null)
+        {
+            try
+            {
+                ApplyVideos(ground, request.Videos);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
         _db.Grounds.Add(ground);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Ok(GroundsMap.ToDetail(ground, Request));
@@ -162,7 +178,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<GroundDetailDto>> Update(Guid id, [FromBody] GroundUpsertRequest request, CancellationToken ct)
     {
-        var ground = await LoadOwnedAsync(id, ct).ConfigureAwait(false);
+        var ground = await LoadOwnedForUpdateAsync(id, request, ct).ConfigureAwait(false);
         if (ground is null)
             return NotFound();
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -199,6 +215,8 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
             ApplyAmenities(ground, request.Amenities);
         if (request.Services is not null)
             ApplyServices(ground, request.Services);
+        if (request.Shop is not null)
+            ApplyShop(ground, request.Shop);
         if (request.Offers is not null)
         {
             try
@@ -210,19 +228,21 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
                 return BadRequest(ex.Message);
             }
         }
-        if (request.Links is not null)
+        try
         {
-            try
-            {
-                ApplyLinks(ground, request.Links);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            if (request.Links is not null)
+                await ReplaceLinksAsync(ground.Id, request.Links, ct).ConfigureAwait(false);
+            if (request.Videos is not null)
+                await ReplaceVideosAsync(ground.Id, request.Videos, ct).ConfigureAwait(false);
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Ok(GroundsMap.ToDetail(ground, Request));
+        var mapped = await LoadDetailAsync(id, ct).ConfigureAwait(false);
+        return Ok(GroundsMap.ToDetail(mapped, Request));
     }
 
     [HttpDelete("{id:guid}")]
@@ -240,6 +260,30 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
         ground.UpdatedAtUtc = DateTime.Now;
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return NoContent();
+    }
+
+    [HttpPost("{id:guid}/bookings")]
+    public async Task<ActionResult<BookingDto>> CreateConfirmedBooking(
+        Guid id, [FromBody] BookingCreateRequest request, CancellationToken ct)
+    {
+        var ground = await LoadOwnedAsync(id, ct).ConfigureAwait(false);
+        if (ground is null)
+            return NotFound("Ground not found.");
+        if (!PakistanWhatsApp.TryNormalize(request.CustomerPhone, out var customerPhone))
+            return BadRequest(PakistanWhatsApp.RequiredError);
+        var name = request.CustomerName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest("Customer name is required.");
+
+        var (booking, error) = await GroundBookingBuilder.TryBuildAsync(
+                _db, ground, request, Guid.Empty, name, customerPhone, GroundBookingStatus.Confirmed, ct)
+            .ConfigureAwait(false);
+        if (error is { } e)
+            return e.StatusCode == 409 ? Conflict(e.Message) : BadRequest(e.Message);
+
+        _db.Bookings.Add(booking!);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Ok(GroundsMap.ToBooking(booking!, ground));
     }
 
     [HttpPost("{id:guid}/images")]
@@ -315,11 +359,14 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
         if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
             return null;
         var ground = await _db.Grounds
+            .AsSplitQuery()
             .Include(g => g.Amenities)
             .Include(g => g.Services)
+            .Include(g => g.ShopItems)
             .Include(g => g.Images)
             .Include(g => g.Offers)
             .Include(g => g.Links)
+            .Include(g => g.Videos)
             .FirstOrDefaultAsync(g => g.Id == id && !g.IsDeleted, ct)
             .ConfigureAwait(false);
         if (ground is null)
@@ -329,43 +376,161 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
         return ground;
     }
 
+    private async Task<Ground?> LoadOwnedForUpdateAsync(Guid id, GroundUpsertRequest request, CancellationToken ct)
+    {
+        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+            return null;
+
+        var query = _db.Grounds.Where(g => g.Id == id && !g.IsDeleted);
+        var includeChildren = request.Amenities is not null
+            || request.Services is not null
+            || request.Shop is not null
+            || request.Offers is not null
+            || request.ListingStatus is not null;
+        if (includeChildren)
+            query = query.AsSplitQuery();
+        if (request.Amenities is not null)
+            query = query.Include(g => g.Amenities);
+        if (request.Services is not null)
+            query = query.Include(g => g.Services);
+        if (request.Shop is not null)
+            query = query.Include(g => g.ShopItems);
+        if (request.Offers is not null || request.ListingStatus is not null)
+            query = query.Include(g => g.Offers);
+
+        var ground = await query.FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (ground is null)
+            return null;
+        if (!GroundsCaller.CanManageGround(HttpContext, ground.OwnerUserId))
+            return null;
+        return ground;
+    }
+
+    private Task<Ground> LoadDetailAsync(Guid id, CancellationToken ct)
+        => _db.Grounds.AsNoTracking()
+            .AsSplitQuery()
+            .Include(g => g.Amenities)
+            .Include(g => g.Services)
+            .Include(g => g.ShopItems)
+            .Include(g => g.Images)
+            .Include(g => g.Offers)
+            .Include(g => g.Links)
+            .Include(g => g.Videos)
+            .FirstAsync(g => g.Id == id, ct);
+
     private static void ApplyAmenities(Ground ground, IReadOnlyList<string>? codes)
     {
-        ground.Amenities.Clear();
-        foreach (var code in (codes ?? []).Where(c => !string.IsNullOrWhiteSpace(c))
-                     .Select(c => c.Trim())
-                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                     .Take(16))
+        var wanted = (codes ?? [])
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c =>
+            {
+                var code = c.Trim();
+                return code.Length > 40 ? code[..40] : code;
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(16)
+            .ToList();
+        var wantedSet = wanted.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var extra in ground.Amenities.Where(a => !wantedSet.Contains(a.Code)).ToList())
+            ground.Amenities.Remove(extra);
+
+        var have = ground.Amenities.Select(a => a.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var code in wanted)
         {
-            ground.Amenities.Add(new GroundAmenity { GroundId = ground.Id, Code = code.Length > 40 ? code[..40] : code });
+            if (have.Add(code))
+                ground.Amenities.Add(new GroundAmenity { GroundId = ground.Id, Code = code });
         }
     }
 
     private static void ApplyServices(Ground ground, IReadOnlyList<GroundServiceUpsert>? incoming)
     {
-        ground.Services.Clear();
-        foreach (var row in (incoming ?? [])
-                     .Where(s => !string.IsNullOrWhiteSpace(s.Name) && s.Amount >= 0)
-                     .GroupBy(s => s.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-                     .Select(g => g.First())
-                     .Take(16))
-        {
-            var code = row.Name.Trim();
-            if (code.Length > 40)
-                code = code[..40];
-            ground.Services.Add(new GroundService
+        var wanted = (incoming ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name) && s.Amount >= 0)
+            .GroupBy(s => s.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Take(16)
+            .Select(row =>
             {
-                GroundId = ground.Id,
-                Code = code,
-                Amount = Math.Max(0, Math.Round(row.Amount, 2))
-            });
+                var code = row.Name.Trim();
+                if (code.Length > 40)
+                    code = code[..40];
+                return (Code: code, Amount: Math.Max(0, Math.Round(row.Amount, 2)));
+            })
+            .ToList();
+        var map = wanted.ToDictionary(x => x.Code, x => x.Amount, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var extra in ground.Services.Where(s => !map.ContainsKey(s.Code)).ToList())
+            ground.Services.Remove(extra);
+
+        foreach (var existing in ground.Services)
+            existing.Amount = map[existing.Code];
+
+        var have = ground.Services.Select(s => s.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var (code, amount) in wanted)
+        {
+            if (have.Add(code))
+            {
+                ground.Services.Add(new GroundService
+                {
+                    GroundId = ground.Id,
+                    Code = code,
+                    Amount = amount
+                });
+            }
+        }
+    }
+
+    private static void ApplyShop(Ground ground, IReadOnlyList<GroundShopItemUpsert>? incoming)
+    {
+        var wanted = (incoming ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name) && s.Price >= 0)
+            .GroupBy(s => s.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Take(16)
+            .Select(row =>
+            {
+                var code = row.Name.Trim();
+                if (code.Length > 40)
+                    code = code[..40];
+                return (
+                    Code: code,
+                    Price: Math.Max(0, Math.Round(row.Price, 2)),
+                    Kind: GroundShopKinds.Normalize(row.Kind));
+            })
+            .ToList();
+        var map = wanted.ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var extra in ground.ShopItems.Where(s => !map.ContainsKey(s.Code)).ToList())
+            ground.ShopItems.Remove(extra);
+
+        foreach (var existing in ground.ShopItems)
+        {
+            var row = map[existing.Code];
+            existing.Price = row.Price;
+            existing.Kind = row.Kind;
+        }
+
+        var have = ground.ShopItems.Select(s => s.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in wanted)
+        {
+            if (have.Add(row.Code))
+            {
+                ground.ShopItems.Add(new GroundShopItem
+                {
+                    GroundId = ground.Id,
+                    Code = row.Code,
+                    Price = row.Price,
+                    Kind = row.Kind
+                });
+            }
         }
     }
 
     private static void ApplyOffers(Ground ground, IReadOnlyList<GroundBookingOfferUpsert>? incoming)
     {
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        ground.Offers.Clear();
+        var next = new List<GroundBookingOffer>();
         var sort = 0;
         foreach (var row in (incoming ?? []).Take(GroundBookingKinds.MaxPerGround))
         {
@@ -386,7 +551,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
             if (perHour)
                 hours = hours <= 0 ? 1 : Math.Clamp(hours, 0.5m, 12m);
 
-            ground.Offers.Add(new GroundBookingOffer
+            next.Add(new GroundBookingOffer
             {
                 GroundId = ground.Id,
                 Kind = kind,
@@ -403,40 +568,111 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
             });
         }
 
-        if (ground.Offers.Count == 0)
+        if (next.Count == 0)
             throw new InvalidOperationException("Add at least one booking type (name, duration, and weekday rate).");
-        if (!ground.Offers.Any(o => o.IsEnabled && o.Price > 0))
+        if (!next.Any(o => o.IsEnabled && o.Price > 0))
             throw new InvalidOperationException("Enable at least one booking type and set its weekday / day rate.");
+
+        var wantedKinds = next.Select(o => o.Kind).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var extra in ground.Offers.Where(o => !wantedKinds.Contains(o.Kind)).ToList())
+            ground.Offers.Remove(extra);
+
+        foreach (var row in next)
+        {
+            var existing = ground.Offers.FirstOrDefault(o =>
+                string.Equals(o.Kind, row.Kind, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                ground.Offers.Add(row);
+                continue;
+            }
+
+            existing.Title = row.Title;
+            existing.Hint = row.Hint;
+            existing.Price = row.Price;
+            existing.NightPrice = row.NightPrice;
+            existing.WeekendPrice = row.WeekendPrice;
+            existing.WeekendNightPrice = row.WeekendNightPrice;
+            existing.DurationHours = row.DurationHours;
+            existing.PricesPerHour = row.PricesPerHour;
+            existing.SortOrder = row.SortOrder;
+            existing.IsEnabled = row.IsEnabled;
+        }
 
         ground.HourlyRate = GroundBookingKinds.FromPrice(ground.Offers);
     }
 
     private static void ApplyLinks(Ground ground, IReadOnlyList<GroundLinkUpsert>? incoming)
+        => AttachUrlRows(ground.Links, ground.Id, NormalizeLinks(incoming),
+            (id, title, url, sort) => new GroundLink { GroundId = id, Title = title, Url = url, SortOrder = sort });
+
+    private static void ApplyVideos(Ground ground, IReadOnlyList<GroundVideoUpsert>? incoming)
+        => AttachUrlRows(ground.Videos, ground.Id, NormalizeVideos(incoming),
+            (id, title, url, sort) => new GroundVideo { GroundId = id, Title = title, Url = url, SortOrder = sort });
+
+    private Task ReplaceLinksAsync(Guid groundId, IReadOnlyList<GroundLinkUpsert> incoming, CancellationToken ct)
+        => ReplaceUrlChildrenAsync(
+            _db.GroundLinks, groundId, NormalizeLinks(incoming), ct,
+            (id, title, url, sort) => new GroundLink { GroundId = id, Title = title, Url = url, SortOrder = sort });
+
+    private Task ReplaceVideosAsync(Guid groundId, IReadOnlyList<GroundVideoUpsert> incoming, CancellationToken ct)
+        => ReplaceUrlChildrenAsync(
+            _db.GroundVideos, groundId, NormalizeVideos(incoming), ct,
+            (id, title, url, sort) => new GroundVideo { GroundId = id, Title = title, Url = url, SortOrder = sort });
+
+    private async Task ReplaceUrlChildrenAsync<T>(
+        DbSet<T> set, Guid groundId, List<(string Title, string Url)> next, CancellationToken ct,
+        Func<Guid, string, string, int, T> create)
+        where T : class
     {
-        ground.Links.Clear();
+        await set.Where(x => EF.Property<Guid>(x, "GroundId") == groundId)
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
         var sort = 0;
+        foreach (var row in next)
+            set.Add(create(groundId, row.Title, row.Url, sort++));
+    }
+
+    private static List<(string Title, string Url)> NormalizeLinks(IReadOnlyList<GroundLinkUpsert>? incoming)
+        => NormalizeUrlRows(incoming?.Select(r => (r.Title, r.Url)), GroundsMap.MaxLinksPerGround, GroundsMap.NormalizeHttpUrl);
+
+    private static List<(string Title, string Url)> NormalizeVideos(IReadOnlyList<GroundVideoUpsert>? incoming)
+        => NormalizeUrlRows(incoming?.Select(r => (r.Title, r.Url)), GroundsMap.MaxVideosPerGround, GroundsMap.NormalizeVideoUrl);
+
+    private static List<(string Title, string Url)> NormalizeUrlRows(
+        IEnumerable<(string? Title, string Url)>? incoming, int max, Func<string, string> normalizeUrl)
+    {
+        var next = new List<(string Title, string Url)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in incoming ?? [])
         {
-            if (sort >= GroundsMap.MaxLinksPerGround)
+            if (next.Count >= max)
                 break;
             var raw = (row.Url ?? string.Empty).Trim();
             if (raw.Length == 0)
                 continue;
-            var url = GroundsMap.NormalizeHttpUrl(raw);
+            var url = normalizeUrl(raw);
             if (!seen.Add(url))
                 continue;
             var title = (row.Title ?? string.Empty).Trim();
             if (title.Length > 80)
                 title = title[..80];
-            ground.Links.Add(new GroundLink
-            {
-                GroundId = ground.Id,
-                Title = title,
-                Url = url,
-                SortOrder = sort++
-            });
+            next.Add((title, url));
         }
+        return next;
+    }
+
+    private static void AttachUrlRows<T>(
+        ICollection<T> existing, Guid groundId, List<(string Title, string Url)> next,
+        Func<Guid, string, string, int, T> create)
+        where T : class
+    {
+        foreach (var extra in existing.ToList())
+            existing.Remove(extra);
+
+        var sort = 0;
+        foreach (var row in next)
+            existing.Add(create(groundId, row.Title, row.Url, sort++));
     }
 
     private static bool CanPublish(Ground ground)
@@ -545,6 +781,8 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
         var query = _db.Bookings.AsNoTracking()
             .Include(b => b.Ground)
             .Include(b => b.Services)
+            .Include(b => b.ShopItems)
+            .Include(b => b.Review)
             .Where(b => !b.IsDeleted && b.CustomerUserId == userId);
 
         if (GroundsMap.TryDecodeCursor(cursor, out var created, out var id))
@@ -565,36 +803,56 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
     }
 
     [HttpGet("owner")]
-    public async Task<ActionResult<IReadOnlyList<BookingDto>>> Owner(Guid? groundId, string? cursor, int take = 20, CancellationToken ct = default)
+    public async Task<ActionResult<IReadOnlyList<BookingDto>>> Owner(
+        Guid? groundId, string? cursor, int take = 20,
+        DateTime? from = null, DateTime? to = null,
+        CancellationToken ct = default)
     {
         if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
             return Forbid();
 
-        take = Math.Clamp(take, 1, 50);
+        var ranged = from is DateTime start && to is DateTime end && end > start;
+        take = Math.Clamp(take, 1, ranged ? 500 : 50);
         var ownerId = GroundsCaller.UserId(HttpContext);
         var super = GroundsCaller.IsSuperAdmin(HttpContext);
         var query = _db.Bookings.AsNoTracking()
             .Include(b => b.Ground)
             .Include(b => b.Services)
+            .Include(b => b.ShopItems)
+            .Include(b => b.Review)
             .Where(b => !b.IsDeleted && !b.Ground.IsDeleted);
         if (!super)
             query = query.Where(b => b.Ground.OwnerUserId == ownerId);
         if (groundId is Guid gid && gid != Guid.Empty)
             query = query.Where(b => b.GroundId == gid);
 
-        if (GroundsMap.TryDecodeCursor(cursor, out var created, out var id))
+        List<GroundBooking> rows;
+        if (ranged)
         {
-            query = query.Where(b =>
-                b.CreatedAtUtc < created ||
-                (b.CreatedAtUtc == created && string.Compare(b.Id.ToString(), id.ToString()) < 0));
+            query = query.Where(b => b.StartAt < to && b.EndAt > from);
+            rows = await query
+                .OrderBy(b => b.StartAt)
+                .ThenBy(b => b.Id)
+                .Take(take)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
         }
+        else
+        {
+            if (GroundsMap.TryDecodeCursor(cursor, out var created, out var id))
+            {
+                query = query.Where(b =>
+                    b.CreatedAtUtc < created ||
+                    (b.CreatedAtUtc == created && string.Compare(b.Id.ToString(), id.ToString()) < 0));
+            }
 
-        var rows = await query
-            .OrderByDescending(b => b.CreatedAtUtc)
-            .ThenByDescending(b => b.Id)
-            .Take(take)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+            rows = await query
+                .OrderByDescending(b => b.CreatedAtUtc)
+                .ThenByDescending(b => b.Id)
+                .Take(take)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        }
 
         return Ok(rows.Select(b => GroundsMap.ToBooking(b, b.Ground)).ToList());
     }
@@ -605,6 +863,8 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
         var b = await _db.Bookings.AsNoTracking()
             .Include(x => x.Ground)
             .Include(x => x.Services)
+            .Include(x => x.ShopItems)
+            .Include(x => x.Review)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct)
             .ConfigureAwait(false);
         if (b is null)
@@ -625,6 +885,8 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
         var b = await _db.Bookings
             .Include(x => x.Ground)
             .Include(x => x.Services)
+            .Include(x => x.ShopItems)
+            .Include(x => x.Review)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct)
             .ConfigureAwait(false);
         if (b is null)
@@ -670,6 +932,111 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
         b.UpdatedAtUtc = DateTime.Now;
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Ok(GroundsMap.ToBooking(b, b.Ground));
+    }
+
+    [HttpGet("{id:guid}/review")]
+    public async Task<ActionResult<GroundReviewDto>> GetReview(Guid id, CancellationToken ct)
+    {
+        var booking = await LoadBookingForReviewAsync(id, tracking: false, ct).ConfigureAwait(false);
+        if (booking is null)
+            return NotFound();
+        if (!CanSeeBooking(booking))
+            return Forbid();
+        if (booking.Review is null)
+            return NotFound();
+        booking.Review.Booking = booking;
+        return Ok(GroundsMap.ToReview(booking.Review));
+    }
+
+    [HttpPost("{id:guid}/review")]
+    public async Task<ActionResult<GroundReviewDto>> CreateReview(
+        Guid id, [FromBody] GroundReviewUpsert request, CancellationToken ct)
+    {
+        if (GroundsCaller.IsGuest(HttpContext))
+            return StatusCode(StatusCodes.Status403Forbidden, "Sign up to review a ground.");
+
+        var booking = await LoadBookingForReviewAsync(id, tracking: true, ct).ConfigureAwait(false);
+        if (booking is null)
+            return NotFound("Booking not found.");
+
+        var userId = GroundsCaller.UserId(HttpContext);
+        var blocked = GroundsMap.ReviewBlockReason(booking, userId);
+        if (blocked is not null)
+            return BadRequest(blocked);
+        if (booking.Review is not null)
+            return Conflict("You already reviewed this booking. Only one review is allowed per completed booking.");
+        if (!GroundsMap.TryNormalizeReview(request, out var rating, out var comment, out var error))
+            return BadRequest(error);
+
+        var review = new GroundReview
+        {
+            GroundId = booking.GroundId,
+            BookingId = booking.Id,
+            CustomerUserId = userId,
+            CustomerName = string.IsNullOrWhiteSpace(booking.CustomerName)
+                ? GroundsCaller.Username(HttpContext)
+                : booking.CustomerName,
+            Rating = rating,
+            Comment = comment,
+            CreatedAtUtc = DateTime.Now,
+            UpdatedAtUtc = DateTime.Now
+        };
+        _db.Reviews.Add(review);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("You already reviewed this booking. Only one review is allowed per completed booking.");
+        }
+
+        review.Booking = booking;
+        return Ok(GroundsMap.ToReview(review));
+    }
+
+    [HttpPut("{id:guid}/review")]
+    public async Task<ActionResult<GroundReviewDto>> UpdateReview(
+        Guid id, [FromBody] GroundReviewUpsert request, CancellationToken ct)
+    {
+        var booking = await LoadBookingForReviewAsync(id, tracking: true, ct).ConfigureAwait(false);
+        if (booking is null)
+            return NotFound("Booking not found.");
+
+        var userId = GroundsCaller.UserId(HttpContext);
+        var blocked = GroundsMap.ReviewBlockReason(booking, userId);
+        if (blocked is not null)
+            return BadRequest(blocked);
+        if (booking.Review is null)
+            return NotFound("No review yet for this booking.");
+        if (!GroundsMap.TryNormalizeReview(request, out var rating, out var comment, out var error))
+            return BadRequest(error);
+
+        booking.Review.Rating = rating;
+        booking.Review.Comment = comment;
+        booking.Review.UpdatedAtUtc = DateTime.Now;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        booking.Review.Booking = booking;
+        return Ok(GroundsMap.ToReview(booking.Review));
+    }
+
+    private async Task<GroundBooking?> LoadBookingForReviewAsync(Guid id, bool tracking, CancellationToken ct)
+    {
+        var query = tracking
+            ? _db.Bookings.AsQueryable()
+            : _db.Bookings.AsNoTracking();
+        return await query
+            .Include(x => x.Ground)
+            .Include(x => x.Review)
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted && !x.Ground.IsDeleted, ct)
+            .ConfigureAwait(false);
+    }
+
+    private bool CanSeeBooking(GroundBooking booking)
+    {
+        var userId = GroundsCaller.UserId(HttpContext);
+        return booking.CustomerUserId == userId
+               || GroundsCaller.CanManageGround(HttpContext, booking.Ground.OwnerUserId);
     }
 
     private static bool CanChangeStatus(string current, string next, bool isOwner, bool isCustomer)

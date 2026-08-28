@@ -64,6 +64,8 @@ public partial class AppShell : Shell
             currentWorkspace = AppWorkspace.Leagues;
         if (currentWorkspace == AppWorkspace.GroundOwner && session?.IsGroundOwner != true && session?.CanManagePlatform != true)
             currentWorkspace = AppWorkspace.Grounds;
+        if (currentWorkspace == AppWorkspace.Scheduler && session?.IsGuest == true)
+            currentWorkspace = AppWorkspace.Leagues;
 
         if (currentWorkspace == AppWorkspace.GroundOwner)
         {
@@ -82,7 +84,13 @@ public partial class AppShell : Shell
         }
         else if (currentWorkspace == AppWorkspace.Settings)
         {
-            Items.Add(CreateFlyout("Settings", "groundsettings", "groundsettingshome", () => services.GetRequiredService<GroundSettingsPage>()));
+            Items.Add(CreateFlyout("Amenities", "groundamenities", "groundamenitieshome", () => services.GetRequiredService<AmenitiesPage>()));
+            Items.Add(CreateFlyout("Services", "groundservices", "groundserviceshome", () => services.GetRequiredService<ServicesPage>()));
+            Items.Add(CreateFlyout("Shop", "groundshop", "groundshophome", () => services.GetRequiredService<ShopCatalogPage>()));
+        }
+        else if (currentWorkspace == AppWorkspace.Scheduler)
+        {
+            Items.Add(CreateFlyout("Tournament Scheduler", "tournamentscheduler", "tournamentschedulerhome", () => services.GetRequiredService<TournamentSchedulerPage>()));
         }
         else
         {
@@ -117,7 +125,9 @@ public partial class AppShell : Shell
                     ? "Accounts"
                     : currentWorkspace == AppWorkspace.Settings
                         ? "Catalog"
-                        : "Live",
+                        : currentWorkspace == AppWorkspace.Scheduler
+                            ? "Manual"
+                            : "Live",
             FontSize = 12,
             TextColor = Color.FromArgb("#B8C4D4"),
             LineBreakMode = LineBreakMode.TailTruncation,
@@ -134,9 +144,11 @@ public partial class AppShell : Shell
                         ? "Users"
                         : currentWorkspace == AppWorkspace.Settings
                             ? "Settings"
-                            : string.IsNullOrWhiteSpace(_league.CurrentLeagueName)
-                            ? "Select a league"
-                            : _league.CurrentLeagueName,
+                            : currentWorkspace == AppWorkspace.Scheduler
+                                ? "Tournament Scheduler"
+                                : string.IsNullOrWhiteSpace(_league.CurrentLeagueName)
+                                ? "Select a league"
+                                : _league.CurrentLeagueName,
             FontSize = 16,
             FontAttributes = FontAttributes.Bold,
             TextColor = Color.FromArgb("#B6FF3B"),
@@ -308,16 +320,23 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(TournamentDetailPage), new DiRouteFactory<TournamentDetailPage>(services));
         Routing.RegisterRoute(nameof(SeriesEditPage), new DiRouteFactory<SeriesEditPage>(services));
         Routing.RegisterRoute(nameof(SeriesDetailPage), new DiRouteFactory<SeriesDetailPage>(services));
+        Routing.RegisterRoute(nameof(TournamentSchedulerEditPage), new DiRouteFactory<TournamentSchedulerEditPage>(services));
+        Routing.RegisterRoute(nameof(TournamentSchedulerDetailPage), new DiRouteFactory<TournamentSchedulerDetailPage>(services));
         Routing.RegisterRoute(nameof(LeagueEditPage), new DiRouteFactory<LeagueEditPage>(services));
         Routing.RegisterRoute(nameof(GroundDetailPage), new DiRouteFactory<GroundDetailPage>(services));
         Routing.RegisterRoute(nameof(GroundBookRequestPage), new DiRouteFactory<GroundBookRequestPage>(services));
+        Routing.RegisterRoute(nameof(GroundReviewPage), new DiRouteFactory<GroundReviewPage>(services));
         Routing.RegisterRoute(nameof(OwnerGroundEditPage), new DiRouteFactory<OwnerGroundEditPage>(services));
+        Routing.RegisterRoute(nameof(OwnerBookingCreatePage), new DiRouteFactory<OwnerBookingCreatePage>(services));
         Routing.RegisterRoute(nameof(OwnerBookingEditPage), new DiRouteFactory<OwnerBookingEditPage>(services));
+        Routing.RegisterRoute(nameof(AmenityEditPage), new DiRouteFactory<AmenityEditPage>(services));
+        Routing.RegisterRoute(nameof(ServiceEditPage), new DiRouteFactory<ServiceEditPage>(services));
+        Routing.RegisterRoute(nameof(ShopCatalogEditPage), new DiRouteFactory<ShopCatalogEditPage>(services));
     }
 
     private async Task RefreshLeagueNameAsync()
     {
-        if (_workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings)
+        if (_workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings or AppWorkspace.Scheduler)
             return;
         if (_league.CurrentLeagueId is not Guid id)
             return;
@@ -360,6 +379,11 @@ public partial class AppShell : Shell
             _pendingLabel.Text = "Catalog";
             return;
         }
+        if (_workspace.Current == AppWorkspace.Scheduler)
+        {
+            _pendingLabel.Text = "Manual";
+            return;
+        }
         try
         {
             var live = _services.GetRequiredService<ILivePublisher>();
@@ -385,7 +409,7 @@ public partial class AppShell : Shell
             FlyoutIsPresented = true;
 
 #if WINDOWS
-        KeepWindowsPaneOpen();
+        ConfigureWindowsPane();
 #endif
     }
 
@@ -406,7 +430,7 @@ public partial class AppShell : Shell
                 Shell.SetFlyoutBehavior(CurrentPage, behavior);
 
 #if WINDOWS
-            KeepWindowsPaneOpen();
+            ConfigureWindowsPane();
 #endif
         }
         finally
@@ -437,7 +461,7 @@ public partial class AppShell : Shell
 
     private static FlyoutBehavior PlatformFlyoutBehavior =>
 #if WINDOWS || MACCATALYST
-        FlyoutBehavior.Locked;
+        FlyoutBehavior.Flyout;
 #else
         DeviceInfo.Idiom == DeviceIdiom.Desktop ? FlyoutBehavior.Locked : FlyoutBehavior.Flyout;
 #endif
@@ -449,8 +473,8 @@ public partial class AppShell : Shell
 #endif
         ApplyPlatformFlyout();
 #if WINDOWS
-        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), KeepWindowsPaneOpen);
-        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(250), KeepWindowsPaneOpen);
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), ConfigureWindowsPane);
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(250), ConfigureWindowsPane);
 #endif
     }
 
@@ -640,50 +664,18 @@ public partial class AppShell : Shell
     }
 
 #if WINDOWS
-    private void KeepWindowsPaneOpen()
+    private void ConfigureWindowsPane()
     {
         var nav = _winNav ?? FindNavigationView(Handler?.PlatformView);
         if (nav is null)
             return;
 
-        if (!ReferenceEquals(_winNav, nav))
-        {
-            if (_winNav is not null)
-            {
-                _winNav.PaneClosing -= OnWinPaneClosing;
-                _winNav.PaneClosed -= OnWinPaneClosed;
-            }
-
-            _winNav = nav;
-            nav.PaneClosing += OnWinPaneClosing;
-            nav.PaneClosed += OnWinPaneClosed;
-        }
-
-        nav.PaneDisplayMode = Microsoft.UI.Xaml.Controls.NavigationViewPaneDisplayMode.Left;
-        nav.ExpandedModeThresholdWidth = 0;
-        nav.CompactModeThresholdWidth = 0;
-        nav.CompactPaneLength = SidebarWidth;
-        nav.OpenPaneLength = SidebarWidth;
-        nav.IsPaneOpen = true;
+        _winNav = nav;
         nav.IsSettingsVisible = false;
+        nav.IsPaneToggleButtonVisible = true;
+        nav.OpenPaneLength = SidebarWidth;
+        nav.PaneDisplayMode = Microsoft.UI.Xaml.Controls.NavigationViewPaneDisplayMode.LeftMinimal;
         FlyoutWidth = SidebarWidth;
-        FlyoutIsPresented = true;
-    }
-
-    private void OnWinPaneClosing(Microsoft.UI.Xaml.Controls.NavigationView sender, Microsoft.UI.Xaml.Controls.NavigationViewPaneClosingEventArgs args)
-    {
-        args.Cancel = true;
-        sender.IsPaneOpen = true;
-        sender.CompactPaneLength = SidebarWidth;
-        sender.OpenPaneLength = SidebarWidth;
-    }
-
-    private void OnWinPaneClosed(Microsoft.UI.Xaml.Controls.NavigationView sender, object args)
-    {
-        sender.PaneDisplayMode = Microsoft.UI.Xaml.Controls.NavigationViewPaneDisplayMode.Left;
-        sender.CompactPaneLength = SidebarWidth;
-        sender.OpenPaneLength = SidebarWidth;
-        sender.IsPaneOpen = true;
     }
 
     private static Microsoft.UI.Xaml.Controls.NavigationView? FindNavigationView(object? platformView)

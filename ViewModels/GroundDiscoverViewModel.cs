@@ -47,6 +47,13 @@ public partial class GroundDiscoverViewModel : ObservableObject
     public bool HasLocationFilter =>
         !IsAll(Country) || !IsAll(State) || !IsAll(City) || !IsAll(Area);
 
+    public bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(NameQuery)
+        || !string.IsNullOrWhiteSpace(PostalCode)
+        || HasLocationFilter
+        || !string.IsNullOrWhiteSpace(MinRateText)
+        || !string.IsNullOrWhiteSpace(MaxRateText);
+
     public GroundDiscoverViewModel(IGroundsApiClient api, IAuthService auth)
     {
         _api = api;
@@ -65,6 +72,7 @@ public partial class GroundDiscoverViewModel : ObservableObject
         OnPropertyChanged(nameof(UsePostalFilter));
         OnPropertyChanged(nameof(UseLocationFilter));
         OnPropertyChanged(nameof(HasLocationFilter));
+        OnPropertyChanged(nameof(HasActiveFilters));
     }
 
     partial void OnPostalCodeChanged(string value)
@@ -117,6 +125,10 @@ public partial class GroundDiscoverViewModel : ObservableObject
             ClearPostalQuiet();
         NotifyFilterMode();
     }
+
+    partial void OnNameQueryChanged(string value) => OnPropertyChanged(nameof(HasActiveFilters));
+    partial void OnMinRateTextChanged(string value) => OnPropertyChanged(nameof(HasActiveFilters));
+    partial void OnMaxRateTextChanged(string value) => OnPropertyChanged(nameof(HasActiveFilters));
 
     private void ClearPostalQuiet()
     {

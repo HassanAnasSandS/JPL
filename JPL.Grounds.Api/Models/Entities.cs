@@ -59,6 +59,7 @@ public sealed class MasterUser
     public string PasswordHash { get; set; } = string.Empty;
     public AppRole Role { get; set; } = AppRole.User;
     public Guid? LeagueId { get; set; }
+    public string? WhatsAppNumber { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
 }
@@ -94,9 +95,12 @@ public sealed class Ground
     public ICollection<GroundImage> Images { get; set; } = new List<GroundImage>();
     public ICollection<GroundAmenity> Amenities { get; set; } = new List<GroundAmenity>();
     public ICollection<GroundService> Services { get; set; } = new List<GroundService>();
+    public ICollection<GroundShopItem> ShopItems { get; set; } = new List<GroundShopItem>();
     public ICollection<GroundBookingOffer> Offers { get; set; } = new List<GroundBookingOffer>();
     public ICollection<GroundLink> Links { get; set; } = new List<GroundLink>();
+    public ICollection<GroundVideo> Videos { get; set; } = new List<GroundVideo>();
     public ICollection<GroundBooking> Bookings { get; set; } = new List<GroundBooking>();
+    public ICollection<GroundReview> Reviews { get; set; } = new List<GroundReview>();
 }
 
 public sealed class GroundImage
@@ -111,6 +115,16 @@ public sealed class GroundImage
 }
 
 public sealed class GroundLink
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid GroundId { get; set; }
+    public Ground Ground { get; set; } = null!;
+    public string Title { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+}
+
+public sealed class GroundVideo
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid GroundId { get; set; }
@@ -160,6 +174,25 @@ public sealed class GroundBookingService
     public decimal Amount { get; set; }
 }
 
+public sealed class GroundShopItem
+{
+    public Guid GroundId { get; set; }
+    public Ground Ground { get; set; } = null!;
+    public string Code { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public string Kind { get; set; } = GroundShopKinds.Rent;
+}
+
+public sealed class GroundBookingShopItem
+{
+    public Guid BookingId { get; set; }
+    public GroundBooking Booking { get; set; } = null!;
+    public string Code { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public string Kind { get; set; } = GroundShopKinds.Rent;
+    public int Qty { get; set; }
+}
+
 public sealed class GroundBooking
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -181,8 +214,25 @@ public sealed class GroundBooking
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
     public bool IsDeleted { get; set; }
     public ICollection<GroundBookingService> Services { get; set; } = new List<GroundBookingService>();
+    public ICollection<GroundBookingShopItem> ShopItems { get; set; } = new List<GroundBookingShopItem>();
+    public GroundReview? Review { get; set; }
 
     public decimal Balance => Math.Max(0, BookingAmount - Advance);
+}
+
+public sealed class GroundReview
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid GroundId { get; set; }
+    public Ground Ground { get; set; } = null!;
+    public Guid BookingId { get; set; }
+    public GroundBooking Booking { get; set; } = null!;
+    public Guid CustomerUserId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public int Rating { get; set; }
+    public string? Comment { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
 }
 
 /// <summary>SuperAdmin catalog — owners pick these on a ground; not the per-ground join rows.</summary>
@@ -200,6 +250,33 @@ public sealed class ServiceCatalog
     public int SortOrder { get; set; }
 }
 
+public sealed class ShopCatalog
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = string.Empty;
+    public string Kind { get; set; } = GroundShopKinds.Rent;
+    public decimal Price { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public static class GroundShopKinds
+{
+    public const string Rent = "Rent";
+    public const string Sell = "Sell";
+    public const int MaxQty = 99;
+
+    public static readonly string[] All = [Rent, Sell];
+
+    public static bool IsValid(string? kind)
+        => All.Any(s => string.Equals(s, kind, StringComparison.OrdinalIgnoreCase));
+
+    public static string Normalize(string? kind)
+        => string.Equals(kind, Sell, StringComparison.OrdinalIgnoreCase) ? Sell : Rent;
+
+    public static int ClampQty(int qty)
+        => Math.Clamp(qty, 0, MaxQty);
+}
+
 public static class GroundCatalogSeed
 {
     public static readonly string[] Amenities =
@@ -213,5 +290,17 @@ public static class GroundCatalogSeed
         "Umpire", "Scorer", "Tape balls", "Cricket balls", "Generator",
         "Live streaming", "Photographer", "Refreshments", "Kit hire",
         "Extra nets", "Shamiana", "Sound system"
+    ];
+
+    public static readonly (string Name, string Kind)[] Shop =
+    [
+        ("Helmet", GroundShopKinds.Rent),
+        ("Batting pads", GroundShopKinds.Rent),
+        ("Bat", GroundShopKinds.Rent),
+        ("Gloves", GroundShopKinds.Rent),
+        ("Kit hire", GroundShopKinds.Rent),
+        ("Soft drinks", GroundShopKinds.Sell),
+        ("Mineral water", GroundShopKinds.Sell),
+        ("Tape ball pack", GroundShopKinds.Sell)
     ];
 }

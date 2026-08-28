@@ -25,12 +25,13 @@ public static class NetworkUi
     {
         for (var e = ex; e is not null; e = e.InnerException)
         {
-            if (e is OfflineException or TaskCanceledException or SocketException)
+            if (e is OfflineException or TaskCanceledException or TimeoutException or SocketException)
                 return true;
             // Connection failures only — "API 404: ..." HttpRequestException is a server response, not offline.
             if (e is HttpRequestException && !e.Message.StartsWith("API ", StringComparison.Ordinal))
                 return true;
-            if (e.Message.Contains("No such host", StringComparison.OrdinalIgnoreCase) ||
+            if (e.Message.Contains("HttpClient.Timeout", StringComparison.OrdinalIgnoreCase) ||
+                e.Message.Contains("No such host", StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains("Network is unreachable", StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains("Connection refused", StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains("Unable to resolve", StringComparison.OrdinalIgnoreCase) ||

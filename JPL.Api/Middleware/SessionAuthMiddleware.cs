@@ -62,6 +62,11 @@ public sealed class SessionAuthMiddleware
             identity.AddClaim(new Claim("league_id", leagueId.ToString("D")));
             context.Items["JplHomeLeagueId"] = leagueId;
         }
+        if (!string.IsNullOrWhiteSpace(user.WhatsAppNumber))
+        {
+            identity.AddClaim(new Claim("whatsapp", user.WhatsAppNumber));
+            context.Items["JplWhatsApp"] = user.WhatsAppNumber;
+        }
         context.User = new ClaimsPrincipal(identity);
         context.Items["JplUserId"] = user.Id;
         context.Items["JplUsername"] = user.Username;

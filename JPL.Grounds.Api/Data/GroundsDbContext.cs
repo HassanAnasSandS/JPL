@@ -13,12 +13,17 @@ public sealed class GroundsDbContext : DbContext
     public DbSet<GroundImage> GroundImages => Set<GroundImage>();
     public DbSet<GroundAmenity> GroundAmenities => Set<GroundAmenity>();
     public DbSet<GroundService> GroundServices => Set<GroundService>();
+    public DbSet<GroundShopItem> GroundShopItems => Set<GroundShopItem>();
     public DbSet<GroundBookingOffer> GroundBookingOffers => Set<GroundBookingOffer>();
     public DbSet<GroundLink> GroundLinks => Set<GroundLink>();
+    public DbSet<GroundVideo> GroundVideos => Set<GroundVideo>();
     public DbSet<GroundBooking> Bookings => Set<GroundBooking>();
     public DbSet<GroundBookingService> GroundBookingServices => Set<GroundBookingService>();
+    public DbSet<GroundBookingShopItem> GroundBookingShopItems => Set<GroundBookingShopItem>();
+    public DbSet<GroundReview> Reviews => Set<GroundReview>();
     public DbSet<AmenityCatalog> AmenityCatalog => Set<AmenityCatalog>();
     public DbSet<ServiceCatalog> ServiceCatalog => Set<ServiceCatalog>();
+    public DbSet<ShopCatalog> ShopCatalog => Set<ShopCatalog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -89,6 +94,15 @@ public sealed class GroundsDbContext : DbContext
             e.HasIndex(x => new { x.GroundId, x.SortOrder });
         });
 
+        modelBuilder.Entity<GroundVideo>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(80).IsRequired();
+            e.Property(x => x.Url).HasMaxLength(1000).IsRequired();
+            e.HasOne(x => x.Ground).WithMany(g => g.Videos).HasForeignKey(x => x.GroundId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.GroundId, x.SortOrder });
+        });
+
         modelBuilder.Entity<GroundBooking>(e =>
         {
             e.HasKey(x => x.Id);
@@ -108,12 +122,48 @@ public sealed class GroundsDbContext : DbContext
             e.HasIndex(x => new { x.IsDeleted, x.CreatedAtUtc, x.Id });
         });
 
+        modelBuilder.Entity<GroundReview>(e =>
+        {
+            e.ToTable("GroundReviews");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Comment).HasMaxLength(1000);
+            e.HasIndex(x => x.BookingId).IsUnique();
+            e.HasIndex(x => new { x.GroundId, x.CreatedAtUtc, x.Id });
+            e.HasOne(x => x.Booking)
+                .WithOne(b => b.Review)
+                .HasForeignKey<GroundReview>(x => x.BookingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Ground)
+                .WithMany(g => g.Reviews)
+                .HasForeignKey(x => x.GroundId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<GroundBookingService>(e =>
         {
             e.HasKey(x => new { x.BookingId, x.Code });
             e.Property(x => x.Code).HasMaxLength(40);
             e.Property(x => x.Amount).HasPrecision(12, 2);
             e.HasOne(x => x.Booking).WithMany(b => b.Services).HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GroundShopItem>(e =>
+        {
+            e.HasKey(x => new { x.GroundId, x.Code });
+            e.Property(x => x.Code).HasMaxLength(40);
+            e.Property(x => x.Kind).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Price).HasPrecision(12, 2);
+            e.HasOne(x => x.Ground).WithMany(g => g.ShopItems).HasForeignKey(x => x.GroundId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GroundBookingShopItem>(e =>
+        {
+            e.HasKey(x => new { x.BookingId, x.Code });
+            e.Property(x => x.Code).HasMaxLength(40);
+            e.Property(x => x.Kind).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Price).HasPrecision(12, 2);
+            e.HasOne(x => x.Booking).WithMany(b => b.ShopItems).HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AmenityCatalog>(e =>
@@ -130,6 +180,17 @@ public sealed class GroundsDbContext : DbContext
             e.ToTable("ServiceCatalog");
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(40).IsRequired();
+            e.HasIndex(x => x.Name).IsUnique();
+            e.HasIndex(x => x.SortOrder);
+        });
+
+        modelBuilder.Entity<ShopCatalog>(e =>
+        {
+            e.ToTable("ShopCatalog");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Kind).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Price).HasColumnType("decimal(12,2)");
             e.HasIndex(x => x.Name).IsUnique();
             e.HasIndex(x => x.SortOrder);
         });

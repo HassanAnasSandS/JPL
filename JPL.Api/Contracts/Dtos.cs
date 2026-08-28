@@ -10,7 +10,8 @@ public sealed record LoginResponse(
     string Role,
     string Token,
     Guid? LeagueId = null,
-    bool NeedsLeaguePicker = false);
+    bool NeedsLeaguePicker = false,
+    string? WhatsAppNumber = null);
 
 public sealed record LeagueDto(
     Guid Id,
@@ -672,5 +673,82 @@ public sealed class BowlingRowDto
     public int Wickets { get; set; }
     public int Maidens { get; set; }
     public bool IsCaptain { get; set; }
+}
+
+public sealed class SchedulerListDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int GroupCount { get; set; }
+    public int TeamCount { get; set; }
+    public byte RoundRobinType { get; set; }
+    public int QualifyPerGroup { get; set; }
+    public byte KnockoutFormat { get; set; }
+    public byte Status { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public string MetaLine { get; set; } = string.Empty;
+    public string WinnerLine { get; set; } = string.Empty;
+    public bool CanEdit { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string CreatedByUsername { get; set; } = string.Empty;
+    public DateTime UpdatedAtUtc { get; set; }
+}
+
+public sealed class SchedulerDetailDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int GroupCount { get; set; }
+    public byte RoundRobinType { get; set; }
+    public int QualifyPerGroup { get; set; }
+    public byte KnockoutFormat { get; set; }
+    public byte Status { get; set; }
+    public Guid? WinnerTeamId { get; set; }
+    public string? QualificationPicksJson { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public List<SchedulerTeamDto> Teams { get; set; } = new();
+    public List<SchedulerMatchDto> Matches { get; set; } = new();
+}
+
+public sealed class SchedulerTeamDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int GroupNumber { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public sealed class SchedulerMatchDto
+{
+    public Guid Id { get; set; }
+    public byte Stage { get; set; }
+    public int GroupNumber { get; set; }
+    public int Sequence { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public Guid? TeamAId { get; set; }
+    public Guid? TeamBId { get; set; }
+    public string? TeamASlot { get; set; }
+    public string? TeamBSlot { get; set; }
+    public byte Result { get; set; }
+    public Guid? WinnerFeedsMatchId { get; set; }
+    public bool WinnerFeedsIsTeamA { get; set; }
+    public Guid? LoserFeedsMatchId { get; set; }
+    public bool LoserFeedsIsTeamA { get; set; }
+}
+
+public sealed class SchedulerUpsertRequest
+{
+    public Guid? Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int GroupCount { get; set; }
+    public byte RoundRobinType { get; set; }
+    public int QualifyPerGroup { get; set; }
+    public byte KnockoutFormat { get; set; }
+    public byte Status { get; set; }
+    public Guid? WinnerTeamId { get; set; }
+    public string? QualificationPicksJson { get; set; }
+    public List<SchedulerTeamDto> Teams { get; set; } = new();
+    public List<SchedulerMatchDto> Matches { get; set; } = new();
 }
 

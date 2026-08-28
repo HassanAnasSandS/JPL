@@ -5,9 +5,15 @@ using JPL.Grounds.Api.Models;
 
 namespace JPL.Grounds.Api.Services;
 
+internal readonly record struct GroundPublicStats(double AverageRating, int ReviewCount, int CompletedBookingCount);
+
 internal static class GroundsMap
 {
     public const int MaxLinksPerGround = 8;
+    public const int MaxVideosPerGround = 8;
+    public const int MaxVideoUrlLength = 1000;
+    public const int MinRating = 1;
+    public const int MaxRating = 5;
 
     public static string ImageUrl(HttpRequest request, Guid groundId, string fileName)
         => $"{request.Scheme}://{request.Host.Value}/api/grounds/{groundId:D}/images/{fileName}";
@@ -43,7 +49,8 @@ internal static class GroundsMap
         }).ToList();
     }
 
-    public static GroundCardDto ToCard(Ground g, HttpRequest request, bool canDelete = false)
+    public static GroundCardDto ToCard(
+        Ground g, HttpRequest request, bool canDelete = false, GroundPublicStats stats = default)
         => new(
             g.Id,
             g.Name,
@@ -60,9 +67,12 @@ internal static class GroundsMap
             g.GoogleMapsUrl,
             g.CountryName,
             ToOffers(g, enabledOnly: true),
-            canDelete);
+            canDelete,
+            stats.AverageRating,
+            stats.ReviewCount,
+            stats.CompletedBookingCount);
 
-    public static GroundDetailDto ToDetail(Ground g, HttpRequest request)
+    public static GroundDetailDto ToDetail(Ground g, HttpRequest request, GroundPublicStats stats = default)
         => new(
             g.Id,
             g.OwnerUserId,
@@ -97,7 +107,12 @@ internal static class GroundsMap
             ToOffers(g),
             GroundBookingKinds.ClampNightHour(g.NightStartsHour),
             ToLinks(g),
-            GroundBookingKinds.ClampNightEndHour(g.NightEndsHour));
+            GroundBookingKinds.ClampNightEndHour(g.NightEndsHour),
+            ToShop(g.ShopItems),
+            ToVideos(g),
+            stats.AverageRating,
+            stats.ReviewCount,
+            stats.CompletedBookingCount);
 
     public static BookingDto ToBooking(GroundBooking b, Ground ground)
         => ToBooking(b, ground.Name, ground.WhatsAppNumber, ground.ContactPhone, ground.Offers);
@@ -129,7 +144,93 @@ internal static class GroundsMap
             b.BookedHours,
             ToBookingServices(b.Services),
             ownerWhatsApp,
-            ownerPhone);
+            ownerPhone,
+            ToBookingShop(b.ShopItems),
+            b.Review is not null,
+            b.Review?.Rating,
+            b.Review?.Id);
+
+    public static GroundReviewDto ToReview(GroundReview r)
+        => new(
+            r.Id,
+            r.GroundId,
+            r.BookingId,
+            r.CustomerUserId,
+            r.CustomerName,
+            r.Rating,
+            r.Comment,
+            r.CreatedAtUtc,
+            r.Booking?.StartAt ?? r.CreatedAtUtc);
+
+    public static async Task<Dictionary<Guid, GroundPublicStats>> LoadStatsAsync(
+        GroundsDbContext db, IReadOnlyList<Guid> groundIds, CancellationToken ct)
+    {
+        if (groundIds.Count == 0)
+            return new Dictionary<Guid, GroundPublicStats>();
+
+        var completed = await db.Bookings.AsNoTracking()
+            .Where(b => !b.IsDeleted
+                        && groundIds.Contains(b.GroundId)
+                        && b.Status == GroundBookingStatus.Completed)
+            .GroupBy(b => b.GroundId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var ratings = await db.Reviews.AsNoTracking()
+            .Where(r => groundIds.Contains(r.GroundId) && !r.Booking.IsDeleted)
+            .GroupBy(r => r.GroundId)
+            .Select(g => new { g.Key, Count = g.Count(), Sum = g.Sum(x => x.Rating) })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var completedMap = completed.ToDictionary(x => x.Key, x => x.Count);
+        var result = new Dictionary<Guid, GroundPublicStats>(groundIds.Count);
+        foreach (var id in groundIds)
+        {
+            var completedCount = completedMap.GetValueOrDefault(id);
+            var rating = ratings.FirstOrDefault(x => x.Key == id);
+            var avg = rating is null || rating.Count == 0
+                ? 0
+                : Math.Round(rating.Sum / (double)rating.Count, 1);
+            result[id] = new GroundPublicStats(avg, rating?.Count ?? 0, completedCount);
+        }
+
+        return result;
+    }
+
+    public static string? ReviewBlockReason(GroundBooking booking, Guid userId)
+    {
+        if (booking.IsDeleted)
+            return "Booking not found.";
+        if (!string.Equals(booking.Status, GroundBookingStatus.Completed, StringComparison.OrdinalIgnoreCase))
+            return "You can review only after the booking is marked Completed.";
+        if (booking.CustomerUserId == Guid.Empty || booking.CustomerUserId != userId)
+            return "Only the customer who completed this booking can review.";
+        return null;
+    }
+
+    public static bool TryNormalizeReview(GroundReviewUpsert request, out int rating, out string? comment, out string? error)
+    {
+        rating = request.Rating;
+        comment = Trim(request.Comment, 1000);
+        error = null;
+        if (rating < MinRating || rating > MaxRating)
+        {
+            error = "Rate this ground from 1 to 5 stars.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string? Trim(string? value, int max)
+    {
+        var t = value?.Trim();
+        if (string.IsNullOrEmpty(t))
+            return null;
+        return t.Length <= max ? t : t[..max];
+    }
 
     public static IReadOnlyList<GroundLinkDto> ToLinks(Ground g)
         => (g.Links ?? Enumerable.Empty<GroundLink>())
@@ -138,6 +239,38 @@ internal static class GroundsMap
                 string.IsNullOrWhiteSpace(x.Title) ? string.Empty : x.Title.Trim(),
                 x.Url))
             .ToList();
+
+    public static IReadOnlyList<GroundVideoDto> ToVideos(Ground g)
+        => (g.Videos ?? Enumerable.Empty<GroundVideo>())
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new GroundVideoDto(
+                string.IsNullOrWhiteSpace(x.Title) ? string.Empty : x.Title.Trim(),
+                x.Url))
+            .ToList();
+
+    public static string NormalizeVideoUrl(string raw)
+    {
+        var text = (raw ?? string.Empty).Trim();
+        var iframe = System.Text.RegularExpressions.Regex.Match(
+            text,
+            """src\s*=\s*["'](?<url>https?://[^"']+)["']""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        if (iframe.Success)
+            text = iframe.Groups["url"].Value.Trim();
+        var value = (text ?? string.Empty).Trim();
+        if (value.Length == 0)
+            throw new InvalidOperationException("Each video needs a URL.");
+        if (!value.Contains("://", StringComparison.Ordinal))
+            value = "https://" + value;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || string.IsNullOrWhiteSpace(uri.Host))
+            throw new InvalidOperationException($"Not a valid video link: {value}");
+        var normalized = uri.AbsoluteUri;
+        if (normalized.Length > MaxVideoUrlLength)
+            throw new InvalidOperationException("Video link is too long.");
+        return normalized;
+    }
 
     public static string NormalizeHttpUrl(string raw)
     {
@@ -170,6 +303,20 @@ internal static class GroundsMap
             .Select(s => new GroundServiceDto(s.Code, s.Amount))
             .ToList();
 
+    public static IReadOnlyList<GroundShopItemDto> ToShop(IEnumerable<GroundShopItem>? rows)
+        => (rows ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code) && s.Price >= 0)
+            .OrderBy(s => s.Code)
+            .Select(s => new GroundShopItemDto(s.Code, s.Price, GroundShopKinds.Normalize(s.Kind)))
+            .ToList();
+
+    public static IReadOnlyList<GroundShopItemDto> ToBookingShop(IEnumerable<GroundBookingShopItem>? rows)
+        => (rows ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code) && s.Qty > 0)
+            .OrderBy(s => s.Code)
+            .Select(s => new GroundShopItemDto(s.Code, s.Price, GroundShopKinds.Normalize(s.Kind), s.Qty))
+            .ToList();
+
     public static List<GroundService> PickRequested(Ground ground, IReadOnlyList<string>? requested)
     {
         var names = (requested ?? [])
@@ -184,6 +331,29 @@ internal static class GroundsMap
         return (ground.Services ?? [])
             .Where(s => s.Amount >= 0 && names.Any(n => string.Equals(n, s.Code, StringComparison.OrdinalIgnoreCase)))
             .ToList();
+    }
+
+    public static List<(GroundShopItem Item, int Qty)> PickRequestedShop(Ground ground, IReadOnlyList<GroundShopQtyUpsert>? requested)
+    {
+        var wanted = (requested ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name) && s.Qty > 0)
+            .GroupBy(s => s.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Name: g.Key, Qty: GroundShopKinds.ClampQty(g.Sum(x => x.Qty))))
+            .Where(x => x.Qty > 0)
+            .Take(16)
+            .ToList();
+        if (wanted.Count == 0)
+            return [];
+
+        var result = new List<(GroundShopItem Item, int Qty)>();
+        foreach (var (name, qty) in wanted)
+        {
+            var item = (ground.ShopItems ?? [])
+                .FirstOrDefault(s => s.Price >= 0 && string.Equals(name, s.Code, StringComparison.OrdinalIgnoreCase));
+            if (item is not null)
+                result.Add((item, qty));
+        }
+        return result;
     }
 
     public static string EncodeCursor(DateTime createdAt, Guid id)

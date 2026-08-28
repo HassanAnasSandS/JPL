@@ -29,6 +29,8 @@ public sealed class LeaguesController : ControllerBase
             .OrderBy(l => l.Name)
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        var userCounts = await LeagueNameDeduper.LoadUserCountsAsync(db, ct).ConfigureAwait(false);
+        list = LeagueNameDeduper.CollapseActiveByName(list, userCounts).ToList();
         var live = await db.LeagueLiveIndexes.AsNoTracking()
             .ToDictionaryAsync(x => x.LeagueId, ct)
             .ConfigureAwait(false);
@@ -57,6 +59,10 @@ public sealed class LeaguesController : ControllerBase
             return Forbid();
         if (!TryValidate(request, out var name, out var image, out var error))
             return BadRequest(error);
+
+        await using var check = _dbs.CreateMaster();
+        if (await LeagueNameDeduper.NameTakenAsync(check, name, exceptId: null, ct).ConfigureAwait(false))
+            return BadRequest("A league with this name already exists.");
 
         var league = new League
         {
@@ -97,6 +103,9 @@ public sealed class LeaguesController : ControllerBase
         var league = await db.Leagues.FirstOrDefaultAsync(l => l.Id == id, ct).ConfigureAwait(false);
         if (league is null)
             return NotFound();
+
+        if (await LeagueNameDeduper.NameTakenAsync(db, name, exceptId: id, ct).ConfigureAwait(false))
+            return BadRequest("A league with this name already exists.");
 
         league.Name = name;
         if (image is { Length: > 0 })

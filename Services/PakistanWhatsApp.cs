@@ -44,6 +44,13 @@ public static class PakistanWhatsApp
         return true;
     }
 
+    public static string? FormatDisplay(string? raw)
+    {
+        if (!TryNormalize(raw, out var local))
+            return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+        return local.Length == 11 ? $"{local[..4]} {local[4..]}" : local;
+    }
+
     public static bool TryWaMeDigits(string? raw, out string digits)
     {
         digits = string.Empty;

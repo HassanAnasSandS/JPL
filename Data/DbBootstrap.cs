@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 18;
+    private const int SchemaVersion = 19;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -26,6 +26,7 @@ public static class DbBootstrap
         // must run every launch (all statements are IF NOT EXISTS / ADD COLUMN).
         await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
         await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+        await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
 
         var dbVersion = await ReadUserVersionAsync(db, ct).ConfigureAwait(false);
         if (dbVersion < SchemaVersion)
@@ -39,6 +40,7 @@ public static class DbBootstrap
         {
             await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
             await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+            await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
         }
 
         // Always run: phones already at SchemaVersion skip EnsureLegacyTables, so new
@@ -716,6 +718,68 @@ public static class DbBootstrap
             ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync(
             """CREATE INDEX IF NOT EXISTS "IX_NetDeliveries_BatterId_BowlerId" ON "NetDeliveries" ("BatterId", "BowlerId");""",
+            ct).ConfigureAwait(false);
+    }
+
+    public static async Task EnsureSchedulerTablesAsync(JplDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SchedulerTournaments" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTournaments" PRIMARY KEY,
+                "Name" TEXT NOT NULL,
+                "GroupCount" INTEGER NOT NULL,
+                "RoundRobinType" INTEGER NOT NULL,
+                "QualifyPerGroup" INTEGER NOT NULL,
+                "KnockoutFormat" INTEGER NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "WinnerTeamId" TEXT NULL,
+                "CreatedByUserId" TEXT NOT NULL,
+                "QualificationPicksJson" TEXT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL,
+                "IsDeleted" INTEGER NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SchedulerTeams" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTeams" PRIMARY KEY,
+                "TournamentId" TEXT NOT NULL,
+                "Name" TEXT NOT NULL,
+                "GroupNumber" INTEGER NOT NULL,
+                "SortOrder" INTEGER NOT NULL,
+                CONSTRAINT "FK_SchedulerTeams_SchedulerTournaments_TournamentId"
+                    FOREIGN KEY ("TournamentId") REFERENCES "SchedulerTournaments" ("Id") ON DELETE CASCADE
+            );
+            """, ct).ConfigureAwait(false);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SchedulerMatches" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerMatches" PRIMARY KEY,
+                "TournamentId" TEXT NOT NULL,
+                "Stage" INTEGER NOT NULL,
+                "GroupNumber" INTEGER NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "Label" TEXT NOT NULL,
+                "TeamAId" TEXT NULL,
+                "TeamBId" TEXT NULL,
+                "TeamASlot" TEXT NULL,
+                "TeamBSlot" TEXT NULL,
+                "Result" INTEGER NOT NULL,
+                "WinnerFeedsMatchId" TEXT NULL,
+                "WinnerFeedsIsTeamA" INTEGER NOT NULL,
+                "LoserFeedsMatchId" TEXT NULL,
+                "LoserFeedsIsTeamA" INTEGER NOT NULL,
+                CONSTRAINT "FK_SchedulerMatches_SchedulerTournaments_TournamentId"
+                    FOREIGN KEY ("TournamentId") REFERENCES "SchedulerTournaments" ("Id") ON DELETE CASCADE
+            );
+            """, ct).ConfigureAwait(false);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_SchedulerTeams_TournamentId" ON "SchedulerTeams" ("TournamentId");""",
+            ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_SchedulerMatches_TournamentId" ON "SchedulerMatches" ("TournamentId");""",
             ct).ConfigureAwait(false);
     }
 

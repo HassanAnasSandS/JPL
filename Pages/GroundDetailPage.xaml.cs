@@ -23,12 +23,19 @@ public partial class GroundDetailPage : ContentPage
     {
         if (_vm.IsViewerOpen)
             _vm.CloseViewerCommand.Execute(null);
+        if (_vm.IsVideoPlayerOpen)
+            _vm.CloseVideoCommand.Execute(null);
         Shell.SetNavBarIsVisible(this, true);
         base.OnDisappearing();
     }
 
     protected override bool OnBackButtonPressed()
     {
+        if (_vm.IsVideoPlayerOpen)
+        {
+            _vm.CloseVideoCommand.Execute(null);
+            return true;
+        }
         if (_vm.IsViewerOpen)
         {
             _vm.CloseViewerCommand.Execute(null);
@@ -46,9 +53,10 @@ public partial class GroundDetailPage : ContentPage
 
     void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GroundDetailViewModel.IsViewerOpen))
+        if (e.PropertyName == nameof(GroundDetailViewModel.IsViewerOpen)
+            || e.PropertyName == nameof(GroundDetailViewModel.IsVideoPlayerOpen))
         {
-            Shell.SetNavBarIsVisible(this, !_vm.IsViewerOpen);
+            Shell.SetNavBarIsVisible(this, !_vm.IsViewerOpen && !_vm.IsVideoPlayerOpen);
             if (_vm.IsViewerOpen)
                 ViewerImage.ResetZoom();
             return;

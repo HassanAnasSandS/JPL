@@ -183,6 +183,19 @@ public sealed class AppNavigator : IAppNavigator
             return;
         }
 
+        if (workspace.Current == AppWorkspace.Scheduler)
+        {
+            if (session.IsGuest)
+            {
+                workspace.Clear();
+                await ShowModeChooserAsync().ConfigureAwait(true);
+                return;
+            }
+
+            await ShowMainAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (workspace.Current == AppWorkspace.Leagues)
         {
             if (!league.HasSelection)
@@ -200,7 +213,7 @@ public sealed class AppNavigator : IAppNavigator
         try
         {
             var workspace = _services.GetRequiredService<IAppWorkspace>();
-            if (workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings)
+            if (workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings or AppWorkspace.Scheduler)
                 return;
 
             await Task.Delay(150).ConfigureAwait(true);

@@ -39,7 +39,7 @@ public sealed class LeagueService : ILeagueService
             try
             {
                 var remote = await _api.GetLeaguesAsync(ct).ConfigureAwait(false);
-                var list = remote.Select(ToEntity).ToList();
+                var list = CollapseSameNames(remote.Select(ToEntity).ToList());
                 await CacheLocalAsync(list, ct).ConfigureAwait(false);
                 return list;
             }
@@ -49,7 +49,32 @@ public sealed class LeagueService : ILeagueService
             }
         }
 
-        return await LoadLocalAsync(ct).ConfigureAwait(false);
+        return CollapseSameNames(await LoadLocalAsync(ct).ConfigureAwait(false));
+    }
+
+    /// <summary>API historically allowed two active rows with the same name (different Guids).</summary>
+    private List<League> CollapseSameNames(IReadOnlyList<League> list)
+    {
+        var preferId = _auth.Current?.HasHomeLeague == true ? _auth.Current.LeagueId : null;
+        return list
+            .GroupBy(l => l.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                if (preferId is Guid hid)
+                {
+                    var home = g.FirstOrDefault(x => x.Id == hid);
+                    if (home is not null)
+                        return home;
+                }
+
+                var canonical = g.FirstOrDefault(x => x.Id == LeagueIds.Jpl);
+                if (canonical is not null)
+                    return canonical;
+
+                return g.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id).First();
+            })
+            .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private async Task<IReadOnlyList<League>> LoadLocalAsync(CancellationToken ct)

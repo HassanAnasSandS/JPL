@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.ShopCatalogEditPage"
+             x:DataType="vm:ShopCatalogEditViewModel"
+             Title="{Binding PageTitle}"
+             HideSoftInputOnTapped="True">
+
+    <VerticalStackLayout Padding="16" Spacing="14">
+        <Border Style="{StaticResource CardBorder}" Padding="14">
+            <VerticalStackLayout Spacing="10">
+                <Label Text="{Binding NameLabel}" Style="{StaticResource SectionLabel}" />
+                <Entry Placeholder="{Binding NamePlaceholder}"
+                       Text="{Binding Name}"
+                       MaxLength="40"
+                       FontSize="16" />
+                <Label Text="{Binding Hint}" Style="{StaticResource MutedLabel}" FontSize="12" />
+            </VerticalStackLayout>
+        </Border>
+        <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        <Button Text="Save"
+                Style="{StaticResource GoldButton}"
+                HeightRequest="48"
+                Command="{Binding SaveCommand}" />
+    </VerticalStackLayout>
+</ContentPage>

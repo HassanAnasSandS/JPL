@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.NetSessionsPage"
              x:DataType="vm:NetSessionsViewModel"
              Title="Nets Practice"
@@ -23,12 +24,14 @@
                     Clicked="OnAddClicked" />
         </Grid>
 
-        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="12">
+        <ctrl:FilterDrawer Grid.Row="1"
+                           HasActiveFilters="{Binding HasActiveFilters}"
+                           ClearCommand="{Binding ClearFiltersCommand}">
             <VerticalStackLayout Spacing="8">
                 <SearchBar Placeholder="Filter by session name"
                            Text="{Binding NameFilter}"
                            CancelButtonColor="{StaticResource Primary}" />
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
                         <CheckBox IsChecked="{Binding FilterByDate}" VerticalOptions="Center" />
                         <Label Text="By date" VerticalOptions="Center" Style="{StaticResource BodyLabel}" />
@@ -37,15 +40,9 @@
                                 Date="{Binding FilterDate}"
                                 IsEnabled="{Binding FilterByDate}"
                                 VerticalOptions="Center" />
-                    <Button Grid.Column="2"
-                            Text="Clear"
-                            Style="{StaticResource GhostButton}"
-                            Padding="12,8"
-                            IsVisible="{Binding HasActiveFilters}"
-                            Command="{Binding ClearFiltersCommand}" />
                 </Grid>
             </VerticalStackLayout>
-        </Border>
+        </ctrl:FilterDrawer>
 
         <Border Grid.Row="2"
                 IsVisible="{Binding HasActiveSession}"

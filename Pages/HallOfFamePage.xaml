@@ -84,8 +84,10 @@
             </HorizontalStackLayout>
         </ScrollView>
 
-        <ctrl:FormatMultiSelectView Grid.Row="2"
-                                    BindingContext="{Binding FormatFilter}" />
+        <ctrl:FilterDrawer Grid.Row="2"
+                           HasActiveFilters="{Binding FormatFilter.HasSelection}">
+            <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+        </ctrl:FilterDrawer>
 
         <VerticalStackLayout Grid.Row="3" Spacing="2">
             <Label Text="{Binding CategoryTitle}"

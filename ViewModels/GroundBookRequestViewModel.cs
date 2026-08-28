@@ -26,6 +26,44 @@ public sealed class BookableServiceChoice : ObservableObject
     public Action? SelectionChanged { get; set; }
 }
 
+public sealed partial class BookableShopChoice : ObservableObject
+{
+    public const int MaxQty = 99;
+
+    public string Name { get; init; } = string.Empty;
+    public decimal Price { get; init; }
+    public string Kind { get; init; } = "Rent";
+    public string KindLabel => string.Equals(Kind, "Sell", StringComparison.OrdinalIgnoreCase) ? "Sell" : "Rent";
+    public string PriceLabel => Price > 0 ? $"Rs {Price:0}" : "Free";
+    public decimal LineTotal => Qty * Price;
+    public string LineLabel => Qty <= 0
+        ? $"{PriceLabel} · {KindLabel}"
+        : $"{Qty} × {PriceLabel} = Rs {LineTotal:0}";
+
+    private int _qty;
+    public int Qty
+    {
+        get => _qty;
+        set
+        {
+            var next = Math.Clamp(value, 0, MaxQty);
+            if (!SetProperty(ref _qty, next))
+                return;
+            OnPropertyChanged(nameof(LineLabel));
+            OnPropertyChanged(nameof(LineTotal));
+            QtyChanged?.Invoke();
+        }
+    }
+
+    public Action? QtyChanged { get; set; }
+
+    [RelayCommand]
+    private void Increase() => Qty++;
+
+    [RelayCommand]
+    private void Decrease() => Qty--;
+}
+
 [QueryProperty(nameof(GroundId), "id")]
 public partial class GroundBookRequestViewModel : ObservableObject
 {
@@ -37,6 +75,7 @@ public partial class GroundBookRequestViewModel : ObservableObject
 
     public ObservableCollection<GroundBookingOfferDto> OfferChoices { get; } = new();
     public ObservableCollection<BookableServiceChoice> ServiceChoices { get; } = new();
+    public ObservableCollection<BookableShopChoice> ShopChoices { get; } = new();
     public IReadOnlyList<string> HourChoices { get; } = ["1", "2", "3", "4", "5", "6", "8"];
 
     [ObservableProperty] private string groundName = "Request booking";
@@ -56,6 +95,7 @@ public partial class GroundBookRequestViewModel : ObservableObject
 
     public bool ShowHours => SelectedOffer?.IsHourly == true;
     public bool HasPaidServices => ServiceChoices.Count > 0;
+    public bool HasShopItems => ShopChoices.Count > 0;
     public bool HasExtras => !string.IsNullOrWhiteSpace(ExtrasLine);
 
     private int _nightStartsHour = 18;
@@ -66,11 +106,24 @@ public partial class GroundBookRequestViewModel : ObservableObject
         _api = api;
         _auth = auth;
         _navigator = navigator;
-        CustomerName = auth.Current?.Username ?? string.Empty;
+        ApplyLoggedInContact();
     }
 
     public async Task LoadAsync()
     {
+        ApplyLoggedInContact();
+        if (string.IsNullOrWhiteSpace(CustomerPhone))
+        {
+            try
+            {
+                await _auth.ValidateRemoteSessionAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                /* keep local session name / WhatsApp if GetMe fails */
+            }
+            ApplyLoggedInContact();
+        }
         if (!await GroundBookingGate.EnsureCanBookAsync(_auth, _navigator).ConfigureAwait(true))
         {
             if (Shell.Current is not null)
@@ -113,8 +166,21 @@ public partial class GroundBookRequestViewModel : ObservableObject
             });
         }
 
+        ShopChoices.Clear();
+        foreach (var item in g.Shop ?? [])
+        {
+            ShopChoices.Add(new BookableShopChoice
+            {
+                Name = item.Name,
+                Price = item.Price,
+                Kind = item.Kind,
+                QtyChanged = RefreshQuote
+            });
+        }
+
         SelectedOffer = OfferChoices.FirstOrDefault();
         OnPropertyChanged(nameof(HasPaidServices));
+        OnPropertyChanged(nameof(HasShopItems));
         RefreshQuote();
         if (OfferChoices.Count == 0)
             ErrorMessage = "This ground has no booking types enabled.";
@@ -145,9 +211,14 @@ public partial class GroundBookRequestViewModel : ObservableObject
             ErrorMessage = "Pick a booking type.";
             return;
         }
+        if (string.IsNullOrWhiteSpace(CustomerName))
+        {
+            ErrorMessage = "Your account name is missing. Sign in again.";
+            return;
+        }
         if (!PakistanWhatsApp.TryNormalize(CustomerPhone, out var customerPhone))
         {
-            ErrorMessage = PakistanWhatsApp.RequiredError;
+            ErrorMessage = "Your account has no WhatsApp number. Sign in again after updating it.";
             return;
         }
 
@@ -173,7 +244,8 @@ public partial class GroundBookRequestViewModel : ObservableObject
                 customerName = CustomerName,
                 customerPhone = customerPhone,
                 notes = Notes,
-                services = ServiceChoices.Where(s => s.IsSelected).Select(s => s.Name).ToList()
+                services = ServiceChoices.Where(s => s.IsSelected).Select(s => s.Name).ToList(),
+                shop = ShopChoices.Where(s => s.Qty > 0).Select(s => new { name = s.Name, qty = s.Qty }).ToList()
             }).ConfigureAwait(true);
             await Shell.Current.DisplayAlert("Requested", "Booking sent. The ground owner will confirm.", "OK")
                 .ConfigureAwait(true);
@@ -193,6 +265,13 @@ public partial class GroundBookRequestViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private void ApplyLoggedInContact()
+    {
+        var session = _auth.Current;
+        CustomerName = session?.Username ?? string.Empty;
+        CustomerPhone = session?.WhatsAppNumber ?? string.Empty;
     }
 
     private void RefreshQuote()
@@ -234,12 +313,17 @@ public partial class GroundBookRequestViewModel : ObservableObject
 
         var extras = ServiceChoices.Where(s => s.IsSelected).ToList();
         amount += extras.Sum(s => s.Amount);
+        var shop = ShopChoices.Where(s => s.Qty > 0).ToList();
+        amount += shop.Sum(s => s.LineTotal);
 
         WindowLine = $"{start:dd MMM yyyy HH:mm} – {end:HH:mm} ({hours:0} hr)";
         BandLine = band;
-        ExtrasLine = extras.Count == 0
+        var extraBits = extras.Select(s => s.Display)
+            .Concat(shop.Select(s => $"{s.Name} ×{s.Qty} · Rs {s.LineTotal:0} ({s.KindLabel})"))
+            .ToList();
+        ExtrasLine = extraBits.Count == 0
             ? string.Empty
-            : "Extras: " + string.Join(" · ", extras.Select(s => s.Display));
+            : "Extras: " + string.Join(" · ", extraBits);
         QuoteLine = amount <= 0
             ? "Amount: owner will confirm the rate"
             : $"Amount: Rs {amount:0}";

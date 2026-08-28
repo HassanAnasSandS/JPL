@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.TournamentSchedulerEditPage"
+             x:Name="ThisPage"
+             x:DataType="vm:TournamentSchedulerEditViewModel"
+             Title="{Binding PageTitle}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="14" Spacing="12">
+            <Border Style="{StaticResource CardBorder}" Padding="14">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Setup" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Tournament name"
+                           Text="{Binding Name}"
+                           MaxLength="160" />
+
+                    <Label Text="Groups (1, 2 or 4)" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Groups"
+                            ItemsSource="{Binding GroupOptions}"
+                            SelectedItem="{Binding GroupCount}" />
+
+                    <Label Text="Type" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Round robin type"
+                            ItemsSource="{Binding TypeOptions}"
+                            SelectedItem="{Binding SelectedType}" />
+
+                    <Label Text="Knockout" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Knockout format"
+                            ItemsSource="{Binding KnockoutOptions}"
+                            SelectedItem="{Binding SelectedKnockout}" />
+
+                    <Label Text="Qualification — top teams per group" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Qualify per group"
+                            ItemsSource="{Binding QualifyOptions}"
+                            SelectedItem="{Binding QualifyPerGroup}" />
+
+                    <Label Text="{Binding SetupHint}"
+                           FontSize="12"
+                           TextColor="{StaticResource Primary}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Groups}" Spacing="12">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SchedulerGroupDraft">
+                        <Border Style="{StaticResource CardBorder}" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="{Binding Title}" Style="{StaticResource SectionLabel}" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding CountLabel}"
+                                           Style="{StaticResource MutedLabel}"
+                                           FontSize="12"
+                                           VerticalOptions="Center" />
+                                </Grid>
+                                <Label Text="Type a team name for this group (not linked to Players/Teams)."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Entry Placeholder="Team name"
+                                           Text="{Binding NewTeamName}"
+                                           MaxLength="120"
+                                           ReturnCommand="{Binding BindingContext.AddTeamCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                           ReturnCommandParameter="{Binding .}" />
+                                    <Button Grid.Column="1"
+                                            Text="Add"
+                                            Style="{StaticResource GoldButton}"
+                                            Padding="12,8"
+                                            Command="{Binding BindingContext.AddTeamCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Teams}" Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SchedulerTeamDraft">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="{StaticResource SurfaceMuted}"
+                                                    Padding="10,8"
+                                                    StrokeShape="RoundRectangle 10">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <Label Text="{Binding Name}"
+                                                           FontAttributes="Bold"
+                                                           VerticalOptions="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                    <Button Grid.Column="1"
+                                                            Text="Remove"
+                                                            Padding="10,6"
+                                                            FontSize="12"
+                                                            BackgroundColor="#FFE8EC"
+                                                            TextColor="{StaticResource Danger}"
+                                                            Command="{Binding BindingContext.RemoveTeamCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                            CommandParameter="{Binding .}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+            <Button Text="Save schedule"
+                    Style="{StaticResource GoldButton}"
+                    HeightRequest="48"
+                    Command="{Binding SaveCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

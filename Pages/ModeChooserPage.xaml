@@ -56,6 +56,21 @@
                 </VerticalStackLayout>
             </Border>
 
+            <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Tournament Scheduler" TextColor="White" FontAttributes="Bold" FontSize="20" />
+                    <Label Text="Manual groups, round robin, points table, and knockout — independent of live scoring."
+                           TextColor="#B8C4D4" FontSize="13" />
+                    <Button Text="Open Scheduler"
+                            BackgroundColor="#B6FF3B"
+                            TextColor="#0D1B2A"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="48"
+                            Command="{Binding ChooseSchedulerCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
             <Border StrokeThickness="0"
                     BackgroundColor="#152033"
                     Padding="18"
@@ -82,7 +97,7 @@
                     IsVisible="{Binding ShowSettingsOption}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Settings" TextColor="White" FontAttributes="Bold" FontSize="20" />
-                    <Label Text="Ground amenities and paid services that owners pick when listing a ground."
+                    <Label Text="Ground amenities, services, and shop items that owners pick when listing a ground."
                            TextColor="#B8C4D4" FontSize="13" />
                     <Button Text="Open Settings"
                             BackgroundColor="#B6FF3B"

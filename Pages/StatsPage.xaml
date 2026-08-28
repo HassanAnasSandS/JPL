@@ -454,81 +454,51 @@
                 </HorizontalStackLayout>
             </ScrollView>
 
-            <VerticalStackLayout Grid.Row="2" Spacing="8">
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <ctrl:FilterDrawer Grid.Row="2"
+                               HasActiveFilters="{Binding HasActiveFilters}"
+                               ClearCommand="{Binding ClearFiltersCommand}"
+                               ApplyCommand="{Binding ApplyFiltersCommand}"
+                               ApplyButtonText="Apply">
+                <VerticalStackLayout Spacing="8">
                     <SearchBar Placeholder="{Binding SearchPlaceholder}"
                                Text="{Binding PlayerNameFilter}"
                                CancelButtonColor="{StaticResource Primary}" />
-                    <Button Grid.Column="1"
-                            Text="{Binding FiltersToggleText}"
-                            Command="{Binding ToggleFiltersCommand}"
-                            Style="{StaticResource GhostButton}"
-                            Padding="12,8"
-                            FontSize="12"
-                            VerticalOptions="Center">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding HasActiveFilters}" Value="True">
-                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
-                                <Setter Property="FontAttributes" Value="Bold" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="2"
-                            Text="Clear"
-                            Style="{StaticResource GhostButton}"
-                            Padding="12,8"
-                            FontSize="12"
-                            VerticalOptions="Center"
-                            IsVisible="{Binding HasActiveFilters}"
-                            Command="{Binding ClearFiltersCommand}" />
-                </Grid>
-                <Border Style="{StaticResource CardBorder}"
-                        Padding="12"
-                        IsVisible="{Binding ShowFilters}">
-                    <VerticalStackLayout Spacing="8">
-                        <VerticalStackLayout IsVisible="{Binding ShowMatchCategories}">
-                            <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
-                        </VerticalStackLayout>
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding ShowMatchCategories}">
-                            <Label Text="Venue"
-                                   VerticalOptions="Center"
-                                   FontSize="12"
-                                   Style="{StaticResource MutedLabel}" />
-                            <Picker Grid.Column="1"
-                                    Title="All venues"
-                                    ItemsSource="{Binding VenueOptions}"
-                                    ItemDisplayBinding="{Binding Name}"
-                                    SelectedItem="{Binding SelectedVenue}" />
-                        </Grid>
-                        <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="8">
-                            <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
-                                <CheckBox IsChecked="{Binding FilterByDate}" VerticalOptions="Center" />
-                                <Label Text="Date"
-                                       VerticalOptions="Center"
-                                       FontSize="12"
-                                       Style="{StaticResource MutedLabel}" />
-                            </HorizontalStackLayout>
-                            <DatePicker Grid.Column="1"
-                                        Date="{Binding FromDate}"
-                                        IsEnabled="{Binding FilterByDate}" />
-                            <Label Grid.Column="2"
-                                   Text="to"
-                                   VerticalOptions="Center"
-                                   FontSize="12"
-                                   Style="{StaticResource MutedLabel}" />
-                            <DatePicker Grid.Column="3"
-                                        Date="{Binding ToDate}"
-                                        IsEnabled="{Binding FilterByDate}" />
-                        </Grid>
-                        <Button Text="Apply filters"
-                                Style="{StaticResource GoldButton}"
-                                Padding="14,8"
-                                FontSize="12"
-                                HorizontalOptions="Start"
-                                Command="{Binding ApplyFiltersCommand}" />
+                    <VerticalStackLayout IsVisible="{Binding ShowMatchCategories}">
+                        <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
                     </VerticalStackLayout>
-                </Border>
-            </VerticalStackLayout>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding ShowMatchCategories}">
+                        <Label Text="Venue"
+                               VerticalOptions="Center"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                        <Picker Grid.Column="1"
+                                Title="All venues"
+                                ItemsSource="{Binding VenueOptions}"
+                                ItemDisplayBinding="{Binding Name}"
+                                SelectedItem="{Binding SelectedVenue}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="8">
+                        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                            <CheckBox IsChecked="{Binding FilterByDate}" VerticalOptions="Center" />
+                            <Label Text="Date"
+                                   VerticalOptions="Center"
+                                   FontSize="12"
+                                   Style="{StaticResource MutedLabel}" />
+                        </HorizontalStackLayout>
+                        <DatePicker Grid.Column="1"
+                                    Date="{Binding FromDate}"
+                                    IsEnabled="{Binding FilterByDate}" />
+                        <Label Grid.Column="2"
+                               Text="to"
+                               VerticalOptions="Center"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                        <DatePicker Grid.Column="3"
+                                    Date="{Binding ToDate}"
+                                    IsEnabled="{Binding FilterByDate}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </ctrl:FilterDrawer>
 
             <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <VerticalStackLayout Spacing="1">

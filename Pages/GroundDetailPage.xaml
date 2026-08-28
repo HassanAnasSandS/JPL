@@ -43,8 +43,71 @@
                                     Position="{Binding GalleryIndex}"
                                     OpenCommand="{Binding OpenViewerCommand}"
                                     IsVisible="{Binding HasImages}" />
+            <Label Text="Videos" Style="{StaticResource SectionLabel}" IsVisible="{Binding HasVideos}" />
+            <ScrollView Orientation="Horizontal"
+                        HorizontalScrollBarVisibility="Never"
+                        IsVisible="{Binding HasVideos}">
+                <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Videos}" Spacing="10">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="svc:GroundVideoDto">
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="#152033"
+                                    StrokeShape="RoundRectangle 14"
+                                    WidthRequest="228"
+                                    Padding="0">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding BindingContext.OpenVideoCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                          CommandParameter="{Binding .}" />
+                                </Border.GestureRecognizers>
+                                <Grid RowDefinitions="128,Auto">
+                                    <Grid BackgroundColor="#0D1B2A">
+                                        <Image Source="{Binding ThumbnailUrl}"
+                                               Aspect="AspectFill"
+                                               IsVisible="{Binding HasThumbnail}" />
+                                        <BoxView Color="#66000000" />
+                                        <Border StrokeThickness="0"
+                                                BackgroundColor="#E6D4AF37"
+                                                WidthRequest="52"
+                                                HeightRequest="52"
+                                                StrokeShape="RoundRectangle 26"
+                                                HorizontalOptions="Center"
+                                                VerticalOptions="Center">
+                                            <Label Text="▶"
+                                                   FontSize="22"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#0D1B2A"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center"
+                                                   Margin="4,0,0,0" />
+                                        </Border>
+                                        <Label Text="{Binding Provider}"
+                                               FontSize="11"
+                                               FontAttributes="Bold"
+                                               TextColor="White"
+                                               BackgroundColor="#990D1B2A"
+                                               Padding="8,3"
+                                               HorizontalOptions="Start"
+                                               VerticalOptions="Start"
+                                               Margin="8" />
+                                    </Grid>
+                                    <VerticalStackLayout Grid.Row="1" Padding="10,8" Spacing="2">
+                                        <Label Text="{Binding DisplayTitle}"
+                                               FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"
+                                               MaxLines="2" />
+                                        <Label Text="Tap to play"
+                                               FontSize="11"
+                                               TextColor="{StaticResource TextSecondary}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalStackLayout>
+            </ScrollView>
             <Label Text="{Binding Ground.Name}" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
             <Label Text="{Binding LocationLine}" TextColor="{StaticResource TextSecondary}" />
+            <Label Text="{Binding RatingLine}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
             <Label Text="{Binding RateLabel}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
             <Label Text="Booking types" Style="{StaticResource SectionLabel}" IsVisible="{Binding HasOffers}" />
             <Label Text="{Binding RateWindowsLine}"
@@ -86,8 +149,12 @@
             </VerticalStackLayout>
             <Label Text="{Binding AmenitiesLine}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
             <Label Text="{Binding ServicesLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
+            <Label Text="{Binding ShopLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
             <Button Text="Open in Google Maps" Style="{StaticResource GhostButton}" Command="{Binding OpenMapsCommand}" />
-            <Button Text="Request booking" Style="{StaticResource GoldButton}" Command="{Binding BookCommand}" />
+            <Button Text="Request booking"
+                    Style="{StaticResource GoldButton}"
+                    Command="{Binding BookCommand}"
+                    IsVisible="{Binding CanRequestBooking}" />
             <HorizontalStackLayout Spacing="10"
                                    IsVisible="{Binding HasWhatsApp}">
                 <ImageButton Source="whatsapp.svg"
@@ -107,6 +174,38 @@
                     </Label.GestureRecognizers>
                 </Label>
             </HorizontalStackLayout>
+            <Label Text="Reviews and ratings" Style="{StaticResource SectionLabel}" />
+            <Label Text="No reviews yet. Completed bookings can leave one review each."
+                   FontSize="13"
+                   TextColor="{StaticResource TextSecondary}"
+                   IsVisible="{Binding ReviewsEmpty}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Reviews}"
+                                 Spacing="10"
+                                 IsVisible="{Binding HasReviews}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="svc:GroundReviewDto">
+                        <Border Style="{StaticResource CardBorder}" Padding="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="{Binding ReviewerLine}" FontAttributes="Bold" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding StarsLabel}"
+                                           TextColor="{StaticResource Secondary}" />
+                                </Grid>
+                                <Label Text="{Binding Comment}"
+                                       FontSize="13"
+                                       TextColor="{StaticResource TextSecondary}"
+                                       IsVisible="{Binding HasComment}" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <Button Text="More reviews"
+                    Style="{StaticResource GhostButton}"
+                    Command="{Binding LoadMoreReviewsCommand}"
+                    IsVisible="{Binding ReviewsHasMore}" />
+            <ActivityIndicator IsRunning="{Binding ReviewsBusy}" IsVisible="{Binding ReviewsBusy}" />
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
             <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
         </VerticalStackLayout>
@@ -190,6 +289,51 @@
                    HorizontalOptions="Center" />
             </VerticalStackLayout>
         </Grid>
+    </Grid>
+
+    <Grid IsVisible="{Binding IsVideoPlayerOpen}"
+          InputTransparent="False"
+          ZIndex="45"
+          BackgroundColor="#F2000000">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid Padding="12,10" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Label Text="{Binding PlayingVideoTitle}"
+                   TextColor="White"
+                   FontAttributes="Bold"
+                   FontSize="16"
+                   VerticalOptions="Center"
+                   LineBreakMode="TailTruncation" />
+            <Button Grid.Column="1"
+                    Text="Close"
+                    BackgroundColor="#33FFFFFF"
+                    TextColor="White"
+                    FontSize="13"
+                    Padding="14,8"
+                    MinimumHeightRequest="40"
+                    CornerRadius="12"
+                    BorderWidth="0"
+                    Command="{Binding CloseVideoCommand}" />
+        </Grid>
+        <Border Grid.Row="1"
+                StrokeThickness="0"
+                BackgroundColor="#000000"
+                Margin="12,0"
+                StrokeShape="RoundRectangle 16">
+            <WebView Source="{Binding VideoPlayerSource}"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill" />
+        </Border>
+        <Label Grid.Row="2"
+               Text="Plays in-app. The file stays on its site — we only store the link."
+               TextColor="#CCFFFFFF"
+               FontSize="12"
+               Margin="16,10,16,16"
+               HorizontalOptions="Center"
+               HorizontalTextAlignment="Center" />
     </Grid>
     </Grid>
 </ContentPage>

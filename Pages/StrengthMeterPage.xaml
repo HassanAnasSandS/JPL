@@ -88,7 +88,16 @@
                     </HorizontalStackLayout>
                 </Grid>
 
-                <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                <ctrl:FilterDrawer HasActiveFilters="{Binding FormatFilter.HasSelection}">
+                    <VerticalStackLayout Spacing="6">
+                        <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                        <SearchBar Placeholder="Find a player"
+                                   FontSize="12"
+                                   Text="{Binding PlayerFilter}"
+                                   CancelButtonColor="{StaticResource Primary}"
+                                   IsVisible="{Binding IsPlayersMode}" />
+                    </VerticalStackLayout>
+                </ctrl:FilterDrawer>
 
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="{StaticResource Danger}"
@@ -115,10 +124,6 @@
                 </Grid>
 
                 <VerticalStackLayout Spacing="6" IsVisible="{Binding IsPlayersMode}">
-                    <SearchBar Placeholder="Find a player"
-                               FontSize="12"
-                               Text="{Binding PlayerFilter}"
-                               CancelButtonColor="{StaticResource Primary}" />
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerCandidates}" Spacing="1">
                         <BindableLayout.EmptyView>
                             <Label Text="No players left to add" FontSize="11" TextColor="{StaticResource TextSecondary}" />

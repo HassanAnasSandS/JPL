@@ -31,6 +31,7 @@ public partial class UserEditViewModel : ObservableObject
 
     [ObservableProperty] private string username = string.Empty;
     [ObservableProperty] private string password = string.Empty;
+    [ObservableProperty] private string whatsAppNumber = string.Empty;
     [ObservableProperty] private string selectedRole = "League User";
     [ObservableProperty] private UserLeagueOption? selectedLeague;
     [ObservableProperty] private bool isActive = true;
@@ -114,6 +115,7 @@ public partial class UserEditViewModel : ObservableObject
             PasswordHint = "Password (required)";
             SetRoleOptions(includeExisting: null);
             SelectedRole = "League User";
+            WhatsAppNumber = string.Empty;
             SelectLeague(_league.CurrentLeagueId);
             return;
         }
@@ -130,6 +132,7 @@ public partial class UserEditViewModel : ObservableObject
         }
 
         Username = user.Username;
+        WhatsAppNumber = PakistanWhatsApp.FormatDisplay(user.WhatsAppNumber) ?? user.WhatsAppNumber ?? string.Empty;
         SetRoleOptions(user.Role);
         SelectedRole = AppRoleLabels.Of(user.Role);
         IsActive = user.IsActive;
@@ -192,7 +195,10 @@ public partial class UserEditViewModel : ObservableObject
                 leagueId = SelectedLeague.Id;
             }
 
-            var draft = new UserDraft(Username, Password, role, leagueId, IsActive);
+            if (!PakistanWhatsApp.TryNormalize(WhatsAppNumber, out var whatsApp))
+                throw new ArgumentException(PakistanWhatsApp.RequiredError);
+
+            var draft = new UserDraft(Username, Password, role, leagueId, IsActive, whatsApp);
             if (_existingId is Guid id)
                 await _users.UpdateAsync(id, draft).ConfigureAwait(true);
             else

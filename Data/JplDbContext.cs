@@ -40,6 +40,9 @@ public sealed class JplDbContext : DbContext
     public DbSet<SeriesFixture> SeriesFixtures => Set<SeriesFixture>();
     public DbSet<NetSession> NetSessions => Set<NetSession>();
     public DbSet<NetDelivery> NetDeliveries => Set<NetDelivery>();
+    public DbSet<SchedulerTournament> SchedulerTournaments => Set<SchedulerTournament>();
+    public DbSet<SchedulerTeam> SchedulerTeams => Set<SchedulerTeam>();
+    public DbSet<SchedulerMatch> SchedulerMatches => Set<SchedulerMatch>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -314,6 +317,33 @@ public sealed class JplDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.SessionId, x.Sequence }).IsUnique();
             e.HasIndex(x => new { x.BatterId, x.BowlerId });
+        });
+
+        modelBuilder.Entity<SchedulerTournament>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SchedulerTeam>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            e.HasOne(x => x.Tournament).WithMany(t => t.Teams)
+                .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.TournamentId);
+        });
+
+        modelBuilder.Entity<SchedulerMatch>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Label).HasMaxLength(80).IsRequired();
+            e.Property(x => x.TeamASlot).HasMaxLength(80);
+            e.Property(x => x.TeamBSlot).HasMaxLength(80);
+            e.HasOne(x => x.Tournament).WithMany(t => t.Matches)
+                .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.TournamentId);
         });
     }
 }

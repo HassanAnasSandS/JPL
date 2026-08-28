@@ -16,7 +16,10 @@ public sealed record GroundCardDto(
     string? GoogleMapsUrl,
     string? CountryName,
     IReadOnlyList<GroundBookingOfferDto> Offers,
-    bool CanDelete = false);
+    bool CanDelete = false,
+    double AverageRating = 0,
+    int ReviewCount = 0,
+    int CompletedBookingCount = 0);
 
 public sealed record GroundDetailDto(
     Guid Id,
@@ -47,13 +50,24 @@ public sealed record GroundDetailDto(
     IReadOnlyList<GroundBookingOfferDto> Offers,
     int NightStartsHour,
     IReadOnlyList<GroundLinkDto> Links,
-    int NightEndsHour);
+    int NightEndsHour,
+    IReadOnlyList<GroundShopItemDto> Shop,
+    IReadOnlyList<GroundVideoDto> Videos,
+    double AverageRating = 0,
+    int ReviewCount = 0,
+    int CompletedBookingCount = 0);
 
 public sealed record GroundImageDto(Guid Id, string FileName, string Url, bool IsCover, int SortOrder);
 
 public sealed record GroundServiceDto(string Name, decimal Amount);
 
 public sealed record GroundServiceUpsert(string Name, decimal Amount);
+
+public sealed record GroundShopItemDto(string Name, decimal Price, string Kind, int Qty = 0);
+
+public sealed record GroundShopItemUpsert(string Name, decimal Price, string Kind);
+
+public sealed record GroundShopQtyUpsert(string Name, int Qty);
 
 public sealed record GroundBookingOfferDto(
     string Kind,
@@ -91,6 +105,7 @@ public sealed record GroundUpsertRequest(
     string? ListingStatus,
     IReadOnlyList<string>? Amenities,
     IReadOnlyList<GroundServiceUpsert>? Services,
+    IReadOnlyList<GroundShopItemUpsert>? Shop,
     string? PostalCode,
     string? CountryName,
     string? ProvinceName,
@@ -99,11 +114,16 @@ public sealed record GroundUpsertRequest(
     IReadOnlyList<GroundBookingOfferUpsert>? Offers,
     int NightStartsHour,
     IReadOnlyList<GroundLinkUpsert>? Links,
-    int NightEndsHour);
+    int NightEndsHour,
+    IReadOnlyList<GroundVideoUpsert>? Videos);
 
 public sealed record GroundLinkDto(string Title, string Url);
 
 public sealed record GroundLinkUpsert(string? Title, string Url);
+
+public sealed record GroundVideoDto(string Title, string Url);
+
+public sealed record GroundVideoUpsert(string? Title, string Url);
 
 public sealed record MapsResolveRequest(string GoogleMapsUrl);
 
@@ -150,7 +170,11 @@ public sealed record BookingDto(
     decimal BookedHours,
     IReadOnlyList<GroundServiceDto> Services,
     string? OwnerWhatsAppNumber,
-    string? OwnerContactPhone);
+    string? OwnerContactPhone,
+    IReadOnlyList<GroundShopItemDto> Shop,
+    bool HasReview = false,
+    int? MyRating = null,
+    Guid? ReviewId = null);
 
 public sealed record BookingCreateRequest(
     DateTime StartAt,
@@ -160,7 +184,8 @@ public sealed record BookingCreateRequest(
     string? Notes,
     string? BookingKind,
     decimal Hours,
-    IReadOnlyList<string>? Services);
+    IReadOnlyList<string>? Services,
+    IReadOnlyList<GroundShopQtyUpsert>? Shop);
 
 public sealed record BookingUpdateRequest(
     string? Status,
@@ -172,3 +197,25 @@ public sealed record BookingUpdateRequest(
 public sealed record CatalogItemDto(Guid Id, string Name, int SortOrder);
 
 public sealed record CatalogItemUpsert(string Name);
+
+public sealed record ShopCatalogItemDto(Guid Id, string Name, string Kind, decimal Price, int SortOrder);
+
+public sealed record ShopCatalogItemUpsert(string Name);
+
+public sealed record GroundReviewDto(
+    Guid Id,
+    Guid GroundId,
+    Guid BookingId,
+    Guid CustomerUserId,
+    string CustomerName,
+    int Rating,
+    string? Comment,
+    DateTime CreatedAtUtc,
+    DateTime BookingStartAt);
+
+public sealed record GroundReviewUpsert(int Rating, string? Comment);
+
+public sealed record GroundReviewPage(
+    IReadOnlyList<GroundReviewDto> Items,
+    string? NextCursor,
+    bool HasMore);

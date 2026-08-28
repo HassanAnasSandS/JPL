@@ -18,7 +18,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Api",
-        version = "1.9",
+        version = "2.0",
         time = DateTime.Now
     });
 }
@@ -59,7 +59,7 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
                           and not AppRole.PublicUser
                           and not AppRole.Guest
                           && user.LeagueId is null;
-        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, user.LeagueId, needsPicker));
+        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, user.LeagueId, needsPicker, user.WhatsAppNumber));
     }
 
     [HttpPost("signup")]
@@ -95,7 +95,7 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         var token = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + "." + user.Id.ToString("N");
-        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, null, false));
+        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, null, false, user.WhatsAppNumber));
     }
 
     /// <summary>Current session user (requires Bearer token; inactive/deleted → 401 from middleware).</summary>
@@ -112,11 +112,13 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
             return Unauthorized();
 
         Guid? leagueId = Guid.TryParse(leagueText, out var lid) && lid != Guid.Empty ? lid : null;
+        var whatsApp = User.FindFirst("whatsapp")?.Value
+                       ?? HttpContext.Items["JplWhatsApp"] as string;
         var needsPicker = !string.Equals(role, nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase)
                           && !string.Equals(role, nameof(AppRole.PublicUser), StringComparison.OrdinalIgnoreCase)
                           && !string.Equals(role, nameof(AppRole.Guest), StringComparison.OrdinalIgnoreCase)
                           && leagueId is null;
-        return Ok(new LoginResponse(userId, username, role, string.Empty, leagueId, NeedsLeaguePicker: needsPicker));
+        return Ok(new LoginResponse(userId, username, role, string.Empty, leagueId, NeedsLeaguePicker: needsPicker, WhatsAppNumber: whatsApp));
     }
 }
 

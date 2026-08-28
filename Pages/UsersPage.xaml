@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.UsersPage"
              x:DataType="vm:UsersViewModel"
              Title="Users"
@@ -58,7 +59,7 @@
 
         <!-- Management UI -->
         <Grid IsVisible="{Binding ShowManagement}"
-              RowDefinitions="Auto,Auto,Auto,*,Auto"
+              RowDefinitions="Auto,Auto,*,Auto"
               RowSpacing="10">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <Label Text="Accounts"
@@ -79,72 +80,65 @@
                         Clicked="OnAddClicked" />
             </Grid>
 
-            <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
-                <HorizontalStackLayout Spacing="8">
-                    <Button Text="{Binding AllFilterLabel}"
-                            Command="{Binding SelectStatusCommand}"
-                            CommandParameter="all"
-                            Padding="14,8"
-                            FontSize="13"
-                            CornerRadius="18"
-                            MinimumHeightRequest="40"
-                            BackgroundColor="#E8EEF5"
-                            TextColor="{StaticResource Primary}">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsAllFilter}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Text="{Binding ActiveFilterLabel}"
-                            Command="{Binding SelectStatusCommand}"
-                            CommandParameter="active"
-                            Padding="14,8"
-                            FontSize="13"
-                            CornerRadius="18"
-                            MinimumHeightRequest="40"
-                            BackgroundColor="#E8EEF5"
-                            TextColor="{StaticResource Primary}">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsActiveFilter}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Text="{Binding InactiveFilterLabel}"
-                            Command="{Binding SelectStatusCommand}"
-                            CommandParameter="deactive"
-                            Padding="14,8"
-                            FontSize="13"
-                            CornerRadius="18"
-                            MinimumHeightRequest="40"
-                            BackgroundColor="#E8EEF5"
-                            TextColor="{StaticResource Primary}">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsInactiveFilter}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                </HorizontalStackLayout>
-            </ScrollView>
-
-            <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="12">
+            <ctrl:FilterDrawer Grid.Row="1"
+                               HasActiveFilters="{Binding HasActiveFilters}"
+                               ClearCommand="{Binding ClearFiltersCommand}">
                 <VerticalStackLayout Spacing="8">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <SearchBar Placeholder="Filter by username"
-                                   Text="{Binding NameFilter}"
-                                   CancelButtonColor="{StaticResource Primary}" />
-                        <Button Grid.Column="1"
-                                Text="Clear"
-                                Style="{StaticResource GhostButton}"
-                                Padding="12,8"
-                                IsVisible="{Binding HasActiveFilters}"
-                                Command="{Binding ClearFiltersCommand}" />
-                    </Grid>
+                    <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                        <HorizontalStackLayout Spacing="8">
+                            <Button Text="{Binding AllFilterLabel}"
+                                    Command="{Binding SelectStatusCommand}"
+                                    CommandParameter="all"
+                                    Padding="14,8"
+                                    FontSize="13"
+                                    CornerRadius="18"
+                                    MinimumHeightRequest="40"
+                                    BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsAllFilter}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                            <Button Text="{Binding ActiveFilterLabel}"
+                                    Command="{Binding SelectStatusCommand}"
+                                    CommandParameter="active"
+                                    Padding="14,8"
+                                    FontSize="13"
+                                    CornerRadius="18"
+                                    MinimumHeightRequest="40"
+                                    BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsActiveFilter}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                            <Button Text="{Binding InactiveFilterLabel}"
+                                    Command="{Binding SelectStatusCommand}"
+                                    CommandParameter="deactive"
+                                    Padding="14,8"
+                                    FontSize="13"
+                                    CornerRadius="18"
+                                    MinimumHeightRequest="40"
+                                    BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsInactiveFilter}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                    <SearchBar Placeholder="Filter by username"
+                               Text="{Binding NameFilter}"
+                               CancelButtonColor="{StaticResource Primary}" />
                     <Picker Title="Filter by league"
                             ItemsSource="{Binding LeagueFilterOptions}"
                             ItemDisplayBinding="{Binding Name, x:DataType=vm:UserLeagueOption}"
@@ -154,9 +148,9 @@
                             ItemDisplayBinding="{Binding Name, x:DataType=vm:UserRoleOption}"
                             SelectedItem="{Binding SelectedRoleFilter}" />
                 </VerticalStackLayout>
-            </Border>
+            </ctrl:FilterDrawer>
 
-            <RefreshView Grid.Row="3"
+            <RefreshView Grid.Row="2"
                          IsRefreshing="{Binding IsBusy, Mode=OneWay}"
                          Command="{Binding LoadCommand}">
                 <CollectionView ItemsSource="{Binding Items}"
@@ -220,7 +214,7 @@
                 </CollectionView>
             </RefreshView>
 
-            <VerticalStackLayout Grid.Row="4" Spacing="4">
+            <VerticalStackLayout Grid.Row="3" Spacing="4">
                 <ActivityIndicator IsRunning="{Binding IsBusy}"
                                    IsVisible="{Binding IsBusy}"
                                    Color="{StaticResource Secondary}" />

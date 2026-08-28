@@ -64,4 +64,12 @@ public partial class CustomerBookingsViewModel : ObservableObject
         => PakistanWhatsApp.OpenChatAsync(
             row?.OwnerChatPhone,
             row is null ? null : $"Assalam o Alaikum, I want to chat about my booking at {row.GroundName}.");
+
+    [RelayCommand]
+    private async Task WriteReviewAsync(GroundBookingDto? row)
+    {
+        if (row is null || !row.CanOpenReview)
+            return;
+        await Shell.Current.GoToAsync($"{nameof(Pages.GroundReviewPage)}?bookingId={row.Id}").ConfigureAwait(true);
+    }
 }

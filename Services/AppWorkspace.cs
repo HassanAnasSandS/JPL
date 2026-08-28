@@ -6,7 +6,8 @@ public enum AppWorkspace : byte
     Grounds = 1,
     GroundOwner = 2,
     Users = 3,
-    Settings = 4
+    Settings = 4,
+    Scheduler = 5
 }
 
 public interface IAppWorkspace

@@ -123,7 +123,7 @@ public static class AuthMessages
     }
 }
 
-public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Guid? LeagueId)
+public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Guid? LeagueId, string? WhatsAppNumber = null)
 {
     public bool CanWrite => Role is AppRole.Admin or AppRole.SuperAdmin;
     public bool IsGroundOwner => Role == AppRole.GroundOwner;
@@ -196,6 +196,7 @@ public sealed class AuthService : IAuthService
     private const string SessionRoleKey = "jpl.session.role";
     private const string SessionTokenKey = "jpl.session.token";
     private const string SessionLeagueIdKey = "jpl.session.leagueId";
+    private const string SessionWhatsAppKey = "jpl.session.whatsApp";
 
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
     private readonly IApiClient _api;
@@ -238,6 +239,7 @@ public sealed class AuthService : IAuthService
             var roleText = Preferences.Default.Get(SessionRoleKey, string.Empty);
             var token = Preferences.Default.Get(SessionTokenKey, string.Empty);
             var leagueText = Preferences.Default.Get(SessionLeagueIdKey, string.Empty);
+            var whatsApp = Preferences.Default.Get(SessionWhatsAppKey, string.Empty);
 
             if (!Guid.TryParse(idText, out var userId) ||
                 string.IsNullOrWhiteSpace(username) ||
@@ -258,7 +260,12 @@ public sealed class AuthService : IAuthService
             else
                 _tokens.Clear();
 
-            _current = new AuthSession(userId, username, role, leagueId);
+            _current = new AuthSession(
+                userId,
+                username,
+                role,
+                leagueId,
+                string.IsNullOrWhiteSpace(whatsApp) ? null : whatsApp);
             if (leagueId is Guid bound)
                 _league.Set(bound);
             else
@@ -285,6 +292,8 @@ public sealed class AuthService : IAuthService
 
         if (_current is null)
             RestoreLocalSession();
+
+        await HydrateWhatsAppFromLocalAsync(ct).ConfigureAwait(false);
     }
 
     public async Task ValidateRemoteSessionAsync(CancellationToken ct = default)
@@ -311,7 +320,10 @@ public sealed class AuthService : IAuthService
                 role = _current.Role;
             role = NormalizeBuiltInRole(me.Username, role);
 
-            _current = new AuthSession(me.UserId, me.Username, role, role == AppRole.Guest ? null : me.LeagueId);
+            var whatsApp = !string.IsNullOrWhiteSpace(me.WhatsAppNumber)
+                ? me.WhatsAppNumber
+                : _current.WhatsAppNumber;
+            _current = new AuthSession(me.UserId, me.Username, role, role == AppRole.Guest ? null : me.LeagueId, whatsApp);
             PersistSession(_current, token);
             if (!_league.HasSelection && me.LeagueId is Guid bound && bound != Guid.Empty)
                 _league.Set(bound);
@@ -350,11 +362,12 @@ public sealed class AuthService : IAuthService
                     role = AppRole.User;
                 role = NormalizeBuiltInRole(remote.Username, role);
 
-                _current = new AuthSession(remote.UserId, remote.Username, role, remote.LeagueId);
+                _current = new AuthSession(remote.UserId, remote.Username, role, remote.LeagueId, remote.WhatsAppNumber);
                 PersistSession(_current, remote.Token);
                 ApplyLeagueAfterLogin(_current);
                 ApplyModuleGates();
-                await CacheLocalLoginAsync(remote.UserId, remote.Username, role, password, remote.LeagueId, ct)
+                await CacheLocalLoginAsync(
+                        remote.UserId, remote.Username, role, password, remote.LeagueId, remote.WhatsAppNumber, ct)
                     .ConfigureAwait(false);
                 return true;
             }
@@ -400,11 +413,12 @@ public sealed class AuthService : IAuthService
         if (!Enum.TryParse<AppRole>(remote.Role, ignoreCase: true, out var role))
             role = AppRole.PublicUser;
 
-        _current = new AuthSession(remote.UserId, remote.Username, role, remote.LeagueId);
+        _current = new AuthSession(remote.UserId, remote.Username, role, remote.LeagueId, normalizedWhatsApp);
         PersistSession(_current, remote.Token);
         ApplyLeagueAfterLogin(_current);
         ApplyModuleGates();
-        await CacheLocalLoginAsync(remote.UserId, remote.Username, role, password.Trim(), remote.LeagueId, ct)
+        await CacheLocalLoginAsync(
+                remote.UserId, remote.Username, role, password.Trim(), remote.LeagueId, normalizedWhatsApp, ct)
             .ConfigureAwait(false);
     }
 
@@ -421,6 +435,7 @@ public sealed class AuthService : IAuthService
         Preferences.Default.Remove(SessionRoleKey);
         Preferences.Default.Remove(SessionTokenKey);
         Preferences.Default.Remove(SessionLeagueIdKey);
+        Preferences.Default.Remove(SessionWhatsAppKey);
         return Task.CompletedTask;
     }
 
@@ -460,7 +475,8 @@ public sealed class AuthService : IAuthService
             throw new AuthFailedException(AuthMessages.WrongPassword);
 
         var role = NormalizeBuiltInRole(user.Username, user.Role);
-        _current = new AuthSession(user.Id, user.Username, role, role == AppRole.Guest ? null : user.LeagueId);
+        _current = new AuthSession(
+            user.Id, user.Username, role, role == AppRole.Guest ? null : user.LeagueId, user.WhatsAppNumber);
         PersistSession(_current, token: null);
         ApplyLeagueAfterLogin(_current);
         ApplyModuleGates();
@@ -474,6 +490,7 @@ public sealed class AuthService : IAuthService
         AppRole role,
         string password,
         Guid? leagueId,
+        string? whatsApp,
         CancellationToken ct)
     {
         try
@@ -493,6 +510,7 @@ public sealed class AuthService : IAuthService
                     Username = username,
                     Role = role,
                     LeagueId = leagueId,
+                    WhatsAppNumber = whatsApp,
                     IsActive = true,
                     CreatedAtUtc = DateTime.Now
                 };
@@ -506,6 +524,8 @@ public sealed class AuthService : IAuthService
                 local.LeagueId = leagueId;
                 local.IsActive = true;
                 local.PasswordHash = _hasher.HashPassword(local, password);
+                if (!string.IsNullOrWhiteSpace(whatsApp))
+                    local.WhatsAppNumber = whatsApp;
             }
 
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -513,6 +533,30 @@ public sealed class AuthService : IAuthService
         catch
         {
             /* login succeeded via API even if cache fails */
+        }
+    }
+
+    private async Task HydrateWhatsAppFromLocalAsync(CancellationToken ct)
+    {
+        if (_current is null || !string.IsNullOrWhiteSpace(_current.WhatsAppNumber))
+            return;
+
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var local = await db.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == _current.UserId, ct)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(local?.WhatsAppNumber))
+                return;
+
+            var token = Preferences.Default.Get(SessionTokenKey, string.Empty);
+            _current = _current with { WhatsAppNumber = local.WhatsAppNumber };
+            PersistSession(_current, string.IsNullOrWhiteSpace(token) ? null : token);
+        }
+        catch
+        {
+            /* local cache is optional */
         }
     }
 
@@ -528,6 +572,11 @@ public sealed class AuthService : IAuthService
             Preferences.Default.Set(SessionLeagueIdKey, leagueId.ToString("D"));
         else
             Preferences.Default.Remove(SessionLeagueIdKey);
+
+        if (!string.IsNullOrWhiteSpace(session.WhatsAppNumber))
+            Preferences.Default.Set(SessionWhatsAppKey, session.WhatsAppNumber);
+        else
+            Preferences.Default.Remove(SessionWhatsAppKey);
 
         if (!string.IsNullOrWhiteSpace(token))
         {
