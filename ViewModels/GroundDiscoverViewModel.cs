@@ -34,6 +34,7 @@ public partial class GroundDiscoverViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool isLoadingMore;
     [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool showRegisterPopup;
 
@@ -53,6 +54,8 @@ public partial class GroundDiscoverViewModel : ObservableObject
         || HasLocationFilter
         || !string.IsNullOrWhiteSpace(MinRateText)
         || !string.IsNullOrWhiteSpace(MaxRateText);
+
+    public string CountLabel => TotalCount <= 0 ? "No grounds" : $"{Items.Count} of {TotalCount}";
 
     public GroundDiscoverViewModel(IGroundsApiClient api, IAuthService auth)
     {
@@ -246,6 +249,8 @@ public partial class GroundDiscoverViewModel : ObservableObject
                 Items.Add(item);
             _cursor = page.NextCursor;
             HasMore = page.HasMore;
+            TotalCount = page.TotalCount;
+            OnPropertyChanged(nameof(CountLabel));
             if (Items.Count == 0)
                 ErrorMessage = "No grounds match these filters yet.";
         }

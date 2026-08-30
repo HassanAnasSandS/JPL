@@ -249,7 +249,8 @@ public sealed record MapsLocationDto(
 public sealed record GroundSearchPageDto(
     IReadOnlyList<GroundCardDto> Items,
     string? NextCursor,
-    bool HasMore);
+    bool HasMore,
+    int TotalCount = 0);
 
 public sealed record GroundLocationOptionsDto(
     IReadOnlyList<string> Countries,
@@ -268,6 +269,7 @@ public sealed record GroundBookingDto(
     DateTime EndAt,
     string Status,
     decimal BookingAmount,
+    decimal Discount,
     decimal Advance,
     decimal Balance,
     string? Notes,
@@ -319,21 +321,14 @@ public sealed record GroundBookingDto(
             return $"{kind} · {StartAt:dd MMM yyyy HH:mm} – {EndAt:HH:mm}";
         }
     }
-    public string MoneyLabel => $"Amount {BookingAmount:0} · Adv {Advance:0} · Bal {Balance:0}";
-    public string ServicesLine
-    {
-        get
-        {
-            var bits = new List<string>();
-            var services = GroundServiceDto.Summarize(Services);
-            if (!string.IsNullOrWhiteSpace(services))
-                bits.Add(services);
-            var shop = GroundShopItemDto.Summarize(Shop);
-            if (!string.IsNullOrWhiteSpace(shop))
-                bits.Add(shop);
-            return string.Join(" · ", bits);
-        }
-    }
+    public bool IsOwnerCreated => CustomerUserId == Guid.Empty;
+
+    public string MoneyLabel =>
+        $"Total {BookingAmount:0} · Disc {Discount:0} · Adv {Advance:0} · Rem {Balance:0}";
+    public string ServicesLine => GroundServiceDto.Summarize(Services);
+    public string ShopLine => GroundShopItemDto.Summarize(Shop);
+    public bool HasServicesLine => !string.IsNullOrWhiteSpace(ServicesLine);
+    public bool HasShopLine => !string.IsNullOrWhiteSpace(ShopLine);
 }
 
 public sealed record GroundReviewDto(
@@ -380,7 +375,14 @@ public sealed record GroundReviewDto(
 public sealed record GroundReviewPageDto(
     IReadOnlyList<GroundReviewDto> Items,
     string? NextCursor,
-    bool HasMore);
+    bool HasMore,
+    int TotalCount = 0);
+
+public sealed record BookingPageDto(
+    IReadOnlyList<GroundBookingDto> Items,
+    string? NextCursor,
+    bool HasMore,
+    int TotalCount = 0);
 
 /// <summary>
 /// JPL.Grounds.Api only (jplground.shoptick.shop → :5026).
@@ -394,11 +396,11 @@ public interface IGroundsApiClient
     Task<GroundSearchPageDto> SearchAsync(
         string? postalCode, string? q,
         string? country, string? state, string? city, string? area,
-        decimal? minRate, decimal? maxRate, string? cursor, int take = 20,
+        decimal? minRate, decimal? maxRate, string? cursor, int take = 5,
         CancellationToken ct = default);
     Task<GroundLocationOptionsDto> GetLocationOptionsAsync(
         string? country, string? state, string? city, CancellationToken ct = default);
-    Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 20, CancellationToken ct = default);
+    Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 5, CancellationToken ct = default);
     Task<GroundDetailDto?> GetGroundAsync(Guid id, CancellationToken ct = default);
     Task<GroundDetailDto> CreateGroundAsync(object body, CancellationToken ct = default);
     Task<GroundDetailDto> UpdateGroundAsync(Guid id, object body, CancellationToken ct = default);
@@ -407,9 +409,9 @@ public interface IGroundsApiClient
     Task DeleteGroundImageAsync(Guid groundId, Guid imageId, CancellationToken ct = default);
     Task<GroundBookingDto> RequestBookingAsync(Guid groundId, object body, CancellationToken ct = default);
     Task<GroundBookingDto> CreateOwnerBookingAsync(Guid groundId, object body, CancellationToken ct = default);
-    Task<IReadOnlyList<GroundBookingDto>> GetMyBookingsAsync(string? cursor, int take = 20, CancellationToken ct = default);
-    Task<IReadOnlyList<GroundBookingDto>> GetOwnerBookingsAsync(
-        Guid? groundId, string? cursor, int take = 20,
+    Task<BookingPageDto> GetMyBookingsAsync(string? cursor, int take = 5, CancellationToken ct = default);
+    Task<BookingPageDto> GetOwnerBookingsAsync(
+        Guid? groundId, string? cursor, int take = 5,
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default);
     Task<GroundBookingDto?> GetBookingAsync(Guid id, CancellationToken ct = default);
@@ -418,8 +420,11 @@ public interface IGroundsApiClient
     Task<ApiUserDto> UpdateGroundOwnerAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteGroundOwnerAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<CatalogItemDto>> GetAmenityCatalogAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<CatalogItemDto>> GetAmenityCatalogPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<IReadOnlyList<CatalogItemDto>> GetServiceCatalogAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<CatalogItemDto>> GetServiceCatalogPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<IReadOnlyList<ShopCatalogItemDto>> GetShopCatalogAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ShopCatalogItemDto>> GetShopCatalogPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<CatalogItemDto> CreateAmenityCatalogAsync(string name, CancellationToken ct = default);
     Task<CatalogItemDto> UpdateAmenityCatalogAsync(Guid id, string name, CancellationToken ct = default);
     Task DeleteAmenityCatalogAsync(Guid id, CancellationToken ct = default);
@@ -429,7 +434,7 @@ public interface IGroundsApiClient
     Task<ShopCatalogItemDto> CreateShopCatalogAsync(string name, CancellationToken ct = default);
     Task<ShopCatalogItemDto> UpdateShopCatalogAsync(Guid id, string name, CancellationToken ct = default);
     Task DeleteShopCatalogAsync(Guid id, CancellationToken ct = default);
-    Task<GroundReviewPageDto> GetGroundReviewsAsync(Guid groundId, string? cursor, int take = 20, CancellationToken ct = default);
+    Task<GroundReviewPageDto> GetGroundReviewsAsync(Guid groundId, string? cursor, int take = 5, CancellationToken ct = default);
     Task<GroundReviewDto?> GetBookingReviewAsync(Guid bookingId, CancellationToken ct = default);
     Task<GroundReviewDto> CreateBookingReviewAsync(Guid bookingId, int rating, string? comment, CancellationToken ct = default);
     Task<GroundReviewDto> UpdateBookingReviewAsync(Guid bookingId, int rating, string? comment, CancellationToken ct = default);
@@ -455,7 +460,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
     public async Task<GroundSearchPageDto> SearchAsync(
         string? postalCode, string? q,
         string? country, string? state, string? city, string? area,
-        decimal? minRate, decimal? maxRate, string? cursor, int take = 20,
+        decimal? minRate, decimal? maxRate, string? cursor, int take = 5,
         CancellationToken ct = default)
     {
         var qs = Query(
@@ -484,7 +489,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
                ?? new GroundLocationOptionsDto([], [], [], []);
     }
 
-    public async Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 20, CancellationToken ct = default)
+    public async Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 5, CancellationToken ct = default)
     {
         var qs = Query(("cursor", cursor), ("take", take.ToString()));
         return await GetAsync<GroundSearchPageDto>($"api/owner/grounds{qs}", ct).ConfigureAwait(false)
@@ -533,14 +538,15 @@ public sealed class GroundsApiClient : IGroundsApiClient
     public Task<GroundBookingDto> CreateOwnerBookingAsync(Guid groundId, object body, CancellationToken ct = default)
         => PostAsync<GroundBookingDto>($"api/owner/grounds/{groundId:D}/bookings", body, ct);
 
-    public Task<IReadOnlyList<GroundBookingDto>> GetMyBookingsAsync(string? cursor, int take = 20, CancellationToken ct = default)
+    public async Task<BookingPageDto> GetMyBookingsAsync(string? cursor, int take = 5, CancellationToken ct = default)
     {
         var qs = Query(("cursor", cursor), ("take", take.ToString()));
-        return GetListAsync<GroundBookingDto>($"api/bookings/mine{qs}", ct);
+        return await GetAsync<BookingPageDto>($"api/bookings/mine{qs}", ct).ConfigureAwait(false)
+               ?? new BookingPageDto([], null, false);
     }
 
-    public Task<IReadOnlyList<GroundBookingDto>> GetOwnerBookingsAsync(
-        Guid? groundId, string? cursor, int take = 20,
+    public async Task<BookingPageDto> GetOwnerBookingsAsync(
+        Guid? groundId, string? cursor, int take = 5,
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default)
     {
@@ -550,7 +556,8 @@ public sealed class GroundsApiClient : IGroundsApiClient
             ("take", take.ToString()),
             ("from", from?.ToString("yyyy-MM-ddTHH:mm:ss")),
             ("to", to?.ToString("yyyy-MM-ddTHH:mm:ss")));
-        return GetListAsync<GroundBookingDto>($"api/bookings/owner{qs}", ct);
+        return await GetAsync<BookingPageDto>($"api/bookings/owner{qs}", ct).ConfigureAwait(false)
+               ?? new BookingPageDto([], null, false);
     }
 
     public Task<GroundBookingDto?> GetBookingAsync(Guid id, CancellationToken ct = default)
@@ -574,8 +581,16 @@ public sealed class GroundsApiClient : IGroundsApiClient
     public Task<IReadOnlyList<CatalogItemDto>> GetAmenityCatalogAsync(CancellationToken ct = default)
         => GetListAsync<CatalogItemDto>("api/catalog/amenities", ct);
 
+    public async Task<ApiPagedResult<CatalogItemDto>> GetAmenityCatalogPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => await GetAsync<ApiPagedResult<CatalogItemDto>>($"api/catalog/amenities/page{ListPaging.Query(skip, ("q", q))}", ct).ConfigureAwait(false)
+           ?? new ApiPagedResult<CatalogItemDto>([], 0);
+
     public Task<IReadOnlyList<CatalogItemDto>> GetServiceCatalogAsync(CancellationToken ct = default)
         => GetListAsync<CatalogItemDto>("api/catalog/services", ct);
+
+    public async Task<ApiPagedResult<CatalogItemDto>> GetServiceCatalogPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => await GetAsync<ApiPagedResult<CatalogItemDto>>($"api/catalog/services/page{ListPaging.Query(skip, ("q", q))}", ct).ConfigureAwait(false)
+           ?? new ApiPagedResult<CatalogItemDto>([], 0);
 
     public Task<CatalogItemDto> CreateAmenityCatalogAsync(string name, CancellationToken ct = default)
         => PostAsync<CatalogItemDto>("api/platform/amenities", new { name }, ct);
@@ -598,6 +613,10 @@ public sealed class GroundsApiClient : IGroundsApiClient
     public Task<IReadOnlyList<ShopCatalogItemDto>> GetShopCatalogAsync(CancellationToken ct = default)
         => GetListAsync<ShopCatalogItemDto>("api/catalog/shop", ct);
 
+    public async Task<ApiPagedResult<ShopCatalogItemDto>> GetShopCatalogPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => await GetAsync<ApiPagedResult<ShopCatalogItemDto>>($"api/catalog/shop/page{ListPaging.Query(skip, ("q", q))}", ct).ConfigureAwait(false)
+           ?? new ApiPagedResult<ShopCatalogItemDto>([], 0);
+
     public Task<ShopCatalogItemDto> CreateShopCatalogAsync(string name, CancellationToken ct = default)
         => PostAsync<ShopCatalogItemDto>("api/platform/shop", new { name }, ct);
 
@@ -608,7 +627,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
         => DeleteAsync($"api/platform/shop/{id:D}", ct);
 
     public async Task<GroundReviewPageDto> GetGroundReviewsAsync(
-        Guid groundId, string? cursor, int take = 20, CancellationToken ct = default)
+        Guid groundId, string? cursor, int take = 5, CancellationToken ct = default)
     {
         var qs = Query(("cursor", cursor), ("take", take.ToString()));
         return await GetAsync<GroundReviewPageDto>($"api/grounds/{groundId:D}/reviews{qs}", ct).ConfigureAwait(false)

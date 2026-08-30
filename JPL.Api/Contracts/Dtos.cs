@@ -79,6 +79,15 @@ public sealed record TeamDto(
     bool IsActive = true,
     IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
+public sealed record TeamListDto(
+    Guid Id,
+    string Name,
+    Guid? CaptainPlayerId,
+    string? CaptainName,
+    int PlayerCount,
+    int PlayingCount,
+    bool IsActive);
+
 public sealed record TeamUpsertRequest(
     Guid? Id,
     string Name,

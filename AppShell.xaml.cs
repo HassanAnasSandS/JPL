@@ -1,3 +1,4 @@
+using JPL.Controls;
 using JPL.Pages;
 using JPL.Services;
 using Microsoft.Maui.Controls.Shapes;
@@ -64,6 +65,8 @@ public partial class AppShell : Shell
             currentWorkspace = AppWorkspace.Leagues;
         if (currentWorkspace == AppWorkspace.GroundOwner && session?.IsGroundOwner != true && session?.CanManagePlatform != true)
             currentWorkspace = AppWorkspace.Grounds;
+        if (currentWorkspace == AppWorkspace.Grounds && session?.IsGroundOwner == true)
+            currentWorkspace = AppWorkspace.GroundOwner;
         if (currentWorkspace == AppWorkspace.Scheduler && session?.IsGuest == true)
             currentWorkspace = AppWorkspace.Leagues;
 
@@ -181,6 +184,13 @@ public partial class AppShell : Shell
                     TextColor = Color.FromArgb("#B6FF3B"),
                     HorizontalOptions = LayoutOptions.Center,
                     HorizontalTextAlignment = TextAlignment.Center
+                },
+                new SloganTicker
+                {
+                    FontSize = 11,
+                    TextColor = Color.FromArgb("#B8C4D4"),
+                    HorizontalOptions = LayoutOptions.Center,
+                    IntervalMs = 3800
                 },
                 _leagueLabel,
                 _pendingLabel
@@ -601,6 +611,88 @@ public partial class AppShell : Shell
         }
     }
 
+    protected override bool OnBackButtonPressed()
+    {
+        if (FlyoutBehavior != FlyoutBehavior.Locked && FlyoutIsPresented)
+        {
+            FlyoutIsPresented = false;
+            return true;
+        }
+
+        var visible = CurrentPage;
+        if (visible is not null && visible != this && visible.SendBackButtonPressed())
+            return true;
+
+        var nav = Current?.Navigation ?? Navigation;
+        if (nav.ModalStack.Count > 0)
+        {
+            DispatchNav(() => nav.PopModalAsync());
+            return true;
+        }
+
+        var sectionStack = CurrentItem?.CurrentItem?.Stack?.Count ?? 0;
+        if (sectionStack > 1 || nav.NavigationStack.Count > 1 || CanPopShellLocation())
+        {
+            DispatchNav(async () =>
+            {
+                try
+                {
+                    await GoToAsync("..").ConfigureAwait(true);
+                }
+                catch
+                {
+                    if (nav.NavigationStack.Count > 1)
+                        await nav.PopAsync().ConfigureAwait(true);
+                }
+            });
+            return true;
+        }
+
+        // Root screen of a module — go Home instead of exiting the app.
+        if (_auth.IsAuthenticated)
+        {
+            DispatchNav(async () =>
+            {
+                _workspace.Clear();
+                await _navigator.ShowModeChooserAsync().ConfigureAwait(true);
+            });
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool CanPopShellLocation()
+    {
+        try
+        {
+            var loc = CurrentState?.Location?.OriginalString ?? string.Empty;
+            var parts = loc.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length > 2;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void DispatchNav(Func<Task> action)
+    {
+        Dispatcher.Dispatch(() => _ = SafeNavAsync(action));
+    }
+
+    private static async Task SafeNavAsync(Func<Task> action)
+    {
+        try
+        {
+            await action().ConfigureAwait(true);
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
     protected override void OnNavigating(ShellNavigatingEventArgs args)
     {
         if (args.Source == ShellNavigationSource.ShellItemChanged)
@@ -639,9 +731,6 @@ public partial class AppShell : Shell
             if (item is null || string.IsNullOrWhiteSpace(item.Route))
                 return;
 
-            if (PlatformFlyoutBehavior != FlyoutBehavior.Locked)
-                FlyoutIsPresented = false;
-
             try
             {
                 await GoToAsync($"//{item.Route}").ConfigureAwait(true);
@@ -656,6 +745,8 @@ public partial class AppShell : Shell
 
             UpdateSidebarSelection();
             EnsureDesktopSidebar();
+            if (PlatformFlyoutBehavior != FlyoutBehavior.Locked)
+                FlyoutIsPresented = false;
         }
         finally
         {

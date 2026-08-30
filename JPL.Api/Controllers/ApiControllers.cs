@@ -18,7 +18,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Api",
-        version = "2.0",
+        version = "1.0.2",
         time = DateTime.Now
     });
 }
@@ -156,6 +156,60 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             .ConfigureAwait(false);
 
         return Ok(list.Select(u => ToDto(u, leagueNames)).ToList());
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<UserDto>>> GetPage(
+        int skip = 0,
+        int take = 5,
+        string? q = null,
+        string? status = null,
+        Guid? leagueId = null,
+        string? role = null,
+        CancellationToken ct = default)
+    {
+        if (!CallerIsPlatformAdmin())
+            return Forbid();
+
+        (skip, take) = Paging.Clamp(skip, take);
+        var baseQuery = _db.Users.AsNoTracking().Where(u => u.Role != AppRole.SuperAdmin);
+        var activeCount = await baseQuery.CountAsync(u => u.IsActive, ct).ConfigureAwait(false);
+        var inactiveCount = await baseQuery.CountAsync(u => !u.IsActive, ct).ConfigureAwait(false);
+
+        var query = baseQuery;
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(u => EF.Functions.Like(u.Username, like));
+        if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(u => u.IsActive);
+        else if (string.Equals(status, "inactive", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(status, "deactive", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(u => !u.IsActive);
+        if (leagueId is Guid lid && lid != Guid.Empty)
+            query = query.Where(u => u.LeagueId == lid);
+        if (!string.IsNullOrWhiteSpace(role) && Enum.TryParse<AppRole>(role, true, out var parsed)
+            && parsed != AppRole.SuperAdmin)
+            query = query.Where(u => u.Role == parsed);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query
+            .OrderByDescending(u => u.Role)
+            .ThenBy(u => u.Username)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var ids = list.Where(u => u.LeagueId is Guid).Select(u => u.LeagueId!.Value).Distinct().ToList();
+        var leagueNames = ids.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Leagues.AsNoTracking()
+                .Where(l => ids.Contains(l.Id))
+                .ToDictionaryAsync(l => l.Id, l => l.Name, ct)
+                .ConfigureAwait(false);
+
+        return Ok(new PagedResult<UserDto>(
+            list.Select(u => ToDto(u, leagueNames)).ToList(), total, skip, take, activeCount, inactiveCount));
     }
 
     [HttpGet("{id:guid}")]
@@ -431,6 +485,35 @@ public sealed class PlayersController : ControllerBase
         return Ok(list.Select(ToDto).ToList());
     }
 
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<PlayerDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, string? status = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var baseQuery = _db.Players.AsNoTracking().Where(p => !p.IsDeleted);
+        var activeCount = await baseQuery.CountAsync(p => p.IsActive, ct).ConfigureAwait(false);
+        var inactiveCount = await baseQuery.CountAsync(p => !p.IsActive, ct).ConfigureAwait(false);
+
+        var query = baseQuery;
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(p => EF.Functions.Like(p.FullName, like));
+        if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(p => p.IsActive);
+        else if (status is "inactive" or "deactive")
+            query = query.Where(p => !p.IsActive);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query
+            .OrderByDescending(p => p.IsActive)
+            .ThenBy(p => p.FullName)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return Ok(new PagedResult<PlayerDto>(list.Select(ToDto).ToList(), total, skip, take, activeCount, inactiveCount));
+    }
+
     /// <summary>Player IDs that have a stored photo. Image bytes are not included.</summary>
     [HttpGet("photos")]
     public async Task<ActionResult<IReadOnlyList<Guid>>> PhotoIds(CancellationToken ct)
@@ -668,6 +751,68 @@ public sealed class TeamsController : ControllerBase
 
         var dto = teams.Select(ToDto).ToList();
         return Ok(dto);
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<TeamListDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, string? captain = null, string? status = null,
+        CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var baseQuery = _db.Teams.AsNoTracking().Where(t => !t.IsDeleted);
+        var activeCount = await baseQuery.CountAsync(t => t.IsActive, ct).ConfigureAwait(false);
+        var inactiveCount = await baseQuery.CountAsync(t => !t.IsActive, ct).ConfigureAwait(false);
+
+        var query = baseQuery;
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(t => EF.Functions.Like(t.Name, like));
+        var cap = Paging.LikePattern(captain);
+        if (cap is not null)
+        {
+            query = query.Where(t => t.CaptainPlayerId != null &&
+                _db.Players.Any(p => p.Id == t.CaptainPlayerId && EF.Functions.Like(p.FullName, cap)));
+        }
+        if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(t => t.IsActive);
+        else if (status is "inactive" or "deactive")
+            query = query.Where(t => !t.IsActive);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var rows = await query
+            .OrderByDescending(t => t.IsActive)
+            .ThenBy(t => t.Name)
+            .Skip(skip)
+            .Take(take)
+            .Select(t => new
+            {
+                t.Id,
+                t.Name,
+                t.CaptainPlayerId,
+                t.IsActive,
+                PlayerCount = t.TeamPlayers.Count,
+                PlayingCount = t.TeamPlayers.Count(tp => tp.IsPlaying)
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var captainIds = rows.Where(t => t.CaptainPlayerId is Guid).Select(t => t.CaptainPlayerId!.Value).Distinct().ToList();
+        var names = captainIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Players.AsNoTracking()
+                .Where(p => captainIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+                .ConfigureAwait(false);
+
+        var items = rows.Select(t => new TeamListDto(
+            t.Id,
+            t.Name,
+            t.CaptainPlayerId,
+            t.CaptainPlayerId is Guid cid ? names.GetValueOrDefault(cid) : null,
+            t.PlayerCount,
+            t.PlayingCount,
+            t.IsActive)).ToList();
+        return Ok(new PagedResult<TeamListDto>(items, total, skip, take, activeCount, inactiveCount));
     }
 
     /// <summary>Team IDs that have a stored logo. Image bytes are not included.</summary>
@@ -990,17 +1135,66 @@ public sealed class MatchesController : ControllerBase
     public MatchesController(ApiDbContext db) => _db = db;
 
     /// <summary>Completed matches only — ongoing scoring stays on devices.</summary>
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<MatchSummaryDto>>> GetCompletedPage(
+        int skip = 0, int take = 5, string? q = null, string? captain = null, string? date = null,
+        CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = CompletedStandaloneQuery();
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+        {
+            query = query.Where(m =>
+                EF.Functions.Like(m.Title, like) ||
+                EF.Functions.Like(m.Venue ?? "", like) ||
+                _db.Teams.Any(t => (t.Id == m.TeamAId || t.Id == m.TeamBId) && EF.Functions.Like(t.Name, like)));
+        }
+        var cap = Paging.LikePattern(captain);
+        if (cap is not null)
+        {
+            query = query.Where(m =>
+                _db.Teams.Any(t =>
+                    (t.Id == m.TeamAId || t.Id == m.TeamBId) &&
+                    t.CaptainPlayerId != null &&
+                    _db.Players.Any(p => p.Id == t.CaptainPlayerId && EF.Functions.Like(p.FullName, cap))));
+        }
+        if (!string.IsNullOrWhiteSpace(date) && DateTime.TryParse(date, out var day))
+        {
+            var start = day.Date;
+            var end = start.AddDays(1);
+            query = query.Where(m => m.MatchDateUtc >= start && m.MatchDateUtc < end);
+        }
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var matches = await query
+            .OrderByDescending(m => m.MatchDateUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var items = await MapCompletedAsync(matches, ct).ConfigureAwait(false);
+        return Ok(new PagedResult<MatchSummaryDto>(items, total, skip, take));
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<MatchSummaryDto>>> GetCompleted(CancellationToken ct)
     {
-        var matches = await _db.Matches.AsNoTracking()
-            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed && m.TournamentId == null && m.SeriesId == null)
+        var matches = await CompletedStandaloneQuery()
             .OrderByDescending(m => m.MatchDateUtc)
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        return Ok(await MapCompletedAsync(matches, ct).ConfigureAwait(false));
+    }
 
+    private IQueryable<Match> CompletedStandaloneQuery()
+        => _db.Matches.AsNoTracking()
+            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed && m.TournamentId == null && m.SeriesId == null);
+
+    private async Task<List<MatchSummaryDto>> MapCompletedAsync(List<Match> matches, CancellationToken ct)
+    {
         if (matches.Count == 0)
-            return Ok(Array.Empty<MatchSummaryDto>());
+            return [];
 
         var matchIds = matches.Select(m => m.Id).ToList();
         var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
@@ -1036,7 +1230,7 @@ public sealed class MatchesController : ControllerBase
                 .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
                 .ConfigureAwait(false);
 
-        var list = matches.Select(m =>
+        return matches.Select(m =>
         {
             innsByMatch.TryGetValue(m.Id, out var matchInns);
             matchInns ??= new List<Innings>();
@@ -1078,8 +1272,6 @@ public sealed class MatchesController : ControllerBase
                 m.SeriesId,
                 m.LiveStreamUrl);
         }).ToList();
-
-        return Ok(list);
     }
 
     [HttpGet("{id:guid}/analytics")]
@@ -1694,6 +1886,33 @@ public sealed class NetSessionsController : ControllerBase
     public NetSessionsController(ApiDbContext db) => _db = db;
 
     /// <summary>Completed nets sessions only — setup/live scoring stays on devices and arrives via sync.</summary>
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<NetSessionSummaryDto>>> GetCompletedPage(
+        int skip = 0, int take = 5, string? q = null, string? date = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.NetSessions.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.Status == NetSessionStatus.Completed);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(s => EF.Functions.Like(s.Name, like));
+        if (!string.IsNullOrWhiteSpace(date) && DateTime.TryParse(date, out var day))
+        {
+            var start = day.Date;
+            var end = start.AddDays(1);
+            query = query.Where(s => s.SessionDateUtc >= start && s.SessionDateUtc < end);
+        }
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var sessions = await query
+            .OrderByDescending(s => s.SessionDateUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return Ok(new PagedResult<NetSessionSummaryDto>(await MapNetsAsync(sessions, ct).ConfigureAwait(false), total, skip, take));
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<NetSessionSummaryDto>>> GetCompleted(CancellationToken ct)
     {
@@ -1702,8 +1921,13 @@ public sealed class NetSessionsController : ControllerBase
             .OrderByDescending(s => s.SessionDateUtc)
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        return Ok(await MapNetsAsync(sessions, ct).ConfigureAwait(false));
+    }
+
+    private async Task<List<NetSessionSummaryDto>> MapNetsAsync(List<NetSession> sessions, CancellationToken ct)
+    {
         if (sessions.Count == 0)
-            return Ok(Array.Empty<NetSessionSummaryDto>());
+            return [];
 
         var ids = sessions.Select(s => s.Id).ToList();
         var balls = await _db.NetDeliveries.AsNoTracking()
@@ -1712,7 +1936,7 @@ public sealed class NetSessionsController : ControllerBase
             .ConfigureAwait(false);
         var bySession = balls.GroupBy(d => d.SessionId).ToDictionary(g => g.Key, g => g.ToList());
 
-        var list = sessions.Select(s =>
+        return sessions.Select(s =>
         {
             bySession.TryGetValue(s.Id, out var d);
             d ??= new List<NetDelivery>();
@@ -1728,8 +1952,6 @@ public sealed class NetSessionsController : ControllerBase
                 legal / 6,
                 legal % 6);
         }).ToList();
-
-        return Ok(list);
     }
 
     [HttpGet("{id:guid}/scorecard")]
@@ -2610,6 +2832,39 @@ public sealed class StatsController : ControllerBase
             .ConfigureAwait(false));
     }
 
+    [HttpGet("leaderboard/page")]
+    public async Task<ActionResult<PagedResult<PlayerCareerDto>>> LeaderboardPage(
+        int skip = 0,
+        int take = 5,
+        string? q = null,
+        string? sort = null,
+        string? dir = null,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toExclusiveUtc = null,
+        [FromQuery] Guid? venueId = null,
+        [FromQuery] string? source = null,
+        [FromQuery] Guid[]? formatIds = null,
+        CancellationToken ct = default)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        var board = IsNetsSource(source)
+            ? await StatsCalculator.BuildNetsLeaderboardAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false)
+            : await StatsCalculator.BuildLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+                .ConfigureAwait(false);
+
+        IEnumerable<PlayerCareerDto> filtered = board;
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var f = q.Trim();
+            filtered = filtered.Where(p => p.PlayerName.Contains(f, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var ordered = StatsListSort.OrderPlayers(filtered, sort, StatsListSort.Ascending(dir));
+        return Ok(Paging.Slice(ordered, skip, take));
+    }
+
     /// <summary>Batting / Bowling / All-rounder / Fielder / Captain / Team rankings from server DB.</summary>
     [HttpGet("rankings")]
     public async Task<ActionResult<RankingsDto>> Rankings(
@@ -2622,6 +2877,34 @@ public sealed class StatsController : ControllerBase
             return BadRequest("From date must be before or equal to To date.");
 
         return Ok(await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false));
+    }
+
+    [HttpGet("rankings/page")]
+    public async Task<ActionResult<PagedResult<RankingRowDto>>> RankingsPage(
+        int skip = 0,
+        int take = 5,
+        string? q = null,
+        string? category = null,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toExclusiveUtc = null,
+        [FromQuery] Guid[]? formatIds = null,
+        CancellationToken ct = default)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        var bundle = await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct)
+            .ConfigureAwait(false);
+        var rows = category?.Trim().ToLowerInvariant() switch
+        {
+            "bowling" => bundle.Bowling,
+            "allrounder" => bundle.AllRounder,
+            "fielder" => bundle.Fielder,
+            "captain" => bundle.Captain,
+            "team" => bundle.Team,
+            _ => bundle.Batting
+        };
+        return Ok(Paging.Slice(rows, skip, take, r => r.PlayerName, q));
     }
 
     /// <summary>Team table from all completed matches. Win 2 · Tie 1 · then NRR.</summary>
@@ -2653,6 +2936,37 @@ public sealed class StatsController : ControllerBase
         return Ok(await StatsCalculator
             .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
             .ConfigureAwait(false));
+    }
+
+    [HttpGet("teams/page")]
+    public async Task<ActionResult<PagedResult<TeamCareerDto>>> TeamsPage(
+        int skip = 0,
+        int take = 5,
+        string? q = null,
+        string? sort = null,
+        string? dir = null,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toExclusiveUtc = null,
+        [FromQuery] Guid? venueId = null,
+        [FromQuery] Guid[]? formatIds = null,
+        CancellationToken ct = default)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        var board = await StatsCalculator
+            .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            .ConfigureAwait(false);
+
+        IEnumerable<TeamCareerDto> filtered = board;
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var f = q.Trim();
+            filtered = filtered.Where(t => t.TeamName.Contains(f, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var ordered = StatsListSort.OrderTeams(filtered, sort, StatsListSort.Ascending(dir));
+        return Ok(Paging.Slice(ordered, skip, take));
     }
 
     [HttpGet("players/{playerId:guid}")]
@@ -2715,6 +3029,29 @@ public sealed class HallOfFameController : ControllerBase
     public async Task<ActionResult<HallOfFameDto>> Get(
         [FromQuery] Guid[]? formatIds,
         CancellationToken ct)
+        => Ok(await BuildAsync(formatIds, ct).ConfigureAwait(false));
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<TrophyRowDto>>> GetPage(
+        int skip = 0,
+        int take = 5,
+        string? q = null,
+        string? category = null,
+        [FromQuery] Guid[]? formatIds = null,
+        CancellationToken ct = default)
+    {
+        var bundle = await BuildAsync(formatIds, ct).ConfigureAwait(false);
+        var rows = category?.Trim().ToLowerInvariant() switch
+        {
+            "captain" => bundle.CaptainTrophies,
+            "tourchamp" => bundle.TournamentChampionTrophies,
+            "serieschamp" => bundle.SeriesChampionTrophies,
+            _ => bundle.PlayerOfTheMatch
+        };
+        return Ok(Paging.Slice(rows, skip, take, r => r.PlayerName, q));
+    }
+
+    private async Task<HallOfFameDto> BuildAsync(Guid[]? formatIds, CancellationToken ct)
     {
         var formatIdList = StatsCalculator.NormalizeFormatIds(formatIds);
 
@@ -2848,13 +3185,13 @@ public sealed class HallOfFameController : ControllerBase
                 })
                 .ToList();
 
-        return Ok(new HallOfFameDto
+        return new HallOfFameDto
         {
             PlayerOfTheMatch = ToRows(potmCounts, names, "Player of the Match"),
             CaptainTrophies = ToRows(captainCounts, names, "Captain win trophy"),
             TournamentChampionTrophies = ToRows(tourChampCounts, names, "Tournament champion (captain)"),
             SeriesChampionTrophies = ToRows(seriesChampCounts, names, "Series champion (captain)")
-        });
+        };
     }
 
     private static (int Runs, int Wickets) TeamTotalsLocal(IReadOnlyList<Innings> inns, Guid teamId)
@@ -2893,6 +3230,27 @@ public sealed class AuctionsController : ControllerBase
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return Ok(list.Select(ToDto).ToList());
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<AuctionDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.Auctions.AsNoTracking().Where(a => !a.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(a => EF.Functions.Like(a.Title, like));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query
+            .Include(a => a.Captains)
+            .Include(a => a.Lots)
+            .OrderByDescending(a => a.AuctionDateUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return Ok(new PagedResult<AuctionDto>(list.Select(ToDto).ToList(), total, skip, take));
     }
 
     [HttpGet("{id:guid}")]
@@ -3178,6 +3536,20 @@ public sealed class VenuesController : ControllerBase
         return Ok(list.Select(ToDto).ToList());
     }
 
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<VenueDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.Venues.AsNoTracking().Where(v => !v.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(v => EF.Functions.Like(v.Name, like));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query.OrderBy(v => v.Name).Skip(skip).Take(take).ToListAsync(ct).ConfigureAwait(false);
+        return Ok(new PagedResult<VenueDto>(list.Select(ToDto).ToList(), total, skip, take));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<VenueDto>> Get(Guid id, CancellationToken ct)
     {
@@ -3284,6 +3656,20 @@ public sealed class FormatsController : ControllerBase
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return Ok(list.Select(ToDto).ToList());
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<FormatDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.Formats.AsNoTracking().Where(f => !f.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(f => EF.Functions.Like(f.Name, like));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query.OrderBy(f => f.Name).Skip(skip).Take(take).ToListAsync(ct).ConfigureAwait(false);
+        return Ok(new PagedResult<FormatDto>(list.Select(ToDto).ToList(), total, skip, take));
     }
 
     [HttpGet("{id:guid}")]
@@ -3423,6 +3809,32 @@ public sealed class VenueBookingsController : ControllerBase
 
         var names = await LoadNamesAsync(list, ct).ConfigureAwait(false);
         return Ok(list.Select(b => ToDto(b, names)).ToList());
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<VenueBookingDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.VenueBookings.AsNoTracking().Where(b => !b.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+        {
+            query = query.Where(b =>
+                _db.Venues.Any(v => v.Id == b.VenueId && EF.Functions.Like(v.Name, like)) ||
+                _db.Players.Any(p => p.Id == b.BookedByPlayerId && EF.Functions.Like(p.FullName, like)));
+        }
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query
+            .Include(b => b.Participants)
+            .OrderByDescending(b => b.BookingDateUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var names = await LoadNamesAsync(list, ct).ConfigureAwait(false);
+        return Ok(new PagedResult<VenueBookingDto>(list.Select(b => ToDto(b, names)).ToList(), total, skip, take));
     }
 
     [HttpGet("{id:guid}")]
@@ -3731,6 +4143,61 @@ public sealed class TournamentsController : ControllerBase
             WinnerTeamName = t.WinnerTeamId is Guid w ? names.GetValueOrDefault(w) : null,
             UpdatedAtUtc = t.UpdatedAtUtc
         }).ToList());
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<TournamentListDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.Tournaments.AsNoTracking().Where(t => !t.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(t => EF.Functions.Like(t.Name, like));
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query
+            .OrderByDescending(t => t.UpdatedAtUtc)
+            .Skip(skip)
+            .Take(take)
+            .Select(t => new
+            {
+                t.Id,
+                t.Name,
+                t.GroupCount,
+                t.QualifyPerGroup,
+                t.Status,
+                TeamCount = t.Teams.Count,
+                FixtureCount = t.Fixtures.Count,
+                t.WinnerTeamId,
+                t.UpdatedAtUtc
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var winnerIds = list.Where(t => t.WinnerTeamId is Guid).Select(t => t.WinnerTeamId!.Value).Distinct().ToList();
+        var names = winnerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Teams.AsNoTracking()
+                .Where(t => winnerIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+                .ConfigureAwait(false);
+
+        var items = list.Select(t => new TournamentListDto
+        {
+            Id = t.Id,
+            Name = t.Name,
+            GroupCount = t.GroupCount,
+            QualifyPerGroup = t.QualifyPerGroup,
+            Status = (byte)t.Status,
+            StatusText = StatusText(t.Status),
+            TeamCount = t.TeamCount,
+            FixtureCount = t.FixtureCount,
+            WinnerTeamId = t.WinnerTeamId,
+            WinnerTeamName = t.WinnerTeamId is Guid w ? names.GetValueOrDefault(w) : null,
+            UpdatedAtUtc = t.UpdatedAtUtc
+        }).ToList();
+        return Ok(new PagedResult<TournamentListDto>(items, total, skip, take));
     }
 
     [HttpGet("{id:guid}")]

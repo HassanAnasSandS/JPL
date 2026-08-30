@@ -8,6 +8,8 @@
 
              xmlns:domain="clr-namespace:JPL.Domain"
 
+             xmlns:svc="clr-namespace:JPL.Services"
+
              xmlns:ctrl="clr-namespace:JPL.Controls"
 
              x:Class="JPL.Pages.PlayersPage"
@@ -24,15 +26,31 @@
 
         <Grid ColumnDefinitions="*,Auto">
 
-            <Label Text="Squad"
+            <VerticalStackLayout VerticalOptions="Center">
 
-                   FontSize="22"
+                <Label Text="Squad"
 
-                   FontAttributes="Bold"
+                       FontSize="22"
 
-                   VerticalOptions="Center"
+                       FontAttributes="Bold"
 
-                   TextColor="{StaticResource Primary}" />
+                       TextColor="{StaticResource Primary}" />
+
+                <Label Text="{x:Static svc:BrandSlogans.Catalog}"
+
+                       FontSize="12"
+
+                       TextColor="{StaticResource TextSecondary}"
+
+                       LineBreakMode="WordWrap" />
+
+                <Label Text="{Binding CountLabel}"
+
+                       FontSize="12"
+
+                       TextColor="{StaticResource TextSecondary}" />
+
+            </VerticalStackLayout>
 
             <HorizontalStackLayout Grid.Column="1" Spacing="8">
 
@@ -136,7 +154,11 @@
 
                             SelectionMode="None"
 
-                            VerticalOptions="Fill">
+                            VerticalOptions="Fill"
+
+                            RemainingItemsThreshold="1"
+
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
 
                 <CollectionView.EmptyView>
 

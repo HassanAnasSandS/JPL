@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.LeaguePickerPage"
              x:Name="ThisPage"
              x:DataType="vm:LeaguePickerViewModel"
@@ -49,6 +50,9 @@
                    FontSize="22"
                    HorizontalTextAlignment="Center"
                    CharacterSpacing="2" />
+            <ctrl:SloganTicker TextColor="#B8C4D4"
+                               FontSize="12"
+                               IntervalMs="3200" />
             <Label Text="{Binding PickerSubtitle}"
                    TextColor="#B8C4D4"
                    FontSize="14"
@@ -67,6 +71,11 @@
                                 Padding="12"
                                 Margin="0,0,0,10"
                                 StrokeShape="RoundRectangle 16">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer
+                                    Command="{Binding BindingContext.SelectCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                    CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
                             <Border.Triggers>
                                 <DataTrigger TargetType="Border" Binding="{Binding IsHome}" Value="True">
                                     <Setter Property="StrokeThickness" Value="2" />
@@ -75,11 +84,6 @@
                             </Border.Triggers>
                             <VerticalStackLayout Spacing="10">
                                 <Grid ColumnDefinitions="72,*" ColumnSpacing="14">
-                                    <Grid.GestureRecognizers>
-                                        <TapGestureRecognizer
-                                            Command="{Binding BindingContext.SelectCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                            CommandParameter="{Binding .}" />
-                                    </Grid.GestureRecognizers>
                                     <Image Source="{Binding Image}"
                                            HeightRequest="64"
                                            WidthRequest="64"

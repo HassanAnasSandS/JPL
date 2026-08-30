@@ -14,16 +14,16 @@ public partial class ModeChooserViewModel : ObservableObject
     public bool ShowSettingsOption => _auth.Current?.CanManagePlatform == true;
     public string SignedInLabel => _auth.Current?.SignedInLabel ?? string.Empty;
     public string GroundsSubtitle => _auth.Current?.IsGroundOwner == true
-        ? "Your grounds, bookings, and availability."
+        ? $"{BrandSlogans.Grounds}\nYour grounds, bookings, and availability."
         : _auth.Current?.IsGuest == true
-            ? "Browse cricket grounds across Pakistan. Sign up to book."
-            : "Search cricket grounds across Pakistan and request a booking.";
+            ? $"{BrandSlogans.Grounds}\nBrowse cricket grounds across Pakistan. Sign up to book."
+            : BrandSlogans.Grounds;
     public string GroundsButton => _auth.Current?.IsGroundOwner == true
         ? "Open My Grounds"
         : "Browse Grounds";
     public string LeaguesSubtitle => _auth.Current?.CanViewLeagueCatalog == true
-        ? "Live scoring, tournaments, auctions, and your league catalog."
-        : "Watch live scores, stats, and public league pages.";
+        ? $"{BrandSlogans.Catalog}\n{BrandSlogans.LiveScore}"
+        : $"{BrandSlogans.LiveScore}\n{BrandSlogans.Statistics}";
 
     public ModeChooserViewModel(IAppNavigator navigator, IAppWorkspace workspace, IAuthService auth)
     {

@@ -20,7 +20,7 @@ public interface IAppWorkspace
 
 public sealed class AppWorkspaceStore : IAppWorkspace
 {
-    private const string Key = "jpl.session.workspace";
+    internal const string Key = "jpl.session.workspace";
     private AppWorkspace _current = AppWorkspace.Leagues;
 
     public AppWorkspace Current => _current;
@@ -29,17 +29,38 @@ public sealed class AppWorkspaceStore : IAppWorkspace
     {
         _current = workspace;
         Preferences.Default.Set(Key, (int)workspace);
+        var disk = SessionDisk.Load();
+        if (disk is not null)
+            SessionDisk.Save(disk with { Workspace = (int)workspace });
+        else
+            SessionDisk.FlushPlatformPrefs();
     }
 
     public void Restore()
     {
-        var raw = Preferences.Default.Get(Key, (int)AppWorkspace.Leagues);
-        _current = Enum.IsDefined(typeof(AppWorkspace), raw) ? (AppWorkspace)raw : AppWorkspace.Leagues;
+        if (Preferences.Default.ContainsKey(Key))
+        {
+            var raw = Preferences.Default.Get(Key, (int)AppWorkspace.Leagues);
+            _current = Enum.IsDefined(typeof(AppWorkspace), raw) ? (AppWorkspace)raw : AppWorkspace.Leagues;
+            return;
+        }
+
+        var disk = SessionDisk.Load();
+        if (disk?.Workspace is int w && Enum.IsDefined(typeof(AppWorkspace), w))
+        {
+            _current = (AppWorkspace)w;
+            Preferences.Default.Set(Key, w);
+            SessionDisk.FlushPlatformPrefs();
+            return;
+        }
+
+        _current = AppWorkspace.Leagues;
     }
 
     public void Clear()
     {
         _current = AppWorkspace.Leagues;
         Preferences.Default.Remove(Key);
+        SessionDisk.FlushPlatformPrefs();
     }
 }

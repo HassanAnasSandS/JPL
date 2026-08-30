@@ -96,6 +96,7 @@ public sealed record SeriesDraft(
 public interface ISeriesService
 {
     Task<IReadOnlyList<SeriesListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<SeriesListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<SeriesDetail?> GetAsync(Guid id, CancellationToken ct = default);
     Task<SeriesDetail> CreateAsync(SeriesDraft draft, CancellationToken ct = default);
     Task<SeriesDetail> UpdateAsync(Guid id, SeriesDraft draft, CancellationToken ct = default);
@@ -151,6 +152,34 @@ public sealed class SeriesService : ISeriesService
         }
 
         return list;
+    }
+
+    public async Task<ApiPagedResult<SeriesListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var remote = await _api.GetSeriesPageAsync(skip, q, ct).ConfigureAwait(false);
+        var pending = await _sync.GetPendingSeriesIdsAsync(ct).ConfigureAwait(false);
+        var list = new List<SeriesListItem>();
+        foreach (var s in remote.Items ?? [])
+        {
+            var waiting = pending.Contains(s.Id);
+            var ready = waiting && await IsReadyToSyncAsync(s.Id, ct).ConfigureAwait(false);
+            var score = $"{s.TeamAWins}–{s.TeamBWins}";
+            var winner = s.IsTied
+                ? "Series tied"
+                : string.IsNullOrWhiteSpace(s.WinnerTeamName) ? "" : $"Winner: {s.WinnerTeamName}";
+            list.Add(new SeriesListItem
+            {
+                Id = s.Id,
+                Name = s.Name,
+                Status = s.Status,
+                StatusText = s.StatusText,
+                MetaLine = $"{s.TeamAName} vs {s.TeamBName} · {s.MatchCount} matches · {score}",
+                WinnerLine = winner,
+                NeedsSync = ready
+            });
+        }
+
+        return remote.WithItems(list);
     }
 
     public async Task<SeriesDetail?> GetAsync(Guid id, CancellationToken ct = default)

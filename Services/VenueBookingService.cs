@@ -60,6 +60,7 @@ public sealed class VenueBookingParticipantItem
 public interface IVenueBookingService
 {
     Task<IReadOnlyList<VenueBookingListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<VenueBookingListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<VenueBookingDetail?> GetAsync(Guid id, CancellationToken ct = default);
     Task<VenueBookingDetail> CreateAsync(VenueBookingDraft draft, CancellationToken ct = default);
     Task<VenueBookingDetail> UpdateAsync(Guid id, VenueBookingDraft draft, CancellationToken ct = default);
@@ -89,6 +90,18 @@ public sealed class VenueBookingService : IVenueBookingService
             .OrderByDescending(b => b.BookingDateUtc)
             .Select(b => ToListItem(b, canWrite && (isSuper || me == b.CreatedByUserId)))
             .ToList();
+    }
+
+    public async Task<ApiPagedResult<VenueBookingListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var page = await _api.GetVenueBookingsPageAsync(skip, q, ct).ConfigureAwait(false);
+        var me = _auth.Current?.UserId;
+        var canWrite = _auth.CanWrite;
+        var isSuper = _auth.Current?.Role == AppRole.SuperAdmin;
+        var items = (page.Items ?? [])
+            .Select(b => ToListItem(b, canWrite && (isSuper || me == b.CreatedByUserId)))
+            .ToList();
+        return page.WithItems(items);
     }
 
     public async Task<VenueBookingDetail?> GetAsync(Guid id, CancellationToken ct = default)

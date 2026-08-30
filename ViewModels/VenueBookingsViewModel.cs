@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using JPL.Domain;
 using JPL.Services;
 
 namespace JPL.ViewModels;
@@ -22,17 +21,21 @@ public partial class VenueBookingsViewModel : ObservableObject
 {
     private readonly IVenueBookingService _bookings;
     private readonly IAuthService _auth;
+    private int _loadBusy;
+    private int _filterGen;
 
     public ObservableCollection<VenueBookingRow> Items { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private string nameFilter = string.Empty;
 
     public bool HasFilter => !string.IsNullOrWhiteSpace(NameFilter);
-
-    private List<VenueBookingListItem> _all = new();
+    public string CountLabel => TotalCount <= 0 ? "No bookings" : $"{Items.Count} of {TotalCount}";
 
     public VenueBookingsViewModel(IVenueBookingService bookings, IAuthService auth)
     {
@@ -44,20 +47,50 @@ public partial class VenueBookingsViewModel : ObservableObject
     partial void OnNameFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasFilter));
-        ApplyFilters();
+        _ = ReloadDebouncedAsync();
+    }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
+    [RelayCommand]
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
+    {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    private async Task LoadMoreAsync()
     {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             CanWrite = _auth.CanWrite;
-
-            _all = (await _bookings.GetAllAsync().ConfigureAwait(true)).ToList();
-            ApplyFilters();
+            var page = await _bookings.GetPageAsync(Items.Count, NameFilter).ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ListPaging.Append(Items, page.Items.Select(ToRow), r => r.Id);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
@@ -66,46 +99,31 @@ public partial class VenueBookingsViewModel : ObservableObject
                 : ex.Message;
             if (NetworkUi.IsNetworkFailure(ex))
                 await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
-            _all = new List<VenueBookingListItem>();
-            ApplyFilters();
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
     [RelayCommand]
     private void ClearFilter() => NameFilter = string.Empty;
 
-    private void ApplyFilters()
+    private static VenueBookingRow ToRow(VenueBookingListItem b) => new()
     {
-        IEnumerable<VenueBookingListItem> q = _all;
-        var name = NameFilter?.Trim();
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            q = q.Where(b =>
-                b.VenueName.Contains(name, StringComparison.OrdinalIgnoreCase) ||
-                b.BookedByPlayerName.Contains(name, StringComparison.OrdinalIgnoreCase) ||
-                b.CreatedByUsername.Contains(name, StringComparison.OrdinalIgnoreCase));
-        }
-
-        Items.Clear();
-        foreach (var b in q)
-        {
-            Items.Add(new VenueBookingRow
-            {
-                Id = b.Id,
-                VenueName = b.VenueName,
-                DateText = b.DateText,
-                CostText = b.CostText,
-                BookedByLine = b.BookedByLine,
-                ParticipantsLine = b.ParticipantsLine,
-                OwnerLine = b.OwnerLine,
-                CanEdit = b.CanEdit
-            });
-        }
-    }
+        Id = b.Id,
+        VenueName = b.VenueName,
+        DateText = b.DateText,
+        CostText = b.CostText,
+        BookedByLine = b.BookedByLine,
+        ParticipantsLine = b.ParticipantsLine,
+        OwnerLine = b.OwnerLine,
+        CanEdit = b.CanEdit
+    };
 
     [RelayCommand]
     private async Task AddAsync()

@@ -24,17 +24,21 @@ public partial class SeriesListViewModel : ObservableObject
     private readonly ISeriesService _series;
     private readonly IAuthService _auth;
     private readonly ISyncService _sync;
+    private int _loadBusy;
+    private int _filterGen;
 
     public ObservableCollection<SeriesRow> Items { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? nameFilter;
     [ObservableProperty] private string? errorMessage;
 
-    private List<SeriesListItem> _all = new();
-
     public bool CanWrite => _auth.CanWrite;
     public bool HasFilter => !string.IsNullOrWhiteSpace(NameFilter);
+    public string CountLabel => TotalCount <= 0 ? "No series" : $"{Items.Count} of {TotalCount}";
 
     public SeriesListViewModel(ISeriesService series, IAuthService auth, ISyncService sync)
     {
@@ -46,59 +50,79 @@ public partial class SeriesListViewModel : ObservableObject
     partial void OnNameFilterChanged(string? value)
     {
         OnPropertyChanged(nameof(HasFilter));
-        ApplyFilter();
+        _ = ReloadDebouncedAsync();
+    }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
+    [RelayCommand]
+    private Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
+    {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    private async Task LoadAsync()
+    private async Task LoadMoreAsync()
     {
-        if (IsBusy) return;
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
-            _all = (await _series.GetAllAsync().ConfigureAwait(true)).ToList();
-            ApplyFilter();
+            var page = await _series.GetPageAsync(Items.Count, NameFilter).ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ListPaging.Append(Items, page.Items.Select(ToRow), r => r.Id);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            _all = new List<SeriesListItem>();
-            Items.Clear();
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
+        }
     }
 
-    private void ApplyFilter()
+    private SeriesRow ToRow(SeriesListItem s)
     {
-        Items.Clear();
-        IEnumerable<SeriesListItem> q = _all;
-        if (!string.IsNullOrWhiteSpace(NameFilter))
+        var draft = s.Status == 0;
+        return new SeriesRow
         {
-            var f = NameFilter.Trim();
-            q = q.Where(s =>
-                s.Name.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || s.StatusText.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || s.WinnerLine.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || s.MetaLine.Contains(f, StringComparison.OrdinalIgnoreCase));
-        }
-
-        foreach (var s in q)
-        {
-            var draft = s.Status == 0;
-            Items.Add(new SeriesRow
-            {
-                Id = s.Id,
-                Name = s.Name,
-                MetaLine = s.MetaLine,
-                StatusText = s.Status == 2 ? "LIVE" : s.StatusText,
-                WinnerLine = s.WinnerLine,
-                IsDraft = draft,
-                CanEdit = CanWrite && draft,
-                CanDelete = CanWrite && draft,
-                NeedsSync = CanWrite && s.NeedsSync
-            });
-        }
+            Id = s.Id,
+            Name = s.Name,
+            MetaLine = s.MetaLine,
+            StatusText = s.Status == 2 ? "LIVE" : s.StatusText,
+            WinnerLine = s.WinnerLine,
+            IsDraft = draft,
+            CanEdit = CanWrite && draft,
+            CanDelete = CanWrite && draft,
+            NeedsSync = CanWrite && s.NeedsSync
+        };
     }
 
     [RelayCommand]

@@ -25,17 +25,23 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     public ValueTask DisposeAsync() => _db.DisposeAsync();
 
     [HttpGet]
-    public async Task<ActionResult<GroundSearchPage>> List(string? cursor, int take = 20, CancellationToken ct = default)
+    public async Task<ActionResult<GroundSearchPage>> List(string? cursor, int take = 5, CancellationToken ct = default)
     {
         if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
             return Forbid();
 
-        take = Math.Clamp(take, 1, 50);
+        take = Paging.ClampTake(take);
         var ownerId = GroundsCaller.UserId(HttpContext);
         var super = GroundsCaller.IsSuperAdmin(HttpContext);
         var query = _db.Grounds.AsNoTracking().Where(g => !g.IsDeleted);
         if (!super)
+        {
+            if (ownerId == Guid.Empty)
+                return Ok(new GroundSearchPage([], null, false, 0));
             query = query.Where(g => g.OwnerUserId == ownerId);
+        }
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
 
         if (GroundsMap.TryDecodeCursor(cursor, out var created, out var id))
         {
@@ -81,7 +87,8 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
             rows.Select(g => GroundsMap.ToCard(
                 g, Request, canDelete: !booked.Contains(g.Id), stats: stats.GetValueOrDefault(g.Id))).ToList(),
             next,
-            hasMore));
+            hasMore,
+            total));
     }
 
     [HttpPost("resolve-maps")]
@@ -104,6 +111,9 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     {
         if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
             return Forbid();
+        var ownerId = GroundsCaller.UserId(HttpContext);
+        if (ownerId == Guid.Empty)
+            return Unauthorized();
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("Ground name is required.");
         if (TryPakistanPhones(request.ContactPhone, request.WhatsAppNumber, out var contactPhone, out var whatsApp)
@@ -112,7 +122,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
 
         var ground = new Ground
         {
-            OwnerUserId = GroundsCaller.UserId(HttpContext),
+            OwnerUserId = ownerId,
             Name = RequireName(request.Name),
             Description = Trim(request.Description, 2000),
             AddressLine = Trim(request.AddressLine, 240),
@@ -281,9 +291,10 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
         if (error is { } e)
             return e.StatusCode == 409 ? Conflict(e.Message) : BadRequest(e.Message);
 
-        _db.Bookings.Add(booking!);
+        booking!.ApplyMoney(request.Discount, request.Advance);
+        _db.Bookings.Add(booking);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Ok(GroundsMap.ToBooking(booking!, ground));
+        return Ok(GroundsMap.ToBooking(booking, ground));
     }
 
     [HttpPost("{id:guid}/images")]
@@ -774,9 +785,9 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
     public ValueTask DisposeAsync() => _db.DisposeAsync();
 
     [HttpGet("mine")]
-    public async Task<ActionResult<IReadOnlyList<BookingDto>>> Mine(string? cursor, int take = 20, CancellationToken ct = default)
+    public async Task<ActionResult<BookingPage>> Mine(string? cursor, int take = 5, CancellationToken ct = default)
     {
-        take = Math.Clamp(take, 1, 50);
+        take = Paging.ClampTake(take);
         var userId = GroundsCaller.UserId(HttpContext);
         var query = _db.Bookings.AsNoTracking()
             .Include(b => b.Ground)
@@ -784,6 +795,8 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
             .Include(b => b.ShopItems)
             .Include(b => b.Review)
             .Where(b => !b.IsDeleted && b.CustomerUserId == userId);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
 
         if (GroundsMap.TryDecodeCursor(cursor, out var created, out var id))
         {
@@ -795,16 +808,26 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
         var rows = await query
             .OrderByDescending(b => b.CreatedAtUtc)
             .ThenByDescending(b => b.Id)
-            .Take(take)
+            .Take(take + 1)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return Ok(rows.Select(b => GroundsMap.ToBooking(b, b.Ground)).ToList());
+        var hasMore = rows.Count > take;
+        if (hasMore)
+            rows.RemoveAt(rows.Count - 1);
+        string? next = null;
+        if (hasMore && rows.Count > 0)
+        {
+            var last = rows[^1];
+            next = GroundsMap.EncodeCursor(last.CreatedAtUtc, last.Id);
+        }
+
+        return Ok(new BookingPage(rows.Select(b => GroundsMap.ToBooking(b, b.Ground)).ToList(), next, hasMore, total));
     }
 
     [HttpGet("owner")]
-    public async Task<ActionResult<IReadOnlyList<BookingDto>>> Owner(
-        Guid? groundId, string? cursor, int take = 20,
+    public async Task<ActionResult<BookingPage>> Owner(
+        Guid? groundId, string? cursor, int take = 5,
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default)
     {
@@ -812,7 +835,7 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
             return Forbid();
 
         var ranged = from is DateTime start && to is DateTime end && end > start;
-        take = Math.Clamp(take, 1, ranged ? 500 : 50);
+        take = Math.Clamp(take <= 0 ? Paging.DefaultTake : take, 1, ranged ? 500 : Paging.MaxTake);
         var ownerId = GroundsCaller.UserId(HttpContext);
         var super = GroundsCaller.IsSuperAdmin(HttpContext);
         var query = _db.Bookings.AsNoTracking()
@@ -822,20 +845,31 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
             .Include(b => b.Review)
             .Where(b => !b.IsDeleted && !b.Ground.IsDeleted);
         if (!super)
+        {
+            if (ownerId == Guid.Empty)
+                return Ok(new BookingPage([], null, false, 0));
             query = query.Where(b => b.Ground.OwnerUserId == ownerId);
+        }
         if (groundId is Guid gid && gid != Guid.Empty)
             query = query.Where(b => b.GroundId == gid);
 
+        if (ranged)
+            query = query.Where(b => b.StartAt < to && b.EndAt > from);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+
         List<GroundBooking> rows;
+        string? next = null;
+        var hasMore = false;
         if (ranged)
         {
-            query = query.Where(b => b.StartAt < to && b.EndAt > from);
             rows = await query
                 .OrderBy(b => b.StartAt)
                 .ThenBy(b => b.Id)
                 .Take(take)
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
+            hasMore = rows.Count >= take && total > rows.Count;
         }
         else
         {
@@ -849,12 +883,20 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
             rows = await query
                 .OrderByDescending(b => b.CreatedAtUtc)
                 .ThenByDescending(b => b.Id)
-                .Take(take)
+                .Take(take + 1)
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
+            hasMore = rows.Count > take;
+            if (hasMore)
+                rows.RemoveAt(rows.Count - 1);
+            if (hasMore && rows.Count > 0)
+            {
+                var last = rows[^1];
+                next = GroundsMap.EncodeCursor(last.CreatedAtUtc, last.Id);
+            }
         }
 
-        return Ok(rows.Select(b => GroundsMap.ToBooking(b, b.Ground)).ToList());
+        return Ok(new BookingPage(rows.Select(b => GroundsMap.ToBooking(b, b.Ground)).ToList(), next, hasMore, total));
     }
 
     [HttpGet("{id:guid}")]
@@ -918,10 +960,7 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
 
         if (isOwner)
         {
-            if (request.BookingAmount is decimal amount)
-                b.BookingAmount = Math.Max(0, amount);
-            if (request.Advance is decimal advance)
-                b.Advance = Math.Clamp(advance, 0, b.BookingAmount);
+            b.ApplyMoney(request.Discount, request.Advance);
             if (request.PaymentNote is not null)
                 b.PaymentNote = Trim(request.PaymentNote, 400);
         }

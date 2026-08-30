@@ -5,6 +5,7 @@ namespace JPL.Services;
 public interface IPlayerService
 {
     Task<IReadOnlyList<Player>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<Player>> GetPageAsync(int skip, string? q, int status, CancellationToken ct = default);
     /// <summary>Active players only — for team create/update squad pickers.</summary>
     Task<IReadOnlyList<Player>> GetActiveAsync(CancellationToken ct = default);
     Task<Player?> GetAsync(Guid id, CancellationToken ct = default);
@@ -46,6 +47,22 @@ public sealed class PlayerService : IPlayerService
             .ThenBy(p => p.FullName)
             .Select(ToEntity)
             .ToList();
+    }
+
+    public async Task<ApiPagedResult<Player>> GetPageAsync(int skip, string? q, int status, CancellationToken ct = default)
+    {
+        var statusKey = status switch
+        {
+            1 => "active",
+            2 => "inactive",
+            _ => null
+        };
+        var page = await _api.GetPlayersPageAsync(skip, q, statusKey, ct).ConfigureAwait(false);
+        var items = (page.Items ?? [])
+            .Where(p => !p.IsDeleted)
+            .Select(ToEntity)
+            .ToList();
+        return page.WithItems(items);
     }
 
     public async Task<IReadOnlyList<Player>> GetActiveAsync(CancellationToken ct = default)

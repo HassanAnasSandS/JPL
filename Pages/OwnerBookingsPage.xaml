@@ -7,14 +7,24 @@
              x:Name="ThisPage"
              x:DataType="vm:OwnerBookingsViewModel"
              Title="Bookings">
-    <Grid RowDefinitions="Auto,*" Padding="14" RowSpacing="10">
+    <Grid RowDefinitions="Auto,Auto,*" Padding="14" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto">
-            <Label Text="Bookings" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+            <VerticalStackLayout VerticalOptions="Center">
+                <Label Text="Bookings" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                <Label Text="{Binding CountLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
             <Button Grid.Column="1" Text="+ Book" Style="{StaticResource GoldButton}" Command="{Binding AddCommand}" />
         </Grid>
-        <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
+        <VerticalStackLayout Grid.Row="1" Spacing="4" IsVisible="{Binding HasGroundPicker}">
+            <Label Text="Ground" Style="{StaticResource SectionLabel}" />
+            <Picker Title="Select ground"
+                    ItemsSource="{Binding GroundPicks}"
+                    ItemDisplayBinding="{Binding Name, x:DataType=vm:GroundPick}"
+                    SelectedItem="{Binding SelectedGround}" />
+        </VerticalStackLayout>
+        <RefreshView Grid.Row="2" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
             <CollectionView ItemsSource="{Binding Items}"
-                            RemainingItemsThreshold="4"
+                            RemainingItemsThreshold="1"
                             RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="{Binding ErrorMessage}">
                 <CollectionView.ItemTemplate>
@@ -32,7 +42,8 @@
                                     <Label Text="{Binding WhenLabel}" FontSize="13" />
                                     <Label Text="{Binding Status}" TextColor="{StaticResource Secondary}" />
                                     <Label Text="{Binding MoneyLabel}" FontSize="12" />
-                                    <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding HasServicesLine}" />
+                                    <Label Text="{Binding ShopLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding HasShopLine}" />
                                     <Label Text="{Binding ReviewLine}"
                                            FontSize="12"
                                            TextColor="{StaticResource Secondary}"

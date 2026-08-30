@@ -134,6 +134,7 @@ internal static class GroundsMap
             b.EndAt,
             b.Status,
             b.BookingAmount,
+            b.Discount,
             b.Advance,
             b.Balance,
             b.Notes,

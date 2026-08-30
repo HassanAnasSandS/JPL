@@ -16,6 +16,9 @@
                        FontSize="22"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
+                <Label Text="{Binding CountLabel}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
                 <Label Text="Manual groups, round robin, and knockout — no live scoring"
                        Style="{StaticResource MutedLabel}"
                        FontSize="12" />
@@ -48,6 +51,8 @@
                      IsRefreshing="{Binding IsBusy}"
                      Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+                            RemainingItemsThreshold="1"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="No scheduled tournaments yet. Create one, add teams, then record results by hand.">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="vm:SchedulerRow">

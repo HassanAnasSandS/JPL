@@ -47,10 +47,23 @@
 
     <Grid>
     <Grid Padding="{OnIdiom Phone=8, Default=14}" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="{OnIdiom Phone=6, Default=10}">
-        <Label Text="Rankings"
-               FontSize="{OnIdiom Phone=18, Default=22}"
-               FontAttributes="Bold"
-               TextColor="{StaticResource Primary}" />
+        <Grid ColumnDefinitions="*,Auto">
+            <VerticalStackLayout Spacing="2">
+                <Label Text="Rankings"
+                       FontSize="{OnIdiom Phone=18, Default=22}"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="{x:Static svc:BrandSlogans.Statistics}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       LineBreakMode="WordWrap" />
+            </VerticalStackLayout>
+            <Label Grid.Column="1"
+                   VerticalOptions="End"
+                   Text="{Binding CountLabel}"
+                   FontSize="12"
+                   TextColor="{StaticResource TextSecondary}" />
+        </Grid>
 
         <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
             <HorizontalStackLayout Spacing="6">
@@ -162,13 +175,41 @@
                    FontSize="12" />
         </VerticalStackLayout>
 
-        <RefreshView Grid.Row="4"
+        <Grid Grid.Row="4" RowDefinitions="Auto,*" VerticalOptions="Fill">
+            <Grid HeightRequest="42"
+                  Padding="{OnIdiom Phone=8, Default=10}"
+                  ColumnDefinitions="40,*,Auto"
+                  ColumnSpacing="{OnIdiom Phone=8, Default=10}"
+                  BackgroundColor="{StaticResource Primary}">
+                <Label Text="#"
+                       FontAttributes="Bold"
+                       FontSize="12"
+                       VerticalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       TextColor="{StaticResource Secondary}" />
+                <Label Grid.Column="1"
+                       Text="{Binding NameColumnTitle}"
+                       FontAttributes="Bold"
+                       FontSize="12"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource Secondary}" />
+                <Label Grid.Column="2"
+                       Text="Pts"
+                       FontAttributes="Bold"
+                       FontSize="12"
+                       VerticalOptions="Center"
+                       HorizontalTextAlignment="End"
+                       TextColor="{StaticResource Secondary}" />
+            </Grid>
+        <RefreshView Grid.Row="1"
                      VerticalOptions="Fill"
                      IsRefreshing="{Binding IsBusy, Mode=OneWay}"
                      Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding VisibleRows}"
                             SelectionMode="None"
-                            VerticalOptions="Fill">
+                            VerticalOptions="Fill"
+                            RemainingItemsThreshold="1"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32" Spacing="8" VerticalOptions="Center">
                         <Label Text="No rankings yet"
@@ -242,6 +283,7 @@
                 </CollectionView.ItemTemplate>
             </CollectionView>
         </RefreshView>
+        </Grid>
     </Grid>
 
         <Grid IsVisible="{Binding IsBreakdownVisible}"

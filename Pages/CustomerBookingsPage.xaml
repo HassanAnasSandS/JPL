@@ -7,9 +7,14 @@
              x:Name="ThisPage"
              x:DataType="vm:CustomerBookingsViewModel"
              Title="My bookings">
-    <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}" Padding="14">
+    <Grid RowDefinitions="Auto,*" Padding="14" RowSpacing="8">
+        <VerticalStackLayout Spacing="2">
+            <Label Text="{x:Static svc:BrandSlogans.Grounds}" FontSize="13" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
+            <Label Text="{Binding CountLabel}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
+        </VerticalStackLayout>
+        <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
         <CollectionView ItemsSource="{Binding Items}"
-                        RemainingItemsThreshold="4"
+                        RemainingItemsThreshold="1"
                         RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                         EmptyView="{Binding ErrorMessage}">
             <CollectionView.ItemTemplate>
@@ -21,7 +26,8 @@
                                 <Label Text="{Binding WhenLabel}" FontSize="13" />
                                 <Label Text="{Binding Status}" TextColor="{StaticResource Secondary}" />
                                 <Label Text="{Binding MoneyLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding HasServicesLine}" />
+                                <Label Text="{Binding ShopLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding HasShopLine}" />
                                 <Button Text="{Binding ReviewButtonText}"
                                         Padding="14,8"
                                         FontSize="13"
@@ -48,4 +54,5 @@
             </CollectionView.ItemTemplate>
         </CollectionView>
     </RefreshView>
+    </Grid>
 </ContentPage>

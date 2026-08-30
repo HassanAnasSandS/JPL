@@ -29,7 +29,8 @@ public partial class PlayersViewModel : ObservableObject
     private readonly IAuthService _auth;
     private readonly ILeagueContext _league;
     private readonly IOptions<ApiOptions> _api;
-    private List<PlayerRow> _all = new();
+    private int _loadBusy;
+    private int _filterGen;
 
     public ObservableCollection<PlayerRow> Items { get; } = new();
 
@@ -42,6 +43,10 @@ public partial class PlayersViewModel : ObservableObject
     [ObservableProperty] private int totalCount;
     [ObservableProperty] private int activeCount;
     [ObservableProperty] private int inactiveCount;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+
+    public string CountLabel => TotalCount <= 0 ? "No players" : $"{Items.Count} of {TotalCount}";
 
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(NameFilter) || StatusFilter != 0;
@@ -72,7 +77,7 @@ public partial class PlayersViewModel : ObservableObject
     partial void OnNameFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        _ = ReloadDebouncedAsync();
     }
 
     partial void OnStatusFilterChanged(int value)
@@ -81,53 +86,93 @@ public partial class PlayersViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAllFilter));
         OnPropertyChanged(nameof(IsActiveFilter));
         OnPropertyChanged(nameof(IsInactiveFilter));
-        ApplyFilters();
+        _ = ReloadAsync();
     }
 
-    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(AllFilterLabel));
+    partial void OnTotalCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(AllFilterLabel));
+        OnPropertyChanged(nameof(CountLabel));
+    }
     partial void OnActiveCountChanged(int value) => OnPropertyChanged(nameof(ActiveFilterLabel));
     partial void OnInactiveCountChanged(int value) => OnPropertyChanged(nameof(InactiveFilterLabel));
 
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             CanWrite = _auth.CanWrite;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
 
-            var players = (await _players.GetAllAsync().ConfigureAwait(true)).ToList();
+            var page = await _players.GetPageAsync(Items.Count, NameFilter, StatusFilter).ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ActiveCount = page.ActiveCount ?? ActiveCount;
+            InactiveCount = page.InactiveCount ?? InactiveCount;
+
             IReadOnlyDictionary<Guid, ImageSource> photos = new Dictionary<Guid, ImageSource>();
             try
             {
-                photos = await _images.GetPhotosAsync(players.Select(p => p.Id)).ConfigureAwait(true);
+                photos = await _images.GetPhotosAsync(page.Items.Select(p => p.Id)).ConfigureAwait(true);
             }
             catch
             {
-                // List still works if photos fail.
+                /* list still works if photos fail */
             }
 
-            _all = players.Select(p => new PlayerRow
+            ListPaging.Append(Items, page.Items.Select(p => new PlayerRow
             {
                 Player = p,
                 Photo = photos.GetValueOrDefault(p.Id),
                 Initials = PlayerPhotos.Initials(p.FullName)
-            }).ToList();
-            RefreshCounts();
-            ApplyFilters();
+            }), r => r.Id);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            _all = new List<PlayerRow>();
-            RefreshCounts();
-            ApplyFilters();
+            if (Items.Count == 0)
+            {
+                TotalCount = 0;
+                ActiveCount = 0;
+                InactiveCount = 0;
+            }
         }
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
@@ -147,33 +192,6 @@ public partial class PlayersViewModel : ObservableObject
     {
         NameFilter = string.Empty;
         StatusFilter = 0;
-    }
-
-    private void RefreshCounts()
-    {
-        TotalCount = _all.Count;
-        ActiveCount = _all.Count(p => p.IsActive);
-        InactiveCount = _all.Count(p => !p.IsActive);
-    }
-
-    private void ApplyFilters()
-    {
-        IEnumerable<PlayerRow> q = _all;
-
-        q = StatusFilter switch
-        {
-            1 => q.Where(p => p.IsActive),
-            2 => q.Where(p => !p.IsActive),
-            _ => q
-        };
-
-        var name = NameFilter?.Trim();
-        if (!string.IsNullOrWhiteSpace(name))
-            q = q.Where(p => p.FullName.Contains(name, StringComparison.OrdinalIgnoreCase));
-
-        Items.Clear();
-        foreach (var p in q)
-            Items.Add(p);
     }
 
     [RelayCommand]

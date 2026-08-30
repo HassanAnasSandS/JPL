@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 19;
+    private const int SchemaVersion = 20;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -19,68 +19,61 @@ public static class DbBootstrap
 
     public static async Task InitializeAsync(JplDbContext db, CancellationToken ct = default)
     {
-        await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
-
-        // EnsureCreated does not add tables to an existing file. Phones that already
-        // have a schema version skip the version-gated block, so nets/series CREATE
-        // must run every launch (all statements are IF NOT EXISTS / ADD COLUMN).
-        await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
-        await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
-        await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
+        var path = GetDatabasePath();
+        if (!File.Exists(path))
+            await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+        else
+            await db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
 
         var dbVersion = await ReadUserVersionAsync(db, ct).ConfigureAwait(false);
         if (dbVersion < SchemaVersion)
         {
+            await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
+            await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+            await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
             await EnsureLegacyTablesAsync(db, ct).ConfigureAwait(false);
+
+            try
+            {
+                await EnsureColumnAsync(db, "Users", "WhatsAppNumber",
+                    """ALTER TABLE "Users" ADD COLUMN "WhatsAppNumber" TEXT NULL;""", ct)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                /* table may not exist yet */
+            }
+
+            await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
+                """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Matches", "IsLiveTelecast",
+                """ALTER TABLE "Matches" ADD COLUMN "IsLiveTelecast" INTEGER NOT NULL DEFAULT 1;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Matches", "StartedByUserId",
+                """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Matches", "StartedOnDeviceId",
+                """ALTER TABLE "Matches" ADD COLUMN "StartedOnDeviceId" TEXT NULL;""", ct).ConfigureAwait(false);
+
+            await EnsureColumnAsync(db, "Players", "ImagePath",
+                """ALTER TABLE "Players" ADD COLUMN "ImagePath" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Players", "NickName",
+                """ALTER TABLE "Players" ADD COLUMN "NickName" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Players", "PlayingRole",
+                """ALTER TABLE "Players" ADD COLUMN "PlayingRole" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Players", "BattingStyle",
+                """ALTER TABLE "Players" ADD COLUMN "BattingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Players", "BowlingStyle",
+                """ALTER TABLE "Players" ADD COLUMN "BowlingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Players", "Bio",
+                """ALTER TABLE "Players" ADD COLUMN "Bio" TEXT NULL;""", ct).ConfigureAwait(false);
+            await EnsureColumnAsync(db, "Teams", "ImagePath",
+                """ALTER TABLE "Teams" ADD COLUMN "ImagePath" TEXT NULL;""", ct).ConfigureAwait(false);
+
+            await EnsureFormatsAsync(db, ct).ConfigureAwait(false);
+
             await db.Database.ExecuteSqlRawAsync($"PRAGMA user_version = {SchemaVersion};", ct)
                 .ConfigureAwait(false);
             Preferences.Default.Set(SchemaVersionKey, SchemaVersion);
         }
-        else
-        {
-            await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
-            await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
-            await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
-        }
-
-        // Always run: phones already at SchemaVersion skip EnsureLegacyTables, so new
-        // Users columns must not wait for a version bump.
-        try
-        {
-            await EnsureColumnAsync(db, "Users", "WhatsAppNumber",
-                """ALTER TABLE "Users" ADD COLUMN "WhatsAppNumber" TEXT NULL;""", ct)
-                .ConfigureAwait(false);
-        }
-        catch
-        {
-            /* table may not exist yet */
-        }
-
-        await EnsureColumnAsync(db, "Matches", "LiveStreamUrl",
-            """ALTER TABLE "Matches" ADD COLUMN "LiveStreamUrl" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Matches", "IsLiveTelecast",
-            """ALTER TABLE "Matches" ADD COLUMN "IsLiveTelecast" INTEGER NOT NULL DEFAULT 1;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Matches", "StartedByUserId",
-            """ALTER TABLE "Matches" ADD COLUMN "StartedByUserId" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Matches", "StartedOnDeviceId",
-            """ALTER TABLE "Matches" ADD COLUMN "StartedOnDeviceId" TEXT NULL;""", ct).ConfigureAwait(false);
-
-        await EnsureColumnAsync(db, "Players", "ImagePath",
-            """ALTER TABLE "Players" ADD COLUMN "ImagePath" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Players", "NickName",
-            """ALTER TABLE "Players" ADD COLUMN "NickName" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Players", "PlayingRole",
-            """ALTER TABLE "Players" ADD COLUMN "PlayingRole" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Players", "BattingStyle",
-            """ALTER TABLE "Players" ADD COLUMN "BattingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Players", "BowlingStyle",
-            """ALTER TABLE "Players" ADD COLUMN "BowlingStyle" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Players", "Bio",
-            """ALTER TABLE "Players" ADD COLUMN "Bio" TEXT NULL;""", ct).ConfigureAwait(false);
-        await EnsureColumnAsync(db, "Teams", "ImagePath",
-            """ALTER TABLE "Teams" ADD COLUMN "ImagePath" TEXT NULL;""", ct).ConfigureAwait(false);
-
-        await EnsureFormatsAsync(db, ct).ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);

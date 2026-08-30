@@ -15,7 +15,10 @@ public partial class OwnerGroundsViewModel : ObservableObject
 
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
+
+    public string CountLabel => TotalCount <= 0 ? "No grounds" : $"{Items.Count} of {TotalCount}";
 
     public OwnerGroundsViewModel(IGroundsApiClient api) => _api = api;
 
@@ -43,6 +46,8 @@ public partial class OwnerGroundsViewModel : ObservableObject
                 Items.Add(row);
             _cursor = page.NextCursor;
             HasMore = page.HasMore;
+            TotalCount = page.TotalCount;
+            OnPropertyChanged(nameof(CountLabel));
             if (Items.Count == 0)
                 ErrorMessage = "No grounds yet. Tap + Add to register one.";
         }

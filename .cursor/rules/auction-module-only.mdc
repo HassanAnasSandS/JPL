@@ -1,0 +1,31 @@
+---
+description: Restrict all work to the Auction module only — do not touch other modules or shared code
+alwaysApply: true
+---
+
+# Auction module only
+
+Until the user explicitly lifts this, work **only** on the Auction module.
+
+## Allowed files (edit these only)
+
+- `Pages/AuctionsPage.xaml` + `.xaml.cs`
+- `Pages/AuctionEditPage.xaml` + `.xaml.cs`
+- `Pages/AuctionReportPage.xaml` + `.xaml.cs`
+- `ViewModels/AuctionsViewModel.cs`
+- `ViewModels/AuctionEditViewModel.cs`
+- `ViewModels/AuctionReportViewModel.cs`
+- `Services/AuctionService.cs`
+- `Services/AuctionsModuleGate.cs`
+- `Domain/AuctionEntities.cs`
+
+## Do not touch
+
+Any other module, page, viewmodel, service, or shared/infra code, including but not limited to:
+
+- `AppShell`, `MauiProgram`, `AuthService`, `ApiClient`
+- `Data/JplDbContext.cs`, `Data/DbBootstrap.cs`
+- `JPL.Api/**` (controllers, DTOs, entities, `ApiDbContext`, `LeagueDatabase`, `DeleteConstraints`)
+- Players, Teams, Matches, Scoring, Reports (non-auction), Auth, Settings, or any other feature
+
+If a requested Auction change seems to need a shared-file edit, **stop and ask** instead of editing that file.

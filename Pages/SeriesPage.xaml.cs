@@ -18,28 +18,28 @@ public partial class SeriesPage : ContentPage
         PageSafe.Run(() => _vm.LoadCommand.ExecuteAsync(null));
     }
 
-    private async void OnAddClicked(object? sender, EventArgs e)
+    private void OnAddClicked(object? sender, EventArgs e)
     {
         if (!_vm.CanWrite) return;
-        await Shell.Current.GoToAsync(nameof(SeriesEditPage));
+        PageSafe.Run(() => Shell.Current.GoToAsync(nameof(SeriesEditPage)));
     }
 
     private void OnOpenClicked(object? sender, EventArgs e)
     {
         if (sender is Button { CommandParameter: SeriesRow row })
-            _vm.OpenCommand.Execute(row);
+            PageSafe.Run(() => _vm.OpenCommand.ExecuteAsync(row));
     }
 
     private void OnEditClicked(object? sender, EventArgs e)
     {
         if (sender is Button { CommandParameter: SeriesRow row })
-            _vm.EditCommand.Execute(row);
+            PageSafe.Run(() => _vm.EditCommand.ExecuteAsync(row));
     }
 
     private void OnDeleteClicked(object? sender, EventArgs e)
     {
         if (sender is Button { CommandParameter: SeriesRow row })
-            _vm.DeleteCommand.Execute(row);
+            PageSafe.Run(() => _vm.DeleteCommand.ExecuteAsync(row));
     }
 
     private void OnSyncClicked(object? sender, EventArgs e)

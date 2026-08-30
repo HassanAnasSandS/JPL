@@ -14,9 +14,16 @@ public partial class AuctionsViewModel : ObservableObject
     public ObservableCollection<AuctionListItem> Items { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool isUnlocked;
+
+    private int _loadBusy;
+
+    public string CountLabel => TotalCount <= 0 ? "No auctions" : $"{Items.Count} of {TotalCount}";
 
     public AuctionsViewModel(IAuctionService auctions, IAuthService auth, IAuctionsModuleGate gate)
     {
@@ -72,29 +79,53 @@ public partial class AuctionsViewModel : ObservableObject
         return false;
     }
 
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             CanWrite = _auth.CanWrite;
             IsUnlocked = _gate.IsUnlocked;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
 
-            var list = await _auctions.GetAllAsync().ConfigureAwait(true);
-            Items.Clear();
-            foreach (var item in list)
-                Items.Add(item);
+            var page = await _auctions.GetPageAsync(Items.Count, q: null).ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ListPaging.Append(Items, page.Items, a => a.Id);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 

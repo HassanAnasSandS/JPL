@@ -141,7 +141,8 @@ public sealed record MapsLocationDto(
 public sealed record GroundSearchPage(
     IReadOnlyList<GroundCardDto> Items,
     string? NextCursor,
-    bool HasMore);
+    bool HasMore,
+    int TotalCount = 0);
 
 public sealed record GroundLocationOptionsDto(
     IReadOnlyList<string> Countries,
@@ -160,6 +161,7 @@ public sealed record BookingDto(
     DateTime EndAt,
     string Status,
     decimal BookingAmount,
+    decimal Discount,
     decimal Advance,
     decimal Balance,
     string? Notes,
@@ -185,11 +187,15 @@ public sealed record BookingCreateRequest(
     string? BookingKind,
     decimal Hours,
     IReadOnlyList<string>? Services,
-    IReadOnlyList<GroundShopQtyUpsert>? Shop);
+    IReadOnlyList<GroundShopQtyUpsert>? Shop,
+    decimal? BookingAmount = null,
+    decimal? Discount = null,
+    decimal? Advance = null);
 
 public sealed record BookingUpdateRequest(
     string? Status,
     decimal? BookingAmount,
+    decimal? Discount,
     decimal? Advance,
     string? PaymentNote,
     string? Notes);
@@ -218,4 +224,11 @@ public sealed record GroundReviewUpsert(int Rating, string? Comment);
 public sealed record GroundReviewPage(
     IReadOnlyList<GroundReviewDto> Items,
     string? NextCursor,
-    bool HasMore);
+    bool HasMore,
+    int TotalCount = 0);
+
+public sealed record BookingPage(
+    IReadOnlyList<BookingDto> Items,
+    string? NextCursor,
+    bool HasMore,
+    int TotalCount = 0);

@@ -114,6 +114,7 @@ public sealed class GroundsDbContext : DbContext
             e.Property(x => x.Notes).HasMaxLength(1000);
             e.Property(x => x.PaymentNote).HasMaxLength(400);
             e.Property(x => x.BookingAmount).HasPrecision(12, 2);
+            e.Property(x => x.Discount).HasPrecision(12, 2);
             e.Property(x => x.Advance).HasPrecision(12, 2);
             e.Ignore(x => x.Balance);
             e.HasOne(x => x.Ground).WithMany(g => g.Bookings).HasForeignKey(x => x.GroundId).OnDelete(DeleteBehavior.Restrict);

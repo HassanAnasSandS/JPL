@@ -16,7 +16,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Grounds.Api",
-        version = "1.5",
+        version = "1.0.3",
         time = DateTime.Now
     });
 }
@@ -74,8 +74,10 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         string? city,
         CancellationToken ct = default)
     {
-        var published = _db.Grounds.AsNoTracking()
-            .Where(g => !g.IsDeleted && g.ListingStatus == GroundListingStatus.Published);
+        var published = GroundsCaller.WhereOwnedByCaller(
+            _db.Grounds.AsNoTracking()
+                .Where(g => !g.IsDeleted && g.ListingStatus == GroundListingStatus.Published),
+            HttpContext);
 
         var countries = await DistinctNamesAsync(
                 published.Select(g => g.CountryName ?? "Pakistan"), ct)
@@ -122,12 +124,14 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         decimal? maxRate,
         string? amenities,
         string? cursor,
-        int take = 20,
+        int take = 5,
         CancellationToken ct = default)
     {
-        take = Math.Clamp(take, 1, 50);
-        var query = _db.Grounds.AsNoTracking()
-            .Where(g => !g.IsDeleted && g.ListingStatus == GroundListingStatus.Published);
+        take = Paging.ClampTake(take);
+        var query = GroundsCaller.WhereOwnedByCaller(
+            _db.Grounds.AsNoTracking()
+                .Where(g => !g.IsDeleted && g.ListingStatus == GroundListingStatus.Published),
+            HttpContext);
 
         var postal = GoogleMapsLocationResolver.NormalizePostal(postalCode);
         if (postal is not null)
@@ -169,6 +173,8 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
                 query = query.Where(g => g.Amenities.Any(x => x.Code == code));
         }
 
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+
         if (GroundsMap.TryDecodeCursor(cursor, out var created, out var id))
         {
             query = query.Where(g =>
@@ -201,7 +207,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
             next = GroundsMap.EncodeCursor(last.CreatedAtUtc, last.Id);
         }
 
-        return Ok(new GroundSearchPage(items, next, hasMore));
+        return Ok(new GroundSearchPage(items, next, hasMore, total));
     }
 
     [HttpGet("{id:guid}")]
@@ -220,9 +226,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
             .ConfigureAwait(false);
         if (g is null)
             return NotFound();
-
-        var canSeeDraft = GroundsCaller.CanManageGround(HttpContext, g.OwnerUserId);
-        if (g.ListingStatus != GroundListingStatus.Published && !canSeeDraft)
+        if (!GroundsCaller.CanViewGround(HttpContext, g))
             return NotFound();
 
         var stats = await GroundsMap.LoadStatsAsync(_db, [g.Id], ct).ConfigureAwait(false);
@@ -231,21 +235,22 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
 
     [HttpGet("{id:guid}/reviews")]
     public async Task<ActionResult<GroundReviewPage>> Reviews(
-        Guid id, string? cursor, int take = 20, CancellationToken ct = default)
+        Guid id, string? cursor, int take = 5, CancellationToken ct = default)
     {
         var exists = await _db.Grounds.AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == id && !g.IsDeleted, ct)
             .ConfigureAwait(false);
         if (exists is null)
             return NotFound();
-        var canSeeDraft = GroundsCaller.CanManageGround(HttpContext, exists.OwnerUserId);
-        if (exists.ListingStatus != GroundListingStatus.Published && !canSeeDraft)
+        if (!GroundsCaller.CanViewGround(HttpContext, exists))
             return NotFound();
 
-        take = Math.Clamp(take, 1, 50);
+        take = Paging.ClampTake(take);
         var query = _db.Reviews.AsNoTracking()
             .Include(r => r.Booking)
             .Where(r => r.GroundId == id && !r.Booking.IsDeleted);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
 
         if (GroundsMap.TryDecodeCursor(cursor, out var created, out var reviewId))
         {
@@ -272,7 +277,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
             next = GroundsMap.EncodeCursor(last.CreatedAtUtc, last.Id);
         }
 
-        return Ok(new GroundReviewPage(rows.Select(GroundsMap.ToReview).ToList(), next, hasMore));
+        return Ok(new GroundReviewPage(rows.Select(GroundsMap.ToReview).ToList(), next, hasMore, total));
     }
 
     [HttpGet("{id:guid}/images/{fileName}")]

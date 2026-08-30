@@ -10,11 +10,13 @@
     <Grid>
         <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding LoadCommand}">
             <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" Padding="14" RowSpacing="8">
-                <Picker Title="Ground"
-                        ItemsSource="{Binding GroundPicks}"
-                        ItemDisplayBinding="{Binding Name, x:DataType=vm:GroundPick}"
-                        SelectedItem="{Binding SelectedGround}"
-                        IsVisible="{Binding HasGroundPicker}" />
+                <VerticalStackLayout Spacing="4" IsVisible="{Binding HasGroundPicker}">
+                    <Label Text="Ground" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select ground"
+                            ItemsSource="{Binding GroundPicks}"
+                            ItemDisplayBinding="{Binding Name, x:DataType=vm:GroundPick}"
+                            SelectedItem="{Binding SelectedGround}" />
+                </VerticalStackLayout>
 
                 <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
                     <Button Text="‹"
@@ -187,7 +189,8 @@
                                         </Label>
                                     </HorizontalStackLayout>
                                     <Label Text="{Binding MoneyLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
-                                    <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding ServicesLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding HasServicesLine}" />
+                                    <Label Text="{Binding ShopLine}" FontSize="12" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding HasShopLine}" />
                                     <Label Text="{Binding Notes}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
                                 </VerticalStackLayout>
                             </DataTemplate>

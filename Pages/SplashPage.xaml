@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
+             x:Class="JPL.Pages.SplashPage"
+             Shell.NavBarIsVisible="False"
+             NavigationPage.HasNavigationBar="False"
+             BackgroundColor="#0D1B2A">
+
+    <VerticalStackLayout Spacing="18"
+                         VerticalOptions="Center"
+                         HorizontalOptions="Center"
+                         Padding="28">
+        <Image Source="cric360_logo.png"
+               HeightRequest="140"
+               Aspect="AspectFit"
+               HorizontalOptions="Center"
+               SemanticProperties.Description="Cric360 logo" />
+        <Label Text="CRIC360"
+               HorizontalOptions="Center"
+               HorizontalTextAlignment="Center"
+               TextColor="#B6FF3B"
+               FontSize="18"
+               FontAttributes="Bold"
+               CharacterSpacing="2" />
+        <ctrl:SloganTicker TextColor="#B8C4D4"
+                           FontSize="13"
+                           HorizontalOptions="Center"
+                           WidthRequest="320"
+                           IntervalMs="2800" />
+        <ActivityIndicator x:Name="Spinner"
+                           IsRunning="True"
+                           Color="#B6FF3B"
+                           WidthRequest="44"
+                           HeightRequest="44"
+                           HorizontalOptions="Center"
+                           Margin="0,12,0,0" />
+        <Label x:Name="StatusLabel"
+               Text="Loading…"
+               TextColor="#8899AA"
+               FontSize="14"
+               HorizontalTextAlignment="Center"
+               HorizontalOptions="Center" />
+    </VerticalStackLayout>
+</ContentPage>

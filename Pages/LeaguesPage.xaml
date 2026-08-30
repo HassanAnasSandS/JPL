@@ -11,11 +11,15 @@
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <Label Text="Leagues"
-                   FontSize="22"
-                   FontAttributes="Bold"
-                   VerticalOptions="Center"
-                   TextColor="{StaticResource Primary}" />
+            <VerticalStackLayout VerticalOptions="Center">
+                <Label Text="Leagues"
+                       FontSize="22"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="{Binding CountLabel}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
             <Button Grid.Column="1"
                     Text="+ Add"
                     Style="{StaticResource GoldButton}"
@@ -34,6 +38,8 @@
 
         <RefreshView Grid.Row="2" IsRefreshing="{Binding IsBusy, Mode=OneWay}" Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+                            RemainingItemsThreshold="1"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="No leagues yet.">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="vm:LeagueRow">

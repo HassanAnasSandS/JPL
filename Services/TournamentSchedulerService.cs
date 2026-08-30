@@ -68,6 +68,7 @@ public sealed class SchedulerMatchView
 public interface ITournamentSchedulerService
 {
     Task<IReadOnlyList<SchedulerListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<SchedulerListItem>> GetPageAsync(int skip, string? q, Guid? createdBy = null, CancellationToken ct = default);
     Task<SchedulerDetail> GetAsync(Guid id, CancellationToken ct = default);
     Task<Guid> SaveAsync(
         Guid? id,
@@ -119,6 +120,34 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             CreatedByUserId = t.CreatedByUserId,
             CreatedByUsername = t.CreatedByUsername ?? string.Empty
         }).ToList();
+    }
+
+    public async Task<ApiPagedResult<SchedulerListItem>> GetPageAsync(int skip, string? q, Guid? createdBy = null, CancellationToken ct = default)
+    {
+        EnsureCanUse();
+        var page = await _api.GetSchedulerPageAsync(skip, q, createdBy, ct).ConfigureAwait(false);
+        var items = (page.Items ?? []).Select(t => new SchedulerListItem
+        {
+            Id = t.Id,
+            Name = t.Name,
+            MetaLine = string.IsNullOrWhiteSpace(t.MetaLine)
+                ? SchedulerEngine.SetupHint(
+                    t.GroupCount,
+                    t.QualifyPerGroup,
+                    (SchedulerKnockoutFormat)t.KnockoutFormat,
+                    (SchedulerRoundRobinType)t.RoundRobinType,
+                    t.TeamCount)
+                : t.MetaLine,
+            StatusText = string.IsNullOrWhiteSpace(t.StatusText)
+                ? SchedulerEngine.StatusText((SchedulerStatus)t.Status)
+                : t.StatusText,
+            WinnerLine = t.WinnerLine,
+            Status = (SchedulerStatus)t.Status,
+            CanEdit = t.CanEdit,
+            CreatedByUserId = t.CreatedByUserId,
+            CreatedByUsername = t.CreatedByUsername ?? string.Empty
+        }).ToList();
+        return page.WithItems(items);
     }
 
     public async Task<SchedulerDetail> GetAsync(Guid id, CancellationToken ct = default)

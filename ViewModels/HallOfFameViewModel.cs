@@ -8,7 +8,7 @@ namespace JPL.ViewModels;
 public partial class HallOfFameViewModel : ObservableObject
 {
     private readonly IApiClient _api;
-    private HallOfFameBundle _bundle = new();
+    private int _loadBusy;
 
     public ObservableCollection<TrophyRow> Items { get; } = new();
 
@@ -18,19 +18,32 @@ public partial class HallOfFameViewModel : ObservableObject
     [ObservableProperty] private string categoryTitle = "Player of the Match";
     [ObservableProperty] private string categoryHint = "Trophies for Player of the Match awards";
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
 
     public bool IsPotm => SelectedCategory == 0;
     public bool IsCaptain => SelectedCategory == 1;
     public bool IsTourChamp => SelectedCategory == 2;
     public bool IsSeriesChamp => SelectedCategory == 3;
+    public string CountLabel => TotalCount <= 0 ? "No trophies" : $"{Items.Count} of {TotalCount}";
+    private string CategoryKey => SelectedCategory switch
+    {
+        1 => "captain",
+        2 => "tourchamp",
+        3 => "serieschamp",
+        _ => "potm"
+    };
 
     public HallOfFameViewModel(IApiClient api, IFormatService formats)
     {
         _api = api;
         FormatFilter = new FormatFilterViewModel(formats);
-        FormatFilter.Committed += (_, _) => _ = LoadAsync();
+        FormatFilter.Committed += (_, _) => _ = ReloadAsync();
     }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
 
     partial void OnSelectedCategoryChanged(int value)
     {
@@ -38,7 +51,8 @@ public partial class HallOfFameViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCaptain));
         OnPropertyChanged(nameof(IsTourChamp));
         OnPropertyChanged(nameof(IsSeriesChamp));
-        ApplyCategory();
+        ApplyCategoryTitles();
+        _ = ReloadAsync();
     }
 
     [RelayCommand]
@@ -54,16 +68,42 @@ public partial class HallOfFameViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
             await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
-            _bundle = await _api.GetHallOfFameAsync(FormatFilter.SelectedIds).ConfigureAwait(true);
-            ApplyCategory();
+            var page = await _api.GetHallOfFamePageAsync(
+                    Items.Count,
+                    CategoryKey,
+                    q: null,
+                    FormatFilter.SelectedIds)
+                .ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ListPaging.Append(Items, page.Items, r => r.PlayerId);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
@@ -72,43 +112,40 @@ public partial class HallOfFameViewModel : ObservableObject
                 : ex.Message;
             if (NetworkUi.IsNetworkFailure(ex))
                 await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
-            Items.Clear();
+            if (Items.Count == 0)
+            {
+                Items.Clear();
+                TotalCount = 0;
+            }
         }
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
-    private void ApplyCategory()
+    private void ApplyCategoryTitles()
     {
-        IReadOnlyList<TrophyRow> rows;
         switch (SelectedCategory)
         {
             case 1:
                 CategoryTitle = "Captain Win Trophies";
                 CategoryHint = "Trophy each time a captain’s side wins the match";
-                rows = _bundle.CaptainTrophies;
                 break;
             case 2:
                 CategoryTitle = "Tournament Champions";
                 CategoryHint = "Trophy when a captain’s side wins the tournament";
-                rows = _bundle.TournamentChampionTrophies;
                 break;
             case 3:
                 CategoryTitle = "Series Champions";
                 CategoryHint = "Trophy when a captain’s side wins the series";
-                rows = _bundle.SeriesChampionTrophies;
                 break;
             default:
                 CategoryTitle = "Player of the Match";
                 CategoryHint = "Trophies awarded when a match is completed";
-                rows = _bundle.PlayerOfTheMatch;
                 break;
         }
-
-        Items.Clear();
-        foreach (var row in rows)
-            Items.Add(row);
     }
 }

@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using JPL.Domain;
 using JPL.Services;
 
 namespace JPL.ViewModels;
@@ -31,22 +30,27 @@ public partial class TournamentSchedulerViewModel : ObservableObject
 
     private readonly ITournamentSchedulerService _scheduler;
     private readonly IAuthService _auth;
+    private int _loadBusy;
+    private int _filterGen;
+    private int _suppressFilter;
 
     public ObservableCollection<SchedulerRow> Items { get; } = new();
     public ObservableCollection<SchedulerUserOption> UserFilterOptions { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? nameFilter;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private SchedulerUserOption? selectedUserFilter;
-
-    private List<SchedulerListItem> _all = new();
 
     public bool CanWrite => _auth.Current is { IsGuest: false };
     public bool ShowUserFilter => _auth.Current?.CanManageLeagues == true;
     public bool HasFilter =>
         !string.IsNullOrWhiteSpace(NameFilter)
         || (ShowUserFilter && SelectedUserFilter is { } user && user.Id != Guid.Empty);
+    public string CountLabel => TotalCount <= 0 ? "No schedules" : $"{Items.Count} of {TotalCount}";
 
     public TournamentSchedulerViewModel(ITournamentSchedulerService scheduler, IAuthService auth)
     {
@@ -59,100 +63,116 @@ public partial class TournamentSchedulerViewModel : ObservableObject
     partial void OnNameFilterChanged(string? value)
     {
         OnPropertyChanged(nameof(HasFilter));
-        ApplyFilter();
+        if (_suppressFilter == 0)
+            _ = ReloadDebouncedAsync();
     }
 
     partial void OnSelectedUserFilterChanged(SchedulerUserOption? value)
     {
         OnPropertyChanged(nameof(HasFilter));
-        ApplyFilter();
+        if (_suppressFilter == 0)
+            _ = ReloadAsync();
+    }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
+    [RelayCommand]
+    private Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
+    {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    private async Task LoadAsync()
+    private async Task LoadMoreAsync()
     {
-        if (IsBusy) return;
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             OnPropertyChanged(nameof(CanWrite));
             OnPropertyChanged(nameof(ShowUserFilter));
-            _all = (await _scheduler.GetAllAsync().ConfigureAwait(true)).ToList();
-            RebuildUserFilter();
-            ApplyFilter();
+
+            var createdBy = ShowUserFilter && SelectedUserFilter is { Id: var userId } && userId != Guid.Empty
+                ? userId
+                : (Guid?)null;
+            var page = await _scheduler.GetPageAsync(Items.Count, NameFilter, createdBy).ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            var rows = page.Items.Select(ToRow).ToList();
+            ListPaging.Append(Items, rows, r => r.Id);
+            MergeUserFilter(page.Items);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            _all = [];
-            Items.Clear();
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
+        }
     }
 
-    private void RebuildUserFilter()
+    private SchedulerRow ToRow(SchedulerListItem s) => new()
     {
-        var keepId = SelectedUserFilter?.Id ?? Guid.Empty;
-        UserFilterOptions.Clear();
-        UserFilterOptions.Add(AllUsersOption);
+        Id = s.Id,
+        Name = s.Name,
+        MetaLine = s.MetaLine,
+        StatusText = s.StatusText,
+        WinnerLine = s.WinnerLine,
+        OwnerLine = ShowUserFilter && !string.IsNullOrWhiteSpace(s.CreatedByUsername)
+            ? $"Owner: {s.CreatedByUsername}"
+            : string.Empty,
+        CanEdit = CanWrite && s.CanEdit
+    };
 
-        if (ShowUserFilter)
-        {
-            foreach (var group in _all
-                .GroupBy(s => s.CreatedByUserId)
-                .OrderBy(g => g.First().CreatedByUsername, StringComparer.OrdinalIgnoreCase))
-            {
-                var name = string.IsNullOrWhiteSpace(group.First().CreatedByUsername)
-                    ? "Unknown user"
-                    : group.First().CreatedByUsername;
-                UserFilterOptions.Add(new SchedulerUserOption { Id = group.Key, Name = name });
-            }
-        }
-
-        SelectedUserFilter = UserFilterOptions.FirstOrDefault(x => x.Id == keepId) ?? AllUsersOption;
-        OnPropertyChanged(nameof(HasFilter));
-    }
-
-    private void ApplyFilter()
+    private void MergeUserFilter(IReadOnlyList<SchedulerListItem> rows)
     {
-        Items.Clear();
-        IEnumerable<SchedulerListItem> q = _all;
-        if (ShowUserFilter && SelectedUserFilter is { Id: var userId } && userId != Guid.Empty)
-            q = q.Where(s => s.CreatedByUserId == userId);
+        if (!ShowUserFilter)
+            return;
 
-        if (!string.IsNullOrWhiteSpace(NameFilter))
+        var have = UserFilterOptions.Select(x => x.Id).ToHashSet();
+        foreach (var row in rows)
         {
-            var f = NameFilter.Trim();
-            q = q.Where(s =>
-                s.Name.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || s.StatusText.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || s.MetaLine.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || s.CreatedByUsername.Contains(f, StringComparison.OrdinalIgnoreCase));
-        }
-
-        foreach (var s in q)
-        {
-            Items.Add(new SchedulerRow
-            {
-                Id = s.Id,
-                Name = s.Name,
-                MetaLine = s.MetaLine,
-                StatusText = s.StatusText,
-                WinnerLine = s.WinnerLine,
-                OwnerLine = ShowUserFilter && !string.IsNullOrWhiteSpace(s.CreatedByUsername)
-                    ? $"Owner: {s.CreatedByUsername}"
-                    : string.Empty,
-                CanEdit = CanWrite && s.CanEdit
-            });
+            if (!have.Add(row.CreatedByUserId))
+                continue;
+            var name = string.IsNullOrWhiteSpace(row.CreatedByUsername) ? "Unknown user" : row.CreatedByUsername;
+            UserFilterOptions.Add(new SchedulerUserOption { Id = row.CreatedByUserId, Name = name });
         }
     }
 
     [RelayCommand]
     private void ClearFilter()
     {
+        Interlocked.Exchange(ref _suppressFilter, 1);
         NameFilter = null;
         SelectedUserFilter = AllUsersOption;
+        Interlocked.Exchange(ref _suppressFilter, 0);
+        _ = ReloadAsync();
     }
 
     [RelayCommand]

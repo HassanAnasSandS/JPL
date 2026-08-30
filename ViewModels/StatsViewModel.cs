@@ -10,12 +10,12 @@ public partial class StatsViewModel : ObservableObject
     private readonly IStatsService _stats;
     private readonly IVenueService _venues;
     public FormatFilterViewModel FormatFilter { get; }
-    private List<PlayerCareerSummary> _all = new();
-    private List<TeamCareerSummary> _allTeams = new();
     private string _sortColumn = "PlayerName";
     private bool _sortAscending = true;
     /// <summary>Shell route to return to when leaving player detail (e.g. "//rankings"). Null = stay on Statistics table.</summary>
     private string? _detailReturnRoute;
+    private int _loadBusy;
+    private int _filterGen;
 
     public ObservableCollection<PlayerCareerSummary> Leaderboard { get; } = new();
     public ObservableCollection<TeamCareerSummary> TeamLeaderboard { get; } = new();
@@ -29,6 +29,9 @@ public partial class StatsViewModel : ObservableObject
     [ObservableProperty] private bool showDetail;
     [ObservableProperty] private int headToHeadMode;
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private bool isSorting;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private string confrontationHeader = "Batting vs bowlers";
@@ -49,6 +52,7 @@ public partial class StatsViewModel : ObservableObject
     public bool ShowTable => !ShowDetail;
     public bool ShowLoading => IsBusy || IsSorting;
     public string LoadingMessage => IsSorting ? "Sorting…" : "Loading…";
+    public string CountLabel => TotalCount <= 0 ? "No stats" : $"{(IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count)} of {TotalCount}";
     public bool IsBattingTab => HeadToHeadMode == 0;
     public bool IsBowlingTab => HeadToHeadMode == 1;
     public bool IsCaptainTab => HeadToHeadMode == 2;
@@ -136,6 +140,7 @@ public partial class StatsViewModel : ObservableObject
         };
         VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All venues" });
         SelectedVenue = VenueOptions[0];
+        ApplyCategory();
     }
 
     partial void OnShowDetailChanged(bool value)
@@ -173,8 +178,10 @@ public partial class StatsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasActiveFilters));
         OnPropertyChanged(nameof(FiltersToggleText));
-        ApplySort();
+        _ = ReloadDebouncedAsync();
     }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
 
     partial void OnSelectedVenueChanged(VenueListItem? value)
     {
@@ -216,7 +223,7 @@ public partial class StatsViewModel : ObservableObject
             SelectedCategory = 3;
         else
             ApplyCategory();
-        _ = LoadAsync();
+        _ = ReloadAsync();
     }
 
     partial void OnSelectedCategoryChanged(int oldValue, int newValue)
@@ -248,8 +255,7 @@ public partial class StatsViewModel : ObservableObject
             CaptainVs.Clear();
             TeamVs.Clear();
         }
-        if (oldValue == 8 || newValue == 8)
-            _ = LoadAsync();
+        _ = ReloadAsync();
     }
 
     [RelayCommand]
@@ -335,24 +341,49 @@ public partial class StatsViewModel : ObservableObject
     private void SetDefaultSort(string column)
     {
         if (string.Equals(_sortColumn, column, StringComparison.Ordinal))
-        {
-            ApplySort();
             return;
-        }
 
         _sortColumn = column;
         _sortAscending = false;
         OnPropertyChanged(nameof(SortColumn));
         OnPropertyChanged(nameof(SortAscending));
-        ApplySort();
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
+        HasMore = true;
+        Leaderboard.Clear();
+        TeamLeaderboard.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
+            var existing = IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count;
+            if (existing == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
 
             await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
@@ -375,19 +406,10 @@ public partial class StatsViewModel : ObservableObject
                 }
             }
 
-            DateTime? from = null;
-            DateTime? toExclusive = null;
-            if (FilterByDate)
+            if (!TryDateRange(out var from, out var toExclusive, out var dateError))
             {
-                var fromLocal = FromDate.Date;
-                var toLocalExclusive = ToDate.Date.AddDays(1);
-                if (fromLocal > ToDate.Date)
-                {
-                    ErrorMessage = "From date must be on or before To date.";
-                    return;
-                }
-                from = fromLocal;
-                toExclusive = toLocalExclusive;
+                ErrorMessage = dateError;
+                return;
             }
 
             Guid? venueId = IsNetsSource
@@ -395,52 +417,64 @@ public partial class StatsViewModel : ObservableObject
                 : SelectedVenue is { Id: var id } && id != Guid.Empty ? id : null;
             var source = IsNetsSource ? "nets" : "matches";
             var formatIds = IsNetsSource ? null : FormatFilter.SelectedIds;
-            var loadTeams = IsTeamStats;
-            if (loadTeams)
+            var skip = IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count;
+
+            if (IsTeamStats)
             {
-                var teams = await _stats.GetTeamLeaderboardAsync(from, toExclusive, venueId, formatIds)
+                var page = await _stats.GetTeamLeaderboardPageAsync(
+                        skip, PlayerNameFilter, _sortColumn, _sortAscending, from, toExclusive, venueId, formatIds)
                     .ConfigureAwait(true);
                 if (!IsTeamStats)
                     return;
-                _allTeams = teams.ToList();
-                _all.Clear();
-                Leaderboard.Clear();
-                ApplySort();
+                TotalCount = page.TotalCount;
+                foreach (var row in page.Items)
+                    row.IsAltRow = row.Rank % 2 == 0;
+                ListPaging.Append(TeamLeaderboard, page.Items, t => t.TeamId);
+                HasMore = page.HasMore;
+                OnPropertyChanged(nameof(CountLabel));
                 if (ShowDetail && SelectedTeam is not null)
                 {
-                    var refreshed = _allTeams.FirstOrDefault(t => t.TeamId == SelectedTeam.TeamId);
+                    var refreshed = TeamLeaderboard.FirstOrDefault(t => t.TeamId == SelectedTeam.TeamId);
                     if (refreshed is not null)
                         SelectedTeam = refreshed;
                     await LoadTeamVsAsync().ConfigureAwait(true);
                 }
+                UpdateSortedByText();
                 return;
             }
 
-            var board = await _stats.GetLeaderboardAsync(from, toExclusive, venueId, source, formatIds).ConfigureAwait(true);
+            var board = await _stats.GetLeaderboardPageAsync(
+                    skip, PlayerNameFilter, _sortColumn, _sortAscending, from, toExclusive, venueId, source, formatIds)
+                .ConfigureAwait(true);
             if (IsTeamStats)
                 return;
-            _all = board.ToList();
-            _allTeams.Clear();
-            TeamLeaderboard.Clear();
-            ApplySort();
+            TotalCount = board.TotalCount;
+            foreach (var row in board.Items)
+                row.IsAltRow = row.Rank % 2 == 0;
+            ListPaging.Append(Leaderboard, board.Items, p => p.PlayerId);
+            HasMore = board.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
 
             if (ShowDetail && SelectedCareer is not null)
             {
-                var refreshed = _all.FirstOrDefault(p => p.PlayerId == SelectedCareer.PlayerId);
+                var refreshed = Leaderboard.FirstOrDefault(p => p.PlayerId == SelectedCareer.PlayerId);
                 if (refreshed is not null)
                     SelectedCareer = refreshed;
                 await LoadPlayerDetailsAsync().ConfigureAwait(true);
             }
+            UpdateSortedByText();
         }
         catch (Exception ex)
         {
-            _all.Clear();
-            Leaderboard.Clear();
-            _allTeams.Clear();
-            TeamLeaderboard.Clear();
-            Confrontations.Clear();
-            CaptainVs.Clear();
-            TeamVs.Clear();
+            if ((IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count) == 0)
+            {
+                Leaderboard.Clear();
+                TeamLeaderboard.Clear();
+                TotalCount = 0;
+                Confrontations.Clear();
+                CaptainVs.Clear();
+                TeamVs.Clear();
+            }
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — statistics need internet."
                 : $"Stats require API (server DB). {ex.Message}";
@@ -450,7 +484,33 @@ public partial class StatsViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
+    }
+
+    private bool TryDateRange(out DateTime? from, out DateTime? toExclusive, out string? error)
+    {
+        from = null;
+        toExclusive = null;
+        error = null;
+        if (!FilterByDate)
+            return true;
+        var fromLocal = FromDate.Date;
+        if (fromLocal > ToDate.Date)
+        {
+            error = "From date must be on or before To date.";
+            return false;
+        }
+        from = fromLocal;
+        toExclusive = ToDate.Date.AddDays(1);
+        return true;
+    }
+
+    private void UpdateSortedByText()
+    {
+        var dir = _sortAscending ? "↑" : "↓";
+        SortedByText = $"{DisplayName(_sortColumn)} {dir}  ·  tap a column to sort";
     }
 
     [RelayCommand]
@@ -500,32 +560,7 @@ public partial class StatsViewModel : ObservableObject
         IsSorting = true;
         try
         {
-            // Let the spinner paint so the tap is visibly acknowledged.
-            await Task.Delay(50).ConfigureAwait(true);
-
-            var sortColumn = _sortColumn;
-            var ascending = _sortAscending;
-            if (IsTeamStats)
-            {
-                var source = FilteredTeamRows();
-                var ordered = await Task.Run(() => BuildSortedTeamRows(source, sortColumn, ascending)).ConfigureAwait(true);
-                NumberTeamRows(ordered);
-                TeamLeaderboard.Clear();
-                foreach (var row in ordered)
-                    TeamLeaderboard.Add(row);
-            }
-            else
-            {
-                var source = FilteredRows();
-                var ordered = await Task.Run(() => BuildSortedRows(source, sortColumn, ascending)).ConfigureAwait(true);
-                NumberRows(ordered);
-                Leaderboard.Clear();
-                foreach (var row in ordered)
-                    Leaderboard.Add(row);
-            }
-
-            var dir = _sortAscending ? "↑" : "↓";
-            SortedByText = $"{DisplayName(_sortColumn)} {dir}  ·  tap a column to sort";
+            await ReloadAsync().ConfigureAwait(true);
         }
         finally
         {
@@ -534,208 +569,6 @@ public partial class StatsViewModel : ObservableObject
     }
 
     private bool CanSort(string? column) => !IsSorting && !IsBusy && ShowTable;
-
-    private void ApplySort()
-    {
-        if (IsTeamStats)
-        {
-            var ordered = BuildSortedTeamRows(FilteredTeamRows(), _sortColumn, _sortAscending);
-            NumberTeamRows(ordered);
-            TeamLeaderboard.Clear();
-            foreach (var row in ordered)
-                TeamLeaderboard.Add(row);
-        }
-        else
-        {
-            var ordered = BuildSortedRows(FilteredRows(), _sortColumn, _sortAscending);
-            NumberRows(ordered);
-            Leaderboard.Clear();
-            foreach (var row in ordered)
-                Leaderboard.Add(row);
-        }
-
-        var dir = _sortAscending ? "↑" : "↓";
-        SortedByText = $"{DisplayName(_sortColumn)} {dir}  ·  tap a column to sort";
-    }
-
-    private static void NumberRows(IReadOnlyList<PlayerCareerSummary> rows)
-    {
-        for (var i = 0; i < rows.Count; i++)
-        {
-            rows[i].Rank = i + 1;
-            rows[i].IsAltRow = i % 2 == 1;
-        }
-    }
-
-    private static void NumberTeamRows(IReadOnlyList<TeamCareerSummary> rows)
-    {
-        for (var i = 0; i < rows.Count; i++)
-        {
-            rows[i].Rank = i + 1;
-            rows[i].IsAltRow = i % 2 == 1;
-        }
-    }
-
-    private List<PlayerCareerSummary> FilteredRows()
-    {
-        IEnumerable<PlayerCareerSummary> q = _all;
-        if (!string.IsNullOrWhiteSpace(PlayerNameFilter))
-        {
-            var f = PlayerNameFilter.Trim();
-            q = q.Where(p => p.PlayerName.Contains(f, StringComparison.OrdinalIgnoreCase));
-        }
-        return q.ToList();
-    }
-
-    private List<TeamCareerSummary> FilteredTeamRows()
-    {
-        IEnumerable<TeamCareerSummary> q = _allTeams;
-        if (!string.IsNullOrWhiteSpace(PlayerNameFilter))
-        {
-            var f = PlayerNameFilter.Trim();
-            q = q.Where(t => t.TeamName.Contains(f, StringComparison.OrdinalIgnoreCase));
-        }
-        return q.ToList();
-    }
-
-    private static List<PlayerCareerSummary> BuildSortedRows(
-        IReadOnlyList<PlayerCareerSummary> source,
-        string sortColumn,
-        bool ascending)
-    {
-        IOrderedEnumerable<PlayerCareerSummary> ordered = ascending
-            ? source.OrderBy(r => SortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys))
-            : source.OrderByDescending(r => SortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys));
-
-        return ordered.ThenBy(r => r.PlayerName, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    private static List<TeamCareerSummary> BuildSortedTeamRows(
-        IReadOnlyList<TeamCareerSummary> source,
-        string sortColumn,
-        bool ascending)
-    {
-        IOrderedEnumerable<TeamCareerSummary> ordered = ascending
-            ? source.OrderBy(r => TeamSortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys))
-            : source.OrderByDescending(r => TeamSortKey(r, sortColumn), Comparer<object?>.Create(CompareKeys));
-
-        return ordered.ThenBy(r => r.TeamName, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    private static int CompareKeys(object? a, object? b)
-    {
-        if (a is null && b is null) return 0;
-        if (a is null) return -1;
-        if (b is null) return 1;
-        if (a is IComparable ca && a.GetType() == b.GetType())
-            return ca.CompareTo(b);
-        return string.CompareOrdinal(a.ToString(), b.ToString());
-    }
-
-    private static object SortKey(PlayerCareerSummary r, string column) => column switch
-    {
-        "PlayerName" => r.PlayerName,
-        "Sessions" => r.Sessions,
-        "Matches" => r.Matches,
-        "Won" => r.Won,
-        "Loss" => r.Loss,
-        "Tied" => r.Tied,
-        "CaptainMatches" => r.CaptainMatches,
-        "CaptainWon" => r.CaptainWon,
-        "CaptainLoss" => r.CaptainLoss,
-        "CaptainTied" => r.CaptainTied,
-        "Tournaments" => r.Tournaments,
-        "TournamentWon" => r.TournamentWon,
-        "TournamentLoss" => r.TournamentLoss,
-        "TournamentTied" => r.TournamentTied,
-        "CaptainTournaments" => r.CaptainTournaments,
-        "CaptainTournamentWon" => r.CaptainTournamentWon,
-        "CaptainTournamentLoss" => r.CaptainTournamentLoss,
-        "CaptainTournamentTied" => r.CaptainTournamentTied,
-        "Series" => r.Series,
-        "SeriesWon" => r.SeriesWon,
-        "SeriesLoss" => r.SeriesLoss,
-        "SeriesTied" => r.SeriesTied,
-        "CaptainSeries" => r.CaptainSeries,
-        "CaptainSeriesWon" => r.CaptainSeriesWon,
-        "CaptainSeriesLoss" => r.CaptainSeriesLoss,
-        "CaptainSeriesTied" => r.CaptainSeriesTied,
-        "BallsFaced" => r.BallsFaced,
-        "Runs" => r.Runs,
-        "Dots" => r.Dots,
-        "Ones" => r.Ones,
-        "Twos" => r.Twos,
-        "Threes" => r.Threes,
-        "Fours" => r.Fours,
-        "Fives" => r.Fives,
-        "Sixes" => r.Sixes,
-        "WidesFaced" => r.WidesFaced,
-        "NoBallsFaced" => r.NoBallsFaced,
-        "Dismissals" => r.Dismissals,
-        "BowledOut" => r.BowledOut,
-        "CaughtOut" => r.CaughtOut,
-        "LbwOut" => r.LbwOut,
-        "RunOut" => r.RunOut,
-        "StumpedOut" => r.StumpedOut,
-        "HitWicketOut" => r.HitWicketOut,
-        "BattingStrikeRate" => r.BallsFaced == 0 ? double.MinValue : r.BattingStrikeRate,
-        "BattingAverage" => r.BattingAverage,
-        "AvgPerSession" => r.Sessions <= 0 ? double.MinValue : r.AvgPerSession,
-        "AvgPerOut" => r.Dismissals <= 0 ? double.MinValue : r.AvgPerOut,
-        "HighestScore" => r.InningsBatted <= 0
-            ? (int.MinValue, 0)
-            : (r.HighestScore, r.HighestScoreNotOut ? 1 : 0),
-        "OversBowledBalls" => r.OversBowledBalls,
-        "RunsConceded" => r.RunsConceded,
-        "Wickets" => r.Wickets,
-        "BestBowling" => r.BestBowlingText == "-"
-            ? (int.MinValue, 0)
-            : (r.BestBowlingWickets, -r.BestBowlingRuns),
-        "HatTricks" => r.HatTricks,
-        "DotBallsBowled" => r.DotBallsBowled,
-        "WidesBowled" => r.WidesBowled,
-        "NoBallsBowled" => r.NoBallsBowled,
-        "ByesConceded" => r.ByesConceded,
-        "LegByesConceded" => r.LegByesConceded,
-        "BowledWkts" => r.BowledWkts,
-        "CaughtWkts" => r.CaughtWkts,
-        "LbwWkts" => r.LbwWkts,
-        "StumpedWkts" => r.StumpedWkts,
-        "HitWicketWkts" => r.HitWicketWkts,
-        "RunOutWkts" => r.RunOutWkts,
-        "BowlingStrikeRate" => r.Wickets == 0 ? double.MaxValue : r.BowlingStrikeRate,
-        "BowlingEconomy" => r.OversBowledBalls == 0 ? double.MaxValue : r.BowlingEconomy,
-        "Catches" => r.Catches,
-        "RunOutsEffected" => r.RunOutsEffected,
-        "Stumpings" => r.Stumpings,
-        "AttendanceTotal" => r.AttendanceTotal,
-        "AttendancePresent" => r.AttendancePresent,
-        "AttendanceAbsent" => r.AttendanceAbsent,
-        "AttendancePct" => r.AttendanceTotal == 0 ? double.MinValue : r.AttendancePct,
-        _ => r.PlayerName
-    };
-
-    private static object TeamSortKey(TeamCareerSummary r, string column) => column switch
-    {
-        "TeamName" => r.TeamName,
-        "Played" => r.Played,
-        "Won" => r.Won,
-        "Lost" => r.Lost,
-        "Tied" => r.Tied,
-        "Points" => r.Points,
-        "WinPct" => r.Played == 0 ? double.MinValue : r.WinPct,
-        "Nrr" => r.Played == 0 ? double.MinValue : r.Nrr,
-        "RunsFor" => r.RunsFor,
-        "RunsAgainst" => r.RunsAgainst,
-        "Tournaments" => r.Tournaments,
-        "TournamentWon" => r.TournamentWon,
-        "TournamentLoss" => r.TournamentLoss,
-        "Series" => r.Series,
-        "SeriesWon" => r.SeriesWon,
-        "SeriesLoss" => r.SeriesLoss,
-        "SeriesTied" => r.SeriesTied,
-        _ => r.TeamName
-    };
 
     private static string DisplayName(string column) => column switch
     {
@@ -872,23 +705,13 @@ public partial class StatsViewModel : ObservableObject
             TeamVs.Clear();
             CaptainVs.Clear();
 
-            if (_all.Count == 0)
-            {
-                var board = await _stats.GetLeaderboardAsync().ConfigureAwait(true);
-                _all = board.ToList();
-                ApplySort();
-            }
-
-            var career = _all.FirstOrDefault(p => p.PlayerId == playerId)
+            var career = Leaderboard.FirstOrDefault(p => p.PlayerId == playerId)
                          ?? await _stats.GetCareerAsync(playerId).ConfigureAwait(true);
             if (career is null)
             {
                 ErrorMessage = "Player stats not found.";
                 return;
             }
-
-            if (_all.All(p => p.PlayerId != career.PlayerId))
-                _all.Add(career);
 
             SelectedCareer = career;
             ShowDetail = true;

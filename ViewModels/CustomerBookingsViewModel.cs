@@ -15,7 +15,10 @@ public partial class CustomerBookingsViewModel : ObservableObject
 
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
+
+    public string CountLabel => TotalCount <= 0 ? "No bookings" : $"{Items.Count} of {TotalCount}";
 
     public CustomerBookingsViewModel(IGroundsApiClient api) => _api = api;
 
@@ -39,12 +42,12 @@ public partial class CustomerBookingsViewModel : ObservableObject
                 IsBusy = true;
             ErrorMessage = null;
             var page = await _api.GetMyBookingsAsync(_cursor).ConfigureAwait(true);
-            foreach (var row in page)
+            foreach (var row in page.Items)
                 Items.Add(row);
-            HasMore = page.Count >= 20;
-            _cursor = HasMore && page.Count > 0
-                ? Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{page[^1].CreatedAtUtc.Ticks:D20}|{page[^1].Id:N}"))
-                : null;
+            TotalCount = page.TotalCount;
+            HasMore = page.HasMore;
+            _cursor = page.NextCursor;
+            OnPropertyChanged(nameof(CountLabel));
             if (Items.Count == 0)
                 ErrorMessage = "No bookings yet. Discover a ground and send a request.";
         }

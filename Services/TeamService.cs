@@ -5,6 +5,7 @@ namespace JPL.Services;
 public interface ITeamService
 {
     Task<IReadOnlyList<TeamListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<TeamListItem>> GetPageAsync(int skip, string? q, string? captain, int status, CancellationToken ct = default);
     /// <summary>Active teams only — for match create dropdowns.</summary>
     Task<IReadOnlyList<TeamListItem>> GetActiveAsync(CancellationToken ct = default);
     Task<TeamDetail?> GetAsync(Guid id, CancellationToken ct = default);
@@ -72,6 +73,27 @@ public sealed class TeamService : ITeamService
 
     public async Task<IReadOnlyList<TeamListItem>> GetAllAsync(CancellationToken ct = default)
         => await QueryListAsync(activeOnly: false, ct).ConfigureAwait(false);
+
+    public async Task<ApiPagedResult<TeamListItem>> GetPageAsync(
+        int skip, string? q, string? captain, int status, CancellationToken ct = default)
+    {
+        var statusKey = status switch
+        {
+            1 => "active",
+            2 => "inactive",
+            _ => null
+        };
+        var page = await _api.GetTeamsPageAsync(skip, q, captain, statusKey, ct).ConfigureAwait(false);
+        var items = (page.Items ?? []).Select(t => new TeamListItem(
+            t.Id,
+            t.Name,
+            t.CaptainName,
+            t.PlayerCount,
+            t.IsActive,
+            t.PlayingCount)
+        { CaptainPlayerId = t.CaptainPlayerId }).ToList();
+        return page.WithItems(items);
+    }
 
     public async Task<IReadOnlyList<TeamListItem>> GetActiveAsync(CancellationToken ct = default)
         => await QueryListAsync(activeOnly: true, ct).ConfigureAwait(false);

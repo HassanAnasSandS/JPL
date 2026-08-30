@@ -10,11 +10,17 @@ public partial class NetSessionsViewModel : ObservableObject
     private readonly INetSessionService _sessions;
     private readonly IAuthService _auth;
     private readonly ISyncService _sync;
-    private List<NetSessionListItem> _all = new();
+    private int _loadBusy;
+    private int _filterGen;
+    private int _suppressFilter;
+    private int _pinnedCount;
 
     public ObservableCollection<NetSessionListItem> Items { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool hasActiveSession;
@@ -23,6 +29,8 @@ public partial class NetSessionsViewModel : ObservableObject
     [ObservableProperty] private string nameFilter = string.Empty;
     [ObservableProperty] private bool filterByDate;
     [ObservableProperty] private DateTime filterDate = DateTime.Today;
+
+    public string CountLabel => TotalCount <= 0 ? "No sessions" : $"{Items.Count} of {TotalCount}";
 
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(NameFilter) || FilterByDate;
@@ -40,55 +48,112 @@ public partial class NetSessionsViewModel : ObservableObject
     partial void OnNameFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadDebouncedAsync();
     }
 
     partial void OnFilterByDateChanged(bool value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadAsync();
     }
 
-    partial void OnFilterDateChanged(DateTime value) => ApplyFilters();
+    partial void OnFilterDateChanged(DateTime value)
+    {
+        if (FilterByDate && _suppressFilter == 0)
+            _ = ReloadAsync();
+    }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
 
     [RelayCommand]
     private void ClearFilters()
     {
+        Interlocked.Exchange(ref _suppressFilter, 1);
         NameFilter = string.Empty;
         FilterByDate = false;
         FilterDate = DateTime.Today;
+        Interlocked.Exchange(ref _suppressFilter, 0);
+        _ = ReloadAsync();
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
+        HasMore = true;
+        _pinnedCount = 0;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             CanWrite = _auth.CanWrite;
-            _all = (await _sessions.GetAllAsync().ConfigureAwait(true)).ToList();
-            _active = await _sessions.GetActiveAsync().ConfigureAwait(true);
-            HasActiveSession = _active is not null;
-            AddButtonText = HasActiveSession ? "Continue" : "+ Add";
-            ActiveSessionHint = _active is null
-                ? null
-                : $"In progress: {_active.Name}. Saved on this phone until Complete + Sync.";
-            ApplyFilters();
+
+            if (Items.Count == 0)
+            {
+                _active = await _sessions.GetActiveAsync().ConfigureAwait(true);
+                HasActiveSession = _active is not null;
+                AddButtonText = HasActiveSession ? "Continue" : "+ Add";
+                ActiveSessionHint = _active is null
+                    ? null
+                    : $"In progress: {_active.Name}. Saved on this phone until Complete + Sync.";
+
+                var pinned = SessionFilter(await _sessions.GetPinnedListAsync().ConfigureAwait(true));
+                ListPaging.Append(Items, pinned, s => s.Id);
+                _pinnedCount = Items.Count;
+            }
+
+            var skip = Math.Max(0, Items.Count - _pinnedCount);
+            var date = FilterByDate ? FilterDate.ToString("yyyy-MM-dd") : null;
+            var page = await _sessions.GetCompletedPageAsync(skip, NameFilter, date).ConfigureAwait(true);
+            ListPaging.Append(Items, page.Items, s => s.Id);
+            TotalCount = _pinnedCount + page.TotalCount;
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
-    private void ApplyFilters()
+    private IEnumerable<NetSessionListItem> SessionFilter(IEnumerable<NetSessionListItem> source)
     {
-        IEnumerable<NetSessionListItem> q = _all;
+        IEnumerable<NetSessionListItem> q = source;
         if (!string.IsNullOrWhiteSpace(NameFilter))
         {
             var f = NameFilter.Trim();
@@ -101,9 +166,7 @@ public partial class NetSessionsViewModel : ObservableObject
             q = q.Where(s => s.SessionDateUtc.ToString("yyyy-MM-dd") == key);
         }
 
-        Items.Clear();
-        foreach (var item in q)
-            Items.Add(item);
+        return q;
     }
 
     [RelayCommand(CanExecute = nameof(CanWrite))]

@@ -9,12 +9,16 @@
              Title="My Grounds">
     <Grid RowDefinitions="Auto,*" Padding="14" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto">
-            <Label Text="My Grounds" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+            <VerticalStackLayout VerticalOptions="Center">
+                <Label Text="My Grounds" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                <Label Text="{x:Static svc:BrandSlogans.Grounds}" FontSize="12" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
+                <Label Text="{Binding CountLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
             <Button Grid.Column="1" Text="+ Add" Style="{StaticResource GoldButton}" Command="{Binding AddCommand}" />
         </Grid>
         <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
             <CollectionView ItemsSource="{Binding Items}"
-                            RemainingItemsThreshold="4"
+                            RemainingItemsThreshold="1"
                             RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="{Binding ErrorMessage}">
                 <CollectionView.ItemTemplate>

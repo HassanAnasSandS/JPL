@@ -16,17 +16,21 @@ public partial class FormatsViewModel : ObservableObject
 {
     private readonly IFormatService _formats;
     private readonly IAuthService _auth;
+    private int _loadBusy;
+    private int _filterGen;
 
     public ObservableCollection<FormatRow> Items { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? nameFilter;
     [ObservableProperty] private string? errorMessage;
 
-    private List<FormatListItem> _all = new();
-
     public bool CanWrite => _auth.CanWrite;
     public bool HasFilter => !string.IsNullOrWhiteSpace(NameFilter);
+    public string CountLabel => TotalCount <= 0 ? "No formats" : $"{Items.Count} of {TotalCount}";
 
     public FormatsViewModel(IFormatService formats, IAuthService auth)
     {
@@ -37,43 +41,67 @@ public partial class FormatsViewModel : ObservableObject
     partial void OnNameFilterChanged(string? value)
     {
         OnPropertyChanged(nameof(HasFilter));
-        ApplyFilter();
+        _ = ReloadDebouncedAsync();
+    }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
+    [RelayCommand]
+    private Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
+    {
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    private async Task LoadAsync()
+    private async Task LoadMoreAsync()
     {
-        if (IsBusy) return;
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
-            _all = (await _formats.GetAllAsync().ConfigureAwait(true)).ToList();
-            ApplyFilter();
+            var page = await _formats.GetPageAsync(Items.Count, NameFilter).ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ListPaging.Append(Items, page.Items.Select(x => new FormatRow
+            {
+                Id = x.Id,
+                Name = x.Name,
+                DetailsLine = x.DetailsLine
+            }), r => r.Id);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
-            _all = new();
-            Items.Clear();
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
-        finally { IsBusy = false; }
-    }
-
-    private void ApplyFilter()
-    {
-        Items.Clear();
-        IEnumerable<FormatListItem> q = _all;
-        if (!string.IsNullOrWhiteSpace(NameFilter))
+        finally
         {
-            var f = NameFilter.Trim();
-            q = q.Where(x =>
-                x.Name.Contains(f, StringComparison.OrdinalIgnoreCase)
-                || x.DetailsLine.Contains(f, StringComparison.OrdinalIgnoreCase));
+            IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
-
-        foreach (var x in q.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase))
-            Items.Add(new FormatRow { Id = x.Id, Name = x.Name, DetailsLine = x.DetailsLine });
     }
 
     [RelayCommand]

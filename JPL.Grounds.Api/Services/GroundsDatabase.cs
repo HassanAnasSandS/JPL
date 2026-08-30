@@ -76,6 +76,27 @@ public sealed class GroundsDatabase : IGroundsDbFactory
         await EnsureGroundLinksAsync(db, ct).ConfigureAwait(false);
         await EnsureGroundVideosAsync(db, ct).ConfigureAwait(false);
         await EnsureReviewsAsync(db, ct).ConfigureAwait(false);
+        await EnsureBookingMoneyAsync(db, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureBookingMoneyAsync(GroundsDbContext db, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF COL_LENGTH(N'dbo.Bookings', N'Discount') IS NULL
+                    ALTER TABLE dbo.Bookings ADD Discount decimal(12,2) NOT NULL CONSTRAINT DF_Bookings_Discount DEFAULT 0;
+                """, ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """ALTER TABLE "Bookings" ADD COLUMN "Discount" TEXT NOT NULL DEFAULT '0';""", ct)
+                .ConfigureAwait(false);
+        }
+        catch { /* already exists */ }
     }
 
     private async Task EnsureRateWindowsAsync(GroundsDbContext db, CancellationToken ct)
@@ -161,6 +182,7 @@ public sealed class GroundsDatabase : IGroundsDbFactory
                 SET PricesPerHour = 1
                 WHERE Kind IN (N'Hourly', N'Nets');
                 """, ct).ConfigureAwait(false);
+            await SeedDefaultHourlyOffersAsync(db, ct).ConfigureAwait(false);
             return;
         }
 
@@ -401,9 +423,16 @@ public sealed class GroundsDatabase : IGroundsDbFactory
                 BEGIN
                     CREATE TABLE [dbo].[GroundBookingOffers] (
                         [GroundId] uniqueidentifier NOT NULL,
-                        [Kind] nvarchar(24) NOT NULL,
+                        [Kind] nvarchar(64) NOT NULL,
+                        [Title] nvarchar(80) NOT NULL,
+                        [Hint] nvarchar(200) NULL,
                         [Price] decimal(12,2) NOT NULL,
+                        [NightPrice] decimal(12,2) NOT NULL CONSTRAINT DF_Offers_NightPrice DEFAULT 0,
+                        [WeekendPrice] decimal(12,2) NOT NULL CONSTRAINT DF_Offers_WeekendPrice DEFAULT 0,
+                        [WeekendNightPrice] decimal(12,2) NOT NULL CONSTRAINT DF_Offers_WeekendNightPrice DEFAULT 0,
                         [DurationHours] decimal(6,2) NOT NULL,
+                        [PricesPerHour] bit NOT NULL CONSTRAINT DF_Offers_PricesPerHour DEFAULT 0,
+                        [SortOrder] int NOT NULL CONSTRAINT DF_Offers_SortOrder DEFAULT 0,
                         [IsEnabled] bit NOT NULL,
                         CONSTRAINT [PK_GroundBookingOffers] PRIMARY KEY ([GroundId], [Kind]),
                         CONSTRAINT [FK_GroundBookingOffers_Grounds] FOREIGN KEY ([GroundId])
@@ -428,14 +457,6 @@ public sealed class GroundsDatabase : IGroundsDbFactory
                 IF COL_LENGTH(N'dbo.Bookings', N'BookedHours') IS NOT NULL
                     EXEC(N'UPDATE dbo.Bookings SET BookedHours = 0 WHERE BookedHours IS NULL');
                 """, ct).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                INSERT INTO dbo.GroundBookingOffers (GroundId, Kind, Price, DurationHours, IsEnabled)
-                SELECT g.Id, N'Hourly', g.HourlyRate, 1, CASE WHEN g.HourlyRate > 0 THEN 1 ELSE 0 END
-                FROM dbo.Grounds g
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM dbo.GroundBookingOffers o
-                    WHERE o.GroundId = g.Id AND o.Kind = N'Hourly');
-                """, ct).ConfigureAwait(false);
             return;
         }
 
@@ -459,6 +480,53 @@ public sealed class GroundsDatabase : IGroundsDbFactory
             try { await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false); }
             catch { /* already exists */ }
         }
+    }
+
+    private async Task SeedDefaultHourlyOffersAsync(GroundsDbContext db, CancellationToken ct)
+    {
+        if (!_sqlServer)
+            return;
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'dbo.GroundBookingOffers', N'U') IS NOT NULL
+               AND OBJECT_ID(N'dbo.Grounds', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.GroundBookingOffers', N'Title') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.GroundBookingOffers', N'NightPrice') IS NOT NULL
+                BEGIN
+                    INSERT INTO dbo.GroundBookingOffers
+                        (GroundId, Kind, Title, Price, DurationHours, IsEnabled,
+                         NightPrice, WeekendPrice, WeekendNightPrice, PricesPerHour, SortOrder)
+                    SELECT g.Id, N'Hourly', N'Hourly', ISNULL(g.HourlyRate, 0), 1,
+                           CASE WHEN ISNULL(g.HourlyRate, 0) > 0 THEN 1 ELSE 0 END,
+                           0, 0, 0, 1, 0
+                    FROM dbo.Grounds g
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM dbo.GroundBookingOffers o
+                        WHERE o.GroundId = g.Id AND o.Kind = N'Hourly');
+                END
+                ELSE IF COL_LENGTH(N'dbo.GroundBookingOffers', N'Title') IS NOT NULL
+                BEGIN
+                    INSERT INTO dbo.GroundBookingOffers (GroundId, Kind, Title, Price, DurationHours, IsEnabled)
+                    SELECT g.Id, N'Hourly', N'Hourly', ISNULL(g.HourlyRate, 0), 1,
+                           CASE WHEN ISNULL(g.HourlyRate, 0) > 0 THEN 1 ELSE 0 END
+                    FROM dbo.Grounds g
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM dbo.GroundBookingOffers o
+                        WHERE o.GroundId = g.Id AND o.Kind = N'Hourly');
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO dbo.GroundBookingOffers (GroundId, Kind, Price, DurationHours, IsEnabled)
+                    SELECT g.Id, N'Hourly', ISNULL(g.HourlyRate, 0), 1,
+                           CASE WHEN ISNULL(g.HourlyRate, 0) > 0 THEN 1 ELSE 0 END
+                    FROM dbo.Grounds g
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM dbo.GroundBookingOffers o
+                        WHERE o.GroundId = g.Id AND o.Kind = N'Hourly');
+                END
+            END
+            """, ct).ConfigureAwait(false);
     }
 
     private async Task EnsureCatalogAsync(GroundsDbContext db, CancellationToken ct)

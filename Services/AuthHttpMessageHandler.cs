@@ -58,13 +58,18 @@ public sealed class AuthHttpMessageHandler : DelegatingHandler
 
         if (!isAnonymous && response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            // Stale token (or local-only login with no token) must not crash the UI.
-            // Kick to login only when we actually sent a Bearer token the server rejected.
+            // Only kick out when the server says the account is gone. A generic 401
+            // (stale header, wrong host) must not wipe a saved login on every launch.
             if (sentToken && !_tokens.SuppressForcedLogout)
             {
-                _tokens.Clear();
-                var forcedLogout = _services.GetRequiredService<IAuthForcedLogout>();
-                _ = forcedLogout.ForceLogoutAsync("Please sign in again.");
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                response.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                if (AuthMessages.IsAccountGone(body))
+                {
+                    _tokens.Clear();
+                    var forcedLogout = _services.GetRequiredService<IAuthForcedLogout>();
+                    _ = forcedLogout.ForceLogoutAsync(body);
+                }
             }
         }
 

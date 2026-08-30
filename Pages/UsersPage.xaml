@@ -62,11 +62,15 @@
               RowDefinitions="Auto,Auto,*,Auto"
               RowSpacing="10">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <Label Text="Accounts"
-                       FontSize="22"
-                       FontAttributes="Bold"
-                       VerticalOptions="Center"
-                       TextColor="{StaticResource Primary}" />
+                <VerticalStackLayout VerticalOptions="Center">
+                    <Label Text="Accounts"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Primary}" />
+                    <Label Text="{Binding CountLabel}"
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                </VerticalStackLayout>
                 <Button Grid.Column="1"
                         Text="Lock"
                         Style="{StaticResource GhostButton}"
@@ -155,6 +159,8 @@
                          Command="{Binding LoadCommand}">
                 <CollectionView ItemsSource="{Binding Items}"
                                 SelectionMode="None"
+                                RemainingItemsThreshold="1"
+                                RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                                 EmptyView="No users found.">
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="vm:UserRow">

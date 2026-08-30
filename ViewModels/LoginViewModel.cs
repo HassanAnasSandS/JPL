@@ -34,6 +34,8 @@ public partial class LoginViewModel : ObservableObject
 
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
     public bool ShowLogin => !ShowSignup;
+    public bool ShowLoginForm => ShowLogin && IsFormEnabled;
+    public bool ShowSignupForm => ShowSignup && IsFormEnabled;
 
     public bool ShowBusyOverlay => IsBusy || _startup.IsBusy;
     public bool IsFormEnabled => !ShowBusyOverlay;
@@ -50,6 +52,7 @@ public partial class LoginViewModel : ObservableObject
         _navigator = navigator;
         _startup = startup;
         _startup.Changed += OnStartupChanged;
+        Username = Preferences.Default.Get(AuthService.SessionLastUsernameKey, string.Empty);
         NotifyOverlay();
     }
 
@@ -78,6 +81,8 @@ public partial class LoginViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowBusyOverlay));
         OnPropertyChanged(nameof(IsFormEnabled));
+        OnPropertyChanged(nameof(ShowLoginForm));
+        OnPropertyChanged(nameof(ShowSignupForm));
         OnPropertyChanged(nameof(BusyOverlayMessage));
         LoginCommand.NotifyCanExecuteChanged();
         SignupCommand.NotifyCanExecuteChanged();

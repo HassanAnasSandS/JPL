@@ -9,4 +9,6 @@ public partial class ModeChooserPage : ContentPage
         InitializeComponent();
         BindingContext = vm;
     }
+
+    protected override bool OnBackButtonPressed() => false;
 }

@@ -9,6 +9,7 @@ public sealed class VenueListItem
 public interface IVenueService
 {
     Task<IReadOnlyList<VenueListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<VenueListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<VenueListItem?> GetAsync(Guid id, CancellationToken ct = default);
     Task<VenueListItem> CreateAsync(string name, CancellationToken ct = default);
     Task<VenueListItem> UpdateAsync(Guid id, string name, CancellationToken ct = default);
@@ -32,6 +33,13 @@ public sealed class VenueService : IVenueService
         return list.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
             .Select(v => new VenueListItem { Id = v.Id, Name = v.Name })
             .ToList();
+    }
+
+    public async Task<ApiPagedResult<VenueListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var page = await _api.GetVenuesPageAsync(skip, q, ct).ConfigureAwait(false);
+        var items = (page.Items ?? []).Select(v => new VenueListItem { Id = v.Id, Name = v.Name }).ToList();
+        return page.WithItems(items);
     }
 
     public async Task<VenueListItem?> GetAsync(Guid id, CancellationToken ct = default)

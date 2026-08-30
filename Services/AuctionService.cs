@@ -115,6 +115,7 @@ public sealed class AuctionPlayerDetail
 public interface IAuctionService
 {
     Task<IReadOnlyList<AuctionListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<AuctionListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<AuctionDetail?> GetAsync(Guid id, CancellationToken ct = default);
     Task<Auction> CreateAsync(AuctionDraft draft, CancellationToken ct = default);
     Task<Auction> UpdateAsync(Guid id, AuctionDraft draft, CancellationToken ct = default);
@@ -151,6 +152,24 @@ public sealed class AuctionService : IAuctionService
                 a.Lots.Count(l => !l.IsSold),
                 a.Lots.Where(l => l.IsSold).Sum(l => l.SoldPrice ?? 0)))
             .ToList();
+    }
+
+    public async Task<ApiPagedResult<AuctionListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var page = await _api.GetAuctionsPageAsync(skip, q, ct).ConfigureAwait(false);
+        var items = (page.Items ?? [])
+            .Where(a => !a.IsDeleted)
+            .Select(a => new AuctionListItem(
+                a.Id,
+                a.Title,
+                a.AuctionDateUtc,
+                a.Captains.Count,
+                a.Lots.Count,
+                a.Lots.Count(l => l.IsSold),
+                a.Lots.Count(l => !l.IsSold),
+                a.Lots.Where(l => l.IsSold).Sum(l => l.SoldPrice ?? 0)))
+            .ToList();
+        return page.WithItems(items);
     }
 
     public async Task<AuctionDetail?> GetAsync(Guid id, CancellationToken ct = default)

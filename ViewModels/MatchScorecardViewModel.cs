@@ -100,7 +100,7 @@ public partial class MatchScorecardViewModel : ObservableObject
     public bool ShowShellNavBar => !ShowLiveOverlay;
     public bool ShowDetailScorecardModal => IsDetailScorecardModalOpen && IsLiveStreamOpen;
     public string ScorecardTapHint => "Tap for full scorecard";
-    public string LiveBannerText => HasLiveStream ? "LIVE · STREAM + SCORE" : "LIVE · ball by ball";
+    public string LiveBannerText => BrandSlogans.LiveScore;
 
     public MatchScorecardViewModel(IMatchService matches, ILiveHubClient hub, ILeagueContext league, IOptions<ApiOptions> api)
     {

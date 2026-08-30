@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
              x:Class="JPL.Pages.ModeChooserPage"
              x:DataType="vm:ModeChooserViewModel"
              Title="Cric360"
@@ -17,6 +18,33 @@
                    FontSize="22"
                    HorizontalTextAlignment="Center"
                    CharacterSpacing="2" />
+            <Border StrokeThickness="0"
+                    BackgroundColor="#152033"
+                    Padding="16,12"
+                    StrokeShape="RoundRectangle 16">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="{x:Static svc:BrandSlogans.Catalog}"
+                           TextColor="#E8F0FA"
+                           FontSize="13"
+                           LineBreakMode="WordWrap" />
+                    <Label Text="{x:Static svc:BrandSlogans.LiveScore}"
+                           TextColor="#E8F0FA"
+                           FontSize="13"
+                           LineBreakMode="WordWrap" />
+                    <Label Text="{x:Static svc:BrandSlogans.Analytics}"
+                           TextColor="#E8F0FA"
+                           FontSize="13"
+                           LineBreakMode="WordWrap" />
+                    <Label Text="{x:Static svc:BrandSlogans.Statistics}"
+                           TextColor="#E8F0FA"
+                           FontSize="13"
+                           LineBreakMode="WordWrap" />
+                    <Label Text="{x:Static svc:BrandSlogans.Grounds}"
+                           TextColor="#E8F0FA"
+                           FontSize="13"
+                           LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
             <Label Text="Where do you want to go?"
                    TextColor="#B8C4D4"
                    FontSize="15"

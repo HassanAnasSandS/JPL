@@ -2,111 +2,189 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.GroundBookRequestPage"
              x:DataType="vm:GroundBookRequestViewModel"
              Title="{Binding GroundName}"
              HideSoftInputOnTapped="True">
-    <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="12">
-            <Label Text="Booking type *" Style="{StaticResource SectionLabel}" />
-            <Picker Title="Select type"
-                    ItemsSource="{Binding OfferChoices}"
-                    ItemDisplayBinding="{Binding Display}"
-                    SelectedItem="{Binding SelectedOffer}" />
+    <ContentPage.Resources>
+        <Style x:Key="GroundTab" TargetType="Button">
+            <Setter Property="FontSize" Value="{OnIdiom Phone=12, Default=13}" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="MinimumHeightRequest" Value="{OnIdiom Phone=32, Default=36}" />
+            <Setter Property="BackgroundColor" Value="#E8EEF5" />
+            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+            <Setter Property="Padding">
+                <Setter.Value>
+                    <OnIdiom x:TypeArguments="Thickness" Phone="10,5" Default="14,6" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ContentPage.Resources>
 
-            <Label Text="Date *" Style="{StaticResource SectionLabel}" />
-            <DatePicker Date="{Binding StartDate}" />
-            <Label Text="Start time *" Style="{StaticResource SectionLabel}" />
-            <TimePicker Time="{Binding StartTime}" />
+    <Grid Padding="16" RowDefinitions="Auto,*,Auto" RowSpacing="10">
+        <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout Spacing="6">
+                <ctrl:TabChipButton Text="Booking"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectBookingTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBookingTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Services"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectServicesTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsServicesTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Shop"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectShopTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsShopTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+                <ctrl:TabChipButton Text="Confirm"
+                                    Style="{StaticResource GroundTab}"
+                                    Command="{Binding SelectConfirmTabCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsConfirmTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </ctrl:TabChipButton>
+            </HorizontalStackLayout>
+        </ScrollView>
 
-            <VerticalStackLayout IsVisible="{Binding ShowHours}" Spacing="8">
-                <Label Text="Hours *" Style="{StaticResource SectionLabel}" />
-                <Picker Title="Hours"
-                        ItemsSource="{Binding HourChoices}"
-                        SelectedItem="{Binding SelectedHoursText}" />
-            </VerticalStackLayout>
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout>
+                <VerticalStackLayout IsVisible="{Binding IsBookingTab}" Spacing="12">
+                    <Label Text="Booking type *" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select type"
+                            ItemsSource="{Binding OfferChoices}"
+                            ItemDisplayBinding="{Binding Display}"
+                            SelectedItem="{Binding SelectedOffer}" />
 
-            <VerticalStackLayout IsVisible="{Binding HasPaidServices}" Spacing="6">
-                <Label Text="Extra services" Style="{StaticResource SectionLabel}" />
-                <Label Text="Optional extras. 0 PKR is free; paid amounts are added to the booking total."
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}" />
-                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServiceChoices}" Spacing="2">
-                    <BindableLayout.ItemTemplate>
-                        <DataTemplate x:DataType="vm:BookableServiceChoice">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,2">
-                                <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
-                                <Label Grid.Column="1"
-                                       Text="{Binding Name}"
-                                       VerticalOptions="Center" />
-                                <Label Grid.Column="2"
-                                       Text="{Binding AmountLabel}"
-                                       TextColor="{StaticResource Secondary}"
-                                       VerticalOptions="Center" />
-                            </Grid>
-                        </DataTemplate>
-                    </BindableLayout.ItemTemplate>
+                    <Label Text="Date *" Style="{StaticResource SectionLabel}" />
+                    <DatePicker Date="{Binding StartDate}" />
+                    <Label Text="Start time *" Style="{StaticResource SectionLabel}" />
+                    <TimePicker Time="{Binding StartTime}" />
+
+                    <VerticalStackLayout IsVisible="{Binding ShowHours}" Spacing="8">
+                        <Label Text="Hours *" Style="{StaticResource SectionLabel}" />
+                        <Picker Title="Hours"
+                                ItemsSource="{Binding HourChoices}"
+                                SelectedItem="{Binding SelectedHoursText}" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsServicesTab}" Spacing="12">
+                    <Label Text="Optional extras. 0 PKR is free; paid amounts are added to the booking total."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <Label Text="This ground has no extra services."
+                           FontSize="13"
+                           TextColor="{StaticResource TextSecondary}"
+                           IsVisible="{Binding HasNoServices}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServiceChoices}"
+                                         Spacing="2">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BookableServiceChoice">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,2">
+                                    <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Name}"
+                                           VerticalOptions="Center" />
+                                    <Label Grid.Column="2"
+                                           Text="{Binding AmountLabel}"
+                                           TextColor="{StaticResource Secondary}"
+                                           VerticalOptions="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsShopTab}" Spacing="12">
+                    <Label Text="Add quantity for items you want to rent or buy. Qty 0 skips the item."
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <Label Text="This ground has no shop items."
+                           FontSize="13"
+                           TextColor="{StaticResource TextSecondary}"
+                           IsVisible="{Binding HasNoShopItems}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ShopChoices}"
+                                         Spacing="4">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BookableShopChoice">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Padding="0,2">
+                                    <VerticalStackLayout>
+                                        <Label Text="{Binding Name}" VerticalOptions="Center" />
+                                        <Label Text="{Binding LineLabel}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource TextSecondary}" />
+                                    </VerticalStackLayout>
+                                    <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                                        <Button Text="−"
+                                                Style="{StaticResource GhostButton}"
+                                                Padding="10,4"
+                                                FontSize="16"
+                                                Command="{Binding DecreaseCommand}" />
+                                        <Label Text="{Binding Qty}"
+                                               WidthRequest="28"
+                                               HorizontalTextAlignment="Center"
+                                               VerticalOptions="Center"
+                                               FontAttributes="Bold" />
+                                        <Button Text="+"
+                                                Style="{StaticResource GhostButton}"
+                                                Padding="10,4"
+                                                FontSize="16"
+                                                Command="{Binding IncreaseCommand}" />
+                                    </HorizontalStackLayout>
+                                    <Label Grid.Column="2"
+                                           Text="{Binding KindLabel}"
+                                           TextColor="{StaticResource Secondary}"
+                                           VerticalOptions="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding IsConfirmTab}" Spacing="12">
+                    <Label Text="{Binding WindowLine}" FontAttributes="Bold" />
+                    <Label Text="{Binding BandLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
+                    <Label Text="{Binding ExtrasLine}"
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}"
+                           IsVisible="{Binding HasExtras}" />
+                    <Label Text="{Binding QuoteLine}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
+
+                    <Label Text="Your name" Style="{StaticResource SectionLabel}" />
+                    <Entry Text="{Binding CustomerName}" IsReadOnly="True" />
+                    <Label Text="WhatsApp" Style="{StaticResource SectionLabel}" />
+                    <Entry Text="{Binding CustomerPhone}" IsReadOnly="True" Keyboard="Telephone" />
+                    <Editor Placeholder="Notes" Text="{Binding Notes}" HeightRequest="80" />
                 </VerticalStackLayout>
             </VerticalStackLayout>
+        </ScrollView>
 
-            <VerticalStackLayout IsVisible="{Binding HasShopItems}" Spacing="6">
-                <Label Text="Ground shop" Style="{StaticResource SectionLabel}" />
-                <Label Text="Add quantity for items you want to rent or buy. Qty 0 skips the item."
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}" />
-                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ShopChoices}" Spacing="4">
-                    <BindableLayout.ItemTemplate>
-                        <DataTemplate x:DataType="vm:BookableShopChoice">
-                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Padding="0,2">
-                                <VerticalStackLayout>
-                                    <Label Text="{Binding Name}" VerticalOptions="Center" />
-                                    <Label Text="{Binding LineLabel}"
-                                           FontSize="12"
-                                           TextColor="{StaticResource TextSecondary}" />
-                                </VerticalStackLayout>
-                                <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                                    <Button Text="−"
-                                            Style="{StaticResource GhostButton}"
-                                            Padding="10,4"
-                                            FontSize="16"
-                                            Command="{Binding DecreaseCommand}" />
-                                    <Label Text="{Binding Qty}"
-                                           WidthRequest="28"
-                                           HorizontalTextAlignment="Center"
-                                           VerticalOptions="Center"
-                                           FontAttributes="Bold" />
-                                    <Button Text="+"
-                                            Style="{StaticResource GhostButton}"
-                                            Padding="10,4"
-                                            FontSize="16"
-                                            Command="{Binding IncreaseCommand}" />
-                                </HorizontalStackLayout>
-                                <Label Grid.Column="2"
-                                       Text="{Binding KindLabel}"
-                                       TextColor="{StaticResource Secondary}"
-                                       VerticalOptions="Center" />
-                            </Grid>
-                        </DataTemplate>
-                    </BindableLayout.ItemTemplate>
-                </VerticalStackLayout>
-            </VerticalStackLayout>
-
-            <Label Text="{Binding WindowLine}" FontAttributes="Bold" />
-            <Label Text="{Binding BandLine}" FontSize="13" TextColor="{StaticResource Secondary}" />
-            <Label Text="{Binding ExtrasLine}"
-                   FontSize="12"
-                   TextColor="{StaticResource TextSecondary}"
-                   IsVisible="{Binding HasExtras}" />
-            <Label Text="{Binding QuoteLine}" TextColor="{StaticResource Secondary}" FontAttributes="Bold" />
-
-            <Label Text="Your name" Style="{StaticResource SectionLabel}" />
-            <Entry Text="{Binding CustomerName}" IsReadOnly="True" />
-            <Label Text="WhatsApp" Style="{StaticResource SectionLabel}" />
-            <Entry Text="{Binding CustomerPhone}" IsReadOnly="True" Keyboard="Telephone" />
-            <Editor Placeholder="Notes" Text="{Binding Notes}" HeightRequest="80" />
+        <VerticalStackLayout Grid.Row="2" Spacing="8">
             <Button Text="Send request" Style="{StaticResource GoldButton}" Command="{Binding SubmitCommand}" />
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
             <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
         </VerticalStackLayout>
-    </ScrollView>
+    </Grid>
 </ContentPage>

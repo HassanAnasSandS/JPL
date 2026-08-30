@@ -16,6 +16,7 @@ public sealed class FormatListItem
 public interface IFormatService
 {
     Task<IReadOnlyList<FormatListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<FormatListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<FormatListItem?> GetAsync(Guid id, CancellationToken ct = default);
     Task<FormatListItem> CreateAsync(string name, MatchFormat format, OversMode oversMode, int oversLimit, CancellationToken ct = default);
     Task<FormatListItem> UpdateAsync(Guid id, string name, MatchFormat format, OversMode oversMode, int oversLimit, CancellationToken ct = default);
@@ -39,6 +40,13 @@ public sealed class FormatService : IFormatService
         return list.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .Select(ToItem)
             .ToList();
+    }
+
+    public async Task<ApiPagedResult<FormatListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var page = await _api.GetFormatsPageAsync(skip, q, ct).ConfigureAwait(false);
+        var items = (page.Items ?? []).Select(ToItem).ToList();
+        return page.WithItems(items);
     }
 
     public async Task<FormatListItem?> GetAsync(Guid id, CancellationToken ct = default)

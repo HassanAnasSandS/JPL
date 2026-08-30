@@ -10,6 +10,8 @@ public partial class LoginPage : ContentPage
         BindingContext = vm;
     }
 
+    protected override bool OnBackButtonPressed() => false;
+
     protected override void OnDisappearing()
     {
         if (BindingContext is LoginViewModel vm)

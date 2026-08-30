@@ -207,6 +207,7 @@ public sealed class GroundBooking
     public decimal BookedHours { get; set; }
     public string Status { get; set; } = GroundBookingStatus.Pending;
     public decimal BookingAmount { get; set; }
+    public decimal Discount { get; set; }
     public decimal Advance { get; set; }
     public string? Notes { get; set; }
     public string? PaymentNote { get; set; }
@@ -217,7 +218,21 @@ public sealed class GroundBooking
     public ICollection<GroundBookingShopItem> ShopItems { get; set; } = new List<GroundBookingShopItem>();
     public GroundReview? Review { get; set; }
 
-    public decimal Balance => Math.Max(0, BookingAmount - Advance);
+    public bool IsOwnerCreated => CustomerUserId == Guid.Empty;
+
+    public decimal Balance => Math.Max(0, BookingAmount - Discount - Advance);
+
+    public void ApplyMoney(decimal? discount, decimal? advance)
+    {
+        if (discount is decimal d)
+            Discount = Math.Max(0, d);
+        Discount = Math.Min(Discount, BookingAmount);
+        if (advance is decimal a)
+            Advance = Math.Max(0, a);
+        var maxAdvance = Math.Max(0, BookingAmount - Discount);
+        if (Advance > maxAdvance)
+            Advance = maxAdvance;
+    }
 }
 
 public sealed class GroundReview

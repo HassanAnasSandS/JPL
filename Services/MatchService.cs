@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using JPL.Data;
 using JPL.Domain;
 
@@ -402,6 +403,11 @@ public sealed class OverBallMark
 public interface IMatchService
 {
     Task<IReadOnlyList<MatchListItem>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>Local live/setup (+ unsynced completed) rows to pin at the top of the list.</summary>
+    Task<IReadOnlyList<MatchListItem>> GetPinnedListAsync(CancellationToken ct = default);
+    /// <summary>Completed matches from the API, 5 at a time.</summary>
+    Task<ApiPagedResult<MatchListItem>> GetCompletedPageAsync(
+        int skip, string? q, string? captain, string? date, CancellationToken ct = default);
     /// <summary>The single Setup/InProgress match in the current league on this device, if any.</summary>
     Task<MatchListItem?> GetActiveMatchAsync(CancellationToken ct = default);
     /// <summary>True when this phone has the SQLite scoring row AND the current admin started the match.</summary>
@@ -474,7 +480,7 @@ public sealed class MatchService : IMatchService
         await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
 
         var local = await LoadLocalListAsync(
-                m => m.Status is MatchStatus.Setup or MatchStatus.InProgress
+                m => m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress
                      || (m.TournamentId == null && m.SeriesId == null && m.Status == MatchStatus.Completed),
                 ct)
             .ConfigureAwait(false);
@@ -522,6 +528,68 @@ public sealed class MatchService : IMatchService
             .OrderByDescending(m => m.IsActive)
             .ThenByDescending(m => m.MatchDateUtc)
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<MatchListItem>> GetPinnedListAsync(CancellationToken ct = default)
+    {
+        await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
+        var pendingSync = await _sync.GetPendingStandaloneMatchIdsAsync(ct).ConfigureAwait(false);
+        var pendingIds = pendingSync.ToList();
+        var local = await LoadLocalListAsync(
+                m => m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress
+                     || (m.TournamentId == null && m.SeriesId == null && m.Status == MatchStatus.Completed && pendingIds.Contains(m.Id)),
+                ct)
+            .ConfigureAwait(false);
+
+        var byId = local.ToDictionary(
+            m => m.Id,
+            m => m with { NeedsSync = m.Status == MatchStatus.Completed && pendingSync.Contains(m.Id) });
+
+        try
+        {
+            var live = await _api.GetLiveMatchesAsync(ct).ConfigureAwait(false);
+            foreach (var m in live.Select(FromApi))
+            {
+                if (byId.TryGetValue(m.Id, out var existing) && existing.IsLocal)
+                    continue;
+                byId[m.Id] = m with { IsLocal = false, AllowMutate = false };
+            }
+        }
+        catch
+        {
+            /* older API without live index */
+        }
+
+        return byId.Values
+            .OrderByDescending(m => m.IsActive)
+            .ThenByDescending(m => m.MatchDateUtc)
+            .ToList();
+    }
+
+    public async Task<ApiPagedResult<MatchListItem>> GetCompletedPageAsync(
+        int skip, string? q, string? captain, string? date, CancellationToken ct = default)
+    {
+        await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
+        var pendingSync = await _sync.GetPendingStandaloneMatchIdsAsync(ct).ConfigureAwait(false);
+        var canWrite = _auth.CanWrite;
+        try
+        {
+            var page = await _api.GetCompletedMatchesPageAsync(skip, q, captain, date, ct).ConfigureAwait(false);
+            var items = (page.Items ?? []).Select(m =>
+            {
+                var mapped = FromApi(m);
+                return mapped with
+                {
+                    NeedsSync = mapped.Status == MatchStatus.Completed && pendingSync.Contains(mapped.Id),
+                    AllowMutate = canWrite
+                };
+            }).ToList();
+            return page.WithItems(items);
+        }
+        catch
+        {
+            return new ApiPagedResult<MatchListItem>([], 0, skip, ListPaging.PageSize);
+        }
     }
 
     public async Task<MatchListItem?> GetActiveMatchAsync(CancellationToken ct = default)
@@ -610,17 +678,15 @@ public sealed class MatchService : IMatchService
     }
 
     private async Task<IReadOnlyList<MatchListItem>> LoadLocalListAsync(
-        Func<Match, bool> predicate, CancellationToken ct)
+        Expression<Func<Match, bool>> predicate, CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
-        // Materialize then sort client-side so filters can run in memory.
-        var matches = (await db.Matches.AsNoTracking()
+        var matches = await db.Matches.AsNoTracking()
+                .Where(predicate)
+                .OrderByDescending(m => m.MatchDateUtc)
                 .ToListAsync(ct)
-                .ConfigureAwait(false))
-            .Where(predicate)
-            .OrderByDescending(m => m.MatchDateUtc)
-            .ToList();
+                .ConfigureAwait(false);
         if (matches.Count == 0)
             return Array.Empty<MatchListItem>();
 

@@ -25,6 +25,24 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
             .ToListAsync(ct)
             .ConfigureAwait(false));
 
+    [HttpGet("amenities/page")]
+    public async Task<ActionResult<PagedResult<CatalogItemDto>>> AmenitiesPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        skip = Paging.ClampSkip(skip);
+        take = Paging.ClampTake(take);
+        var query = _db.AmenityCatalog.AsNoTracking().AsQueryable();
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(x => EF.Functions.Like(x.Name, like));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var items = await query.OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Skip(skip).Take(take)
+            .Select(x => new CatalogItemDto(x.Id, x.Name, x.SortOrder))
+            .ToListAsync(ct).ConfigureAwait(false);
+        return Ok(new PagedResult<CatalogItemDto>(items, total, skip, take));
+    }
+
     [HttpGet("services")]
     public async Task<ActionResult<IReadOnlyList<CatalogItemDto>>> Services(CancellationToken ct)
         => Ok(await _db.ServiceCatalog.AsNoTracking()
@@ -33,6 +51,24 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
             .ToListAsync(ct)
             .ConfigureAwait(false));
 
+    [HttpGet("services/page")]
+    public async Task<ActionResult<PagedResult<CatalogItemDto>>> ServicesPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        skip = Paging.ClampSkip(skip);
+        take = Paging.ClampTake(take);
+        var query = _db.ServiceCatalog.AsNoTracking().AsQueryable();
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(x => EF.Functions.Like(x.Name, like));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var items = await query.OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Skip(skip).Take(take)
+            .Select(x => new CatalogItemDto(x.Id, x.Name, x.SortOrder))
+            .ToListAsync(ct).ConfigureAwait(false);
+        return Ok(new PagedResult<CatalogItemDto>(items, total, skip, take));
+    }
+
     [HttpGet("shop")]
     public async Task<ActionResult<IReadOnlyList<ShopCatalogItemDto>>> Shop(CancellationToken ct)
         => Ok(await _db.ShopCatalog.AsNoTracking()
@@ -40,6 +76,24 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
             .Select(x => new ShopCatalogItemDto(x.Id, x.Name, x.Kind, x.Price, x.SortOrder))
             .ToListAsync(ct)
             .ConfigureAwait(false));
+
+    [HttpGet("shop/page")]
+    public async Task<ActionResult<PagedResult<ShopCatalogItemDto>>> ShopPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        skip = Paging.ClampSkip(skip);
+        take = Paging.ClampTake(take);
+        var query = _db.ShopCatalog.AsNoTracking().AsQueryable();
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(x => EF.Functions.Like(x.Name, like));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var items = await query.OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Skip(skip).Take(take)
+            .Select(x => new ShopCatalogItemDto(x.Id, x.Name, x.Kind, x.Price, x.SortOrder))
+            .ToListAsync(ct).ConfigureAwait(false);
+        return Ok(new PagedResult<ShopCatalogItemDto>(items, total, skip, take));
+    }
 }
 
 [ApiController]

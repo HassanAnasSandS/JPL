@@ -115,6 +115,8 @@ public sealed class PlayerCareerDto
             return $"{HighestScore}({HighestScoreBalls}){star}";
         }
     }
+
+    public int Rank { get; set; }
 }
 
 public sealed class ConfrontationDto
@@ -206,6 +208,7 @@ public sealed class TeamCareerDto
         }
     }
     public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
+    public int Rank { get; set; }
 }
 
 /// <summary>One opponent’s record against a selected team (Statistics · Teams 1 vs 1).</summary>

@@ -306,9 +306,15 @@
                                         Attendance="{StaticResource AttendanceRowTemplate}" />
     </ContentPage.Resources>
 
-    <Grid Padding="10" RowDefinitions="*,Auto" VerticalOptions="Fill"
+    <Grid Padding="10" RowDefinitions="Auto,*,Auto" VerticalOptions="Fill"
           BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
-        <Grid IsVisible="{Binding ShowTable}"
+        <Label Text="{x:Static svc:BrandSlogans.Statistics}"
+               FontSize="13"
+               FontAttributes="Bold"
+               TextColor="{StaticResource Primary}"
+               LineBreakMode="WordWrap"
+               Margin="4,0,4,6" />
+        <Grid Grid.Row="1" IsVisible="{Binding ShowTable}"
               RowDefinitions="Auto,Auto,Auto,Auto,*"
               RowSpacing="10"
               VerticalOptions="Fill">
@@ -512,6 +518,9 @@
                     <Label Text="{Binding TableHint}"
                            Style="{StaticResource MutedLabel}"
                            FontSize="11" />
+                    <Label Text="{Binding CountLabel}"
+                           FontSize="12"
+                           TextColor="{StaticResource TextSecondary}" />
                 </VerticalStackLayout>
                 <Label Grid.Column="1"
                        Text="{Binding SortedByText}"
@@ -526,36 +535,15 @@
                     StrokeShape="RoundRectangle 12"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
                     VerticalOptions="Fill">
-                <ScrollView Orientation="Vertical"
+                <ScrollView x:Name="LeaderboardScroll"
+                            Orientation="Vertical"
                             VerticalOptions="Fill"
                             VerticalScrollBarVisibility="Always"
                             HorizontalScrollBarVisibility="Never">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="0" VerticalOptions="Start">
-                        <VerticalStackLayout Spacing="0">
-                            <Grid ColumnDefinitions="32,*,Auto"
-                                  HeightRequest="42"
-                                  Padding="8,0,4,0"
-                                  BackgroundColor="{StaticResource Primary}">
-                                <Label Text="#"
-                                       FontAttributes="Bold"
-                                       FontSize="11"
-                                       VerticalOptions="Center"
-                                       TextColor="{StaticResource Secondary}" />
-                                <Button Grid.Column="1"
-                                        Text="{Binding NameColumnTitle}"
-                                        Style="{StaticResource StatsSortButton}"
-                                        HorizontalOptions="Start"
-                                        Command="{Binding SortCommand}"
-                                        CommandParameter="{Binding NameSortParameter}" />
-                                <Button Grid.Column="2"
-                                        Text="Sess"
-                                        WidthRequest="52"
-                                        Style="{StaticResource StatsSortButton}"
-                                        IsVisible="{Binding IsNetsSource}"
-                                        Command="{Binding SortCommand}"
-                                        CommandParameter="Sessions" />
-                            </Grid>
-                            <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
+                        <Grid WidthRequest="{OnIdiom Phone=176, Default=220}">
+                            <VerticalStackLayout Spacing="0">
+                            <BoxView HeightRequest="44" Color="Transparent" />
                             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Leaderboard}"
                                                  Spacing="0"
                                                  IsVisible="{Binding ShowPlayerLeaderboard}">
@@ -645,13 +633,66 @@
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
                             </VerticalStackLayout>
-                        </VerticalStackLayout>
+                            <BoxView HeightRequest="96" Color="Transparent" IsVisible="{Binding HasMore}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout x:Name="NameHeaderHost"
+                                                 VerticalOptions="Start"
+                                                 ZIndex="20"
+                                                 Spacing="0"
+                                                 BackgroundColor="{StaticResource Primary}">
+                                <Grid ColumnDefinitions="32,*,Auto"
+                                      HeightRequest="42"
+                                      Padding="8,0,4,0"
+                                      BackgroundColor="{StaticResource Primary}">
+                                    <Label Text="#"
+                                           FontAttributes="Bold"
+                                           FontSize="11"
+                                           VerticalOptions="Center"
+                                           TextColor="{StaticResource Secondary}" />
+                                    <Button Grid.Column="1"
+                                            Text="{Binding NameColumnTitle}"
+                                            Style="{StaticResource StatsSortButton}"
+                                            HorizontalOptions="Start"
+                                            Command="{Binding SortCommand}"
+                                            CommandParameter="{Binding NameSortParameter}" />
+                                    <Button Grid.Column="2"
+                                            Text="Sess"
+                                            WidthRequest="52"
+                                            Style="{StaticResource StatsSortButton}"
+                                            IsVisible="{Binding IsNetsSource}"
+                                            Command="{Binding SortCommand}"
+                                            CommandParameter="Sessions" />
+                                </Grid>
+                                <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
+                            </VerticalStackLayout>
+                        </Grid>
 
                         <ScrollView Grid.Column="1"
+                                    x:Name="StatsBodyHScroll"
                                     Orientation="Horizontal"
                                     HorizontalScrollBarVisibility="Always"
                                     VerticalScrollBarVisibility="Never">
+                            <Grid>
                             <VerticalStackLayout Spacing="0">
+                                <BoxView HeightRequest="44" Color="Transparent" />
+
+                                <VerticalStackLayout BindingContext="{Binding .}"
+                                                     BindableLayout.ItemsSource="{Binding Leaderboard}"
+                                                     BindableLayout.ItemTemplateSelector="{StaticResource StatsRowSelector}"
+                                                     IsVisible="{Binding ShowPlayerLeaderboard}"
+                                                     Spacing="0" />
+                                <VerticalStackLayout BindingContext="{Binding .}"
+                                                     BindableLayout.ItemsSource="{Binding TeamLeaderboard}"
+                                                     BindableLayout.ItemTemplate="{StaticResource TeamRowTemplate}"
+                                                     IsVisible="{Binding IsTeamStats}"
+                                                     Spacing="0" />
+                                <BoxView HeightRequest="96" Color="Transparent" IsVisible="{Binding HasMore}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout x:Name="StatsHeaderHost"
+                                                 VerticalOptions="Start"
+                                                 ZIndex="20"
+                                                 Spacing="0"
+                                                 BackgroundColor="{StaticResource Primary}">
                                 <Grid IsVisible="{Binding IsMatchStats}"
                                       ColumnDefinitions="52,44,44,44"
                                       HeightRequest="42"
@@ -817,18 +858,8 @@
                                     <Button Grid.Column="14" Text="S.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" />
                                 </Grid>
                                 <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
-
-                                <VerticalStackLayout BindingContext="{Binding .}"
-                                                     BindableLayout.ItemsSource="{Binding Leaderboard}"
-                                                     BindableLayout.ItemTemplateSelector="{StaticResource StatsRowSelector}"
-                                                     IsVisible="{Binding ShowPlayerLeaderboard}"
-                                                     Spacing="0" />
-                                <VerticalStackLayout BindingContext="{Binding .}"
-                                                     BindableLayout.ItemsSource="{Binding TeamLeaderboard}"
-                                                     BindableLayout.ItemTemplate="{StaticResource TeamRowTemplate}"
-                                                     IsVisible="{Binding IsTeamStats}"
-                                                     Spacing="0" />
                             </VerticalStackLayout>
+                        </Grid>
                         </ScrollView>
                     </Grid>
                 </ScrollView>
@@ -1766,10 +1797,10 @@
             </VerticalStackLayout>
         </ScrollView>
 
-        <Label Grid.Row="1" Text="{Binding ErrorMessage}" TextColor="#B00020" />
+        <Label Grid.Row="2" Text="{Binding ErrorMessage}" TextColor="#B00020" />
 
         <!-- Compact overlay so the table stays readable while sorting/loading -->
-        <Grid Grid.Row="0"
+        <Grid Grid.Row="1"
               IsVisible="{Binding ShowLoading}"
               ZIndex="10"
               BackgroundColor="#220D1B2A">

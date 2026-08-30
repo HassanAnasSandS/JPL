@@ -23,15 +23,22 @@
             <Label Text="{Binding WhenLine}" />
             <Label Text="{Binding ServicesLine}"
                    FontSize="13"
-                   TextColor="{StaticResource TextSecondary}" />
+                   TextColor="{StaticResource TextSecondary}"
+                   IsVisible="{Binding HasServicesLine}" />
+            <Label Text="{Binding ShopLine}"
+                   FontSize="13"
+                   TextColor="{StaticResource TextSecondary}"
+                   IsVisible="{Binding HasShopLine}" />
             <Label Text="Status" Style="{StaticResource SectionLabel}" />
             <Picker ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding SelectedStatus}" />
-            <Label Text="Booking amount (PKR)" Style="{StaticResource SectionLabel}" />
-            <Entry Text="{Binding BookingAmountText}" Keyboard="Numeric" />
+            <Label Text="Total (PKR)" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding BookingAmountText}" Keyboard="Numeric" IsReadOnly="True" />
+            <Label Text="Discount (PKR)" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding DiscountText}" Keyboard="Numeric" />
             <Label Text="Advance (PKR)" Style="{StaticResource SectionLabel}" />
             <Entry Text="{Binding AdvanceText}" Keyboard="Numeric" />
-            <Label Text="Balance (auto)" Style="{StaticResource SectionLabel}" />
-            <Entry Text="{Binding BalanceText}" IsReadOnly="True" />
+            <Label Text="Remaining (auto)" Style="{StaticResource SectionLabel}" />
+            <Entry Text="{Binding RemainingText}" IsReadOnly="True" />
             <Editor Placeholder="Payment note (cash / JazzCash number)" Text="{Binding PaymentNote}" HeightRequest="60" />
             <Editor Placeholder="Notes" Text="{Binding Notes}" HeightRequest="60" />
             <Button Text="Save" Style="{StaticResource GoldButton}" Command="{Binding SaveCommand}" />

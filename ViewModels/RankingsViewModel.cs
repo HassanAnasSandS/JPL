@@ -10,16 +10,20 @@ public partial class RankingsViewModel : ObservableObject
     private readonly IStatsService _stats;
     private readonly StatsViewModel _statsVm;
     public FormatFilterViewModel FormatFilter { get; }
-    private RankingsBundle _bundle = new();
-    private List<RankingRow> _categoryRows = new();
+    private int _loadBusy;
+    private int _filterGen;
 
     public ObservableCollection<RankingRow> VisibleRows { get; } = new();
 
     [ObservableProperty] private int selectedCategory;
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private string categoryTitle = "Batting Ranking";
     [ObservableProperty] private string categoryHint = "Runs, boundaries, SR, avg  ·  dots/ducks/dismissals (−)";
+    [ObservableProperty] private string nameColumnTitle = "Player";
     [ObservableProperty] private string searchPlaceholder = "Filter by player name";
     [ObservableProperty] private string nameFilter = string.Empty;
     [ObservableProperty] private bool filterByDate;
@@ -45,6 +49,16 @@ public partial class RankingsViewModel : ObservableObject
     public bool HasNegativeFactors => Breakdown?.HasNegative == true;
     public bool HasBreakdownNote => Breakdown?.HasNote == true;
     public bool CanOpenCareer => _openedRow is { PlayerId: var id } && id != Guid.Empty;
+    public string CountLabel => TotalCount <= 0 ? "No rankings" : $"{VisibleRows.Count} of {TotalCount}";
+    private string CategoryKey => SelectedCategory switch
+    {
+        1 => "bowling",
+        2 => "allrounder",
+        3 => "fielder",
+        4 => "captain",
+        5 => "team",
+        _ => "batting"
+    };
 
     public RankingsViewModel(IStatsService stats, StatsViewModel statsVm, IFormatService formats)
     {
@@ -69,8 +83,10 @@ public partial class RankingsViewModel : ObservableObject
     partial void OnNameFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyNameFilter();
+        _ = ReloadDebouncedAsync();
     }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
 
     partial void OnFilterByDateChanged(bool value)
         => OnPropertyChanged(nameof(HasActiveFilters));
@@ -83,7 +99,8 @@ public partial class RankingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFielder));
         OnPropertyChanged(nameof(IsCaptain));
         OnPropertyChanged(nameof(IsTeam));
-        ApplyCategory();
+        ApplyCategoryTitles();
+        _ = ReloadAsync();
     }
 
     partial void OnBreakdownChanged(RankingBreakdown? value)
@@ -95,11 +112,38 @@ public partial class RankingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
+        HasMore = true;
+        VisibleRows.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
+            if (VisibleRows.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
             DateTime? from = null;
@@ -118,13 +162,27 @@ public partial class RankingsViewModel : ObservableObject
                 DateRangeText = "All completed matches";
             }
 
-            _bundle = await _stats.GetRankingsAsync(from, toExclusive, FormatFilter.SelectedIds).ConfigureAwait(true);
-            ApplyCategory();
+            var page = await _stats.GetRankingsPageAsync(
+                    VisibleRows.Count,
+                    CategoryKey,
+                    NameFilter,
+                    from,
+                    toExclusive,
+                    FormatFilter.SelectedIds)
+                .ConfigureAwait(true);
+            TotalCount = page.TotalCount;
+            ListPaging.Append(VisibleRows, page.Items, r => r.PlayerId);
+            RankingBars.Apply(VisibleRows);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
-            VisibleRows.Clear();
-            _categoryRows.Clear();
+            if (VisibleRows.Count == 0)
+            {
+                VisibleRows.Clear();
+                TotalCount = 0;
+            }
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — rankings need internet."
                 : $"Rankings require API (server DB). {ex.Message}";
@@ -134,6 +192,8 @@ public partial class RankingsViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
@@ -172,7 +232,7 @@ public partial class RankingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenBreakdown(RankingRow? row)
+    private async Task OpenBreakdownAsync(RankingRow? row)
     {
         if (row is null)
             return;
@@ -182,6 +242,28 @@ public partial class RankingsViewModel : ObservableObject
         BreakdownRank = row.RankText;
         BreakdownCareerLabel = IsTeam ? "View team" : "Full career";
         Breakdown = RankingExplain.ForRow(SelectedCategory, row);
+        if (!IsTeam && row.PlayerId != Guid.Empty && row.Breakdown is null)
+        {
+            try
+            {
+                var career = await _stats.GetCareerAsync(row.PlayerId).ConfigureAwait(true);
+                if (career is not null)
+                {
+                    Breakdown = SelectedCategory switch
+                    {
+                        1 => RankingExplain.Bowling(career),
+                        2 => RankingExplain.AllRounder(career),
+                        3 => RankingExplain.Fielding(career),
+                        4 => RankingExplain.Captaincy(career),
+                        _ => RankingExplain.Batting(career)
+                    };
+                }
+            }
+            catch
+            {
+                /* keep the compact row breakdown */
+            }
+        }
         IsBreakdownVisible = true;
         OnPropertyChanged(nameof(CanOpenCareer));
     }
@@ -236,58 +318,36 @@ public partial class RankingsViewModel : ObservableObject
         }
     }
 
-    private void ApplyCategory()
+    private void ApplyCategoryTitles()
     {
         SearchPlaceholder = IsTeam ? "Filter by team name" : "Filter by player name";
-        IReadOnlyList<RankingRow> rows;
+        NameColumnTitle = IsTeam ? "Team" : "Player";
         switch (SelectedCategory)
         {
             case 1:
                 CategoryTitle = "Bowling Ranking";
                 CategoryHint = "Wkts, maidens, dots, economy vs 8, extras (−)";
-                rows = _bundle.Bowling;
                 break;
             case 2:
                 CategoryTitle = "All-Rounder Ranking";
                 CategoryHint = "Batting pts + bowling pts (must have batted & bowled)";
-                rows = _bundle.AllRounder;
                 break;
             case 3:
                 CategoryTitle = "Fielder Ranking";
                 CategoryHint = "Catch×10, RO×12, St×15  ·  low rate after 4 matches (−)";
-                rows = _bundle.Fielder;
                 break;
             case 4:
                 CategoryTitle = "Captain Ranking";
                 CategoryHint = "Win×4 + tie×1 − loss×2";
-                rows = _bundle.Captain;
                 break;
             case 5:
                 CategoryTitle = "Team Ranking";
                 CategoryHint = "Win×2 + tie×1 − loss×1 + NRR×10";
-                rows = _bundle.Team;
                 break;
             default:
                 CategoryTitle = "Batting Ranking";
                 CategoryHint = "Runs, boundaries, SR, avg  ·  dots/ducks/dismissals (−)";
-                rows = _bundle.Batting;
                 break;
         }
-
-        _categoryRows = rows.ToList();
-        RankingBars.Apply(_categoryRows);
-        ApplyNameFilter();
-    }
-
-    private void ApplyNameFilter()
-    {
-        IEnumerable<RankingRow> q = _categoryRows;
-        var name = NameFilter?.Trim();
-        if (!string.IsNullOrWhiteSpace(name))
-            q = q.Where(r => r.PlayerName.Contains(name, StringComparison.OrdinalIgnoreCase));
-
-        VisibleRows.Clear();
-        foreach (var row in q)
-            VisibleRows.Add(row);
     }
 }

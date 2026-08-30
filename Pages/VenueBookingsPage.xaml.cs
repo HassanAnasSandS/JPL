@@ -12,38 +12,38 @@ public partial class VenueBookingsPage : ContentPage
         BindingContext = _vm = vm;
     }
 
-    protected override async void OnAppearing()
+    protected override void OnAppearing()
     {
         base.OnAppearing();
-        await _vm.LoadCommand.ExecuteAsync(null);
+        PageSafe.Run(() => _vm.LoadCommand.ExecuteAsync(null));
     }
 
-    private async void OnAddClicked(object? sender, EventArgs e)
+    private void OnAddClicked(object? sender, EventArgs e)
     {
         if (!_vm.CanWrite) return;
-        await _vm.AddCommand.ExecuteAsync(null);
+        PageSafe.Run(() => _vm.AddCommand.ExecuteAsync(null));
     }
 
-    private async void OnViewClicked(object? sender, EventArgs e)
+    private void OnViewClicked(object? sender, EventArgs e)
     {
         if (sender is not Button { CommandParameter: VenueBookingRow row })
             return;
-        await _vm.ViewCommand.ExecuteAsync(row);
+        PageSafe.Run(() => _vm.ViewCommand.ExecuteAsync(row));
     }
 
-    private async void OnEditClicked(object? sender, EventArgs e)
-    {
-        if (!_vm.CanWrite) return;
-        if (sender is not Button { CommandParameter: VenueBookingRow row })
-            return;
-        await _vm.EditCommand.ExecuteAsync(row);
-    }
-
-    private async void OnDeleteClicked(object? sender, EventArgs e)
+    private void OnEditClicked(object? sender, EventArgs e)
     {
         if (!_vm.CanWrite) return;
         if (sender is not Button { CommandParameter: VenueBookingRow row })
             return;
-        await _vm.DeleteCommand.ExecuteAsync(row);
+        PageSafe.Run(() => _vm.EditCommand.ExecuteAsync(row));
+    }
+
+    private void OnDeleteClicked(object? sender, EventArgs e)
+    {
+        if (!_vm.CanWrite) return;
+        if (sender is not Button { CommandParameter: VenueBookingRow row })
+            return;
+        PageSafe.Run(() => _vm.DeleteCommand.ExecuteAsync(row));
     }
 }

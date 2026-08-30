@@ -10,11 +10,17 @@ public partial class MatchesViewModel : ObservableObject
     private readonly IMatchService _matches;
     private readonly IAuthService _auth;
     private readonly ISyncService _sync;
-    private List<MatchListItem> _all = new();
+    private int _loadBusy;
+    private int _filterGen;
+    private int _suppressFilter;
+    private int _pinnedCount;
 
     public ObservableCollection<MatchListItem> Items { get; } = new();
 
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+    [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool hasActiveMatch;
@@ -24,6 +30,8 @@ public partial class MatchesViewModel : ObservableObject
     [ObservableProperty] private string captainFilter = string.Empty;
     [ObservableProperty] private bool filterByDate;
     [ObservableProperty] private DateTime filterDate = DateTime.Today;
+
+    public string CountLabel => TotalCount <= 0 ? "No matches" : $"{Items.Count} of {TotalCount}";
 
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(TeamFilter)
@@ -43,71 +51,113 @@ public partial class MatchesViewModel : ObservableObject
     partial void OnTeamFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadDebouncedAsync();
     }
 
     partial void OnCaptainFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadDebouncedAsync();
     }
 
     partial void OnFilterByDateChanged(bool value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadAsync();
     }
 
     partial void OnFilterDateChanged(DateTime value)
     {
-        if (FilterByDate)
-            ApplyFilters();
+        if (FilterByDate && _suppressFilter == 0)
+            _ = ReloadAsync();
+    }
+
+    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
+    [RelayCommand]
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
+    {
+        HasMore = true;
+        _pinnedCount = 0;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    private async Task LoadMoreAsync()
     {
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
             CanWrite = _auth.CanWrite;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
-            _all = (await _matches.GetAllAsync().ConfigureAwait(true)).ToList();
-            ApplyFilters();
 
-            _activeMatch = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
-            HasActiveMatch = _activeMatch is not null;
-            var owned = _activeMatch?.IsScoringOwner == true;
-            AddButtonText = owned ? "Continue" : "+ Add";
-            ActiveMatchHint = _activeMatch is null
-                ? null
-                : owned
-                    ? $"LIVE on this device: {_activeMatch.Title}. Score goes to the server as you play. If internet drops, balls stay here and auto-send when it returns."
-                    : $"LIVE on this device: {_activeMatch.Title}. Another admin started this match — view only. You cannot continue or edit.";
+            if (Items.Count == 0)
+            {
+                _activeMatch = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
+                HasActiveMatch = _activeMatch is not null;
+                var owned = _activeMatch?.IsScoringOwner == true;
+                AddButtonText = owned ? "Continue" : "+ Add";
+                ActiveMatchHint = _activeMatch is null
+                    ? null
+                    : owned
+                        ? $"LIVE on this device: {_activeMatch.Title}. Score goes to the server as you play. If internet drops, balls stay here and auto-send when it returns."
+                        : $"LIVE on this device: {_activeMatch.Title}. Another admin started this match — view only. You cannot continue or edit.";
+
+                var pinned = MatchFilter(await _matches.GetPinnedListAsync().ConfigureAwait(true));
+                ListPaging.Append(Items, pinned.Select(WithFlags), m => m.Id);
+                _pinnedCount = Items.Count;
+            }
+
+            var skip = Math.Max(0, Items.Count - _pinnedCount);
+            var date = FilterByDate ? FilterDate.Date.ToString("yyyy-MM-dd") : null;
+            var page = await _matches.GetCompletedPageAsync(skip, TeamFilter, CaptainFilter, date)
+                .ConfigureAwait(true);
+            ListPaging.Append(Items, page.Items.Select(WithFlags), m => m.Id);
+            TotalCount = _pinnedCount + page.TotalCount;
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
+            if (Items.Count == 0)
+                TotalCount = 0;
         }
         finally
         {
             IsBusy = false;
+            IsLoadingMore = false;
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
-    [RelayCommand]
-    private void ClearFilters()
+    private IEnumerable<MatchListItem> MatchFilter(IEnumerable<MatchListItem> source)
     {
-        TeamFilter = string.Empty;
-        CaptainFilter = string.Empty;
-        FilterByDate = false;
-        FilterDate = DateTime.Today;
-    }
-
-    private void ApplyFilters()
-    {
-        IEnumerable<MatchListItem> q = _all;
+        IEnumerable<MatchListItem> q = source;
         var team = TeamFilter?.Trim();
         var captain = CaptainFilter?.Trim();
 
@@ -132,9 +182,22 @@ public partial class MatchesViewModel : ObservableObject
             q = q.Where(m => m.DateKey == key);
         }
 
-        Items.Clear();
-        foreach (var m in q)
-            Items.Add(m with { AllowMutate = CanWrite, NeedsSync = CanWrite && m.NeedsSync });
+        return q;
+    }
+
+    private MatchListItem WithFlags(MatchListItem m)
+        => m with { AllowMutate = CanWrite, NeedsSync = CanWrite && m.NeedsSync };
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        Interlocked.Exchange(ref _suppressFilter, 1);
+        TeamFilter = string.Empty;
+        CaptainFilter = string.Empty;
+        FilterByDate = false;
+        FilterDate = DateTime.Today;
+        Interlocked.Exchange(ref _suppressFilter, 0);
+        _ = ReloadAsync();
     }
 
     [RelayCommand]

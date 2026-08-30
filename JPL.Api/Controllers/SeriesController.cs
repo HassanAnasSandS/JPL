@@ -66,6 +66,66 @@ public sealed class SeriesController : ControllerBase
         return Ok(dtos);
     }
 
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<SeriesListDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.Series.AsNoTracking().Where(s => !s.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(s => EF.Functions.Like(s.Name, like));
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var list = await query
+            .Include(s => s.Fixtures)
+            .OrderByDescending(s => s.UpdatedAtUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var teamIds = list.SelectMany(s => new[] { s.TeamAId, s.TeamBId })
+            .Concat(list.Where(s => s.WinnerTeamId is Guid).Select(s => s.WinnerTeamId!.Value))
+            .Distinct()
+            .ToList();
+        var names = teamIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Teams.AsNoTracking()
+                .Where(t => teamIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+                .ConfigureAwait(false);
+
+        var dtos = new List<SeriesListDto>();
+        foreach (var s in list)
+        {
+            var (aWins, bWins) = await CountWinsAsync(s, ct).ConfigureAwait(false);
+            dtos.Add(new SeriesListDto
+            {
+                Id = s.Id,
+                Name = s.Name,
+                TeamAId = s.TeamAId,
+                TeamBId = s.TeamBId,
+                TeamAName = names.GetValueOrDefault(s.TeamAId, "?"),
+                TeamBName = names.GetValueOrDefault(s.TeamBId, "?"),
+                MatchCount = s.MatchCount,
+                Status = (byte)s.Status,
+                StatusText = StatusText(s.Status),
+                FixtureCount = s.Fixtures.Count,
+                TeamAWins = aWins,
+                TeamBWins = bWins,
+                WinnerTeamId = s.WinnerTeamId,
+                WinnerTeamName = s.IsTied
+                    ? "Tied"
+                    : s.WinnerTeamId is Guid w ? names.GetValueOrDefault(w) : null,
+                IsTied = s.IsTied,
+                UpdatedAtUtc = s.UpdatedAtUtc
+            });
+        }
+
+        return Ok(new PagedResult<SeriesListDto>(dtos, total, skip, take));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<SeriesDetailDto>> Get(Guid id, CancellationToken ct)
     {

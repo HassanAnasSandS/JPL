@@ -11,11 +11,15 @@
 
     <Grid RowDefinitions="Auto,*,Auto" Padding="14" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <Label Text="Auctions"
-                   FontSize="22"
-                   FontAttributes="Bold"
-                   VerticalOptions="Center"
-                   TextColor="{StaticResource Primary}" />
+            <VerticalStackLayout VerticalOptions="Center">
+                <Label Text="Auctions"
+                       FontSize="22"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="{Binding CountLabel}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
             <Button Grid.Column="1"
                     Text="Report"
                     Padding="14,10"
@@ -35,6 +39,8 @@
                      Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}"
                             SelectionMode="None"
+                            RemainingItemsThreshold="1"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="No auctions yet. Create First Auction to begin.">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="svc:AuctionListItem">

@@ -12,7 +12,16 @@
 
     <Grid>
     <Grid RowDefinitions="Auto,*,Auto" Padding="14" RowSpacing="10">
-        <ctrl:FilterDrawer HasActiveFilters="{Binding HasActiveFilters}"
+        <VerticalStackLayout Spacing="4">
+            <Label Text="Grounds"
+                   FontSize="22"
+                   FontAttributes="Bold"
+                   TextColor="{StaticResource Primary}" />
+            <Label Text="{x:Static svc:BrandSlogans.Grounds}"
+                   FontSize="12"
+                   TextColor="{StaticResource TextSecondary}"
+                   LineBreakMode="WordWrap" />
+            <ctrl:FilterDrawer HasActiveFilters="{Binding HasActiveFilters}"
                            ClearCommand="{Binding ClearFiltersCommand}"
                            ApplyCommand="{Binding SearchCommand}"
                            ApplyButtonText="Search">
@@ -20,6 +29,9 @@
                 <SearchBar Placeholder="Search name"
                            Text="{Binding NameQuery}"
                            SearchCommand="{Binding SearchCommand}" />
+                <Label Text="{Binding CountLabel}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
                 <Label Text="Advanced filter"
                        FontAttributes="Bold"
                        FontSize="13"
@@ -67,10 +79,11 @@
                 </Grid>
             </VerticalStackLayout>
         </ctrl:FilterDrawer>
+        </VerticalStackLayout>
 
         <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
             <CollectionView ItemsSource="{Binding Items}"
-                            RemainingItemsThreshold="4"
+                            RemainingItemsThreshold="1"
                             RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="No grounds yet.">
                 <CollectionView.ItemTemplate>

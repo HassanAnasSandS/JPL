@@ -17,6 +17,15 @@ public static class AuthMessages
     public const string WrongPassword = "Password is not correct.";
     public const string Generic = "Could not sign in. Please try again.";
 
+    public static bool IsAccountGone(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return false;
+        return body.Contains("deleted", StringComparison.OrdinalIgnoreCase)
+               || body.Contains("deactivated", StringComparison.OrdinalIgnoreCase)
+               || body.Contains("no longer active", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string ForLogin(Exception ex)
     {
         if (ex is AuthFailedException)
@@ -177,6 +186,9 @@ public interface IAuthService
     /// <summary>Preferences-only restore — no network / no SQLite. Safe on UI thread at startup.</summary>
     void RestoreLocalSession();
 
+    /// <summary>Re-write session to disk so a recents-swipe kill still remembers the login.</summary>
+    void FlushPersistedSession();
+
     Task InitializeAsync(CancellationToken ct = default);
 
     /// <summary>Optional GetMe check after UI is up. Deletes/deactivates force logout.</summary>
@@ -197,6 +209,7 @@ public sealed class AuthService : IAuthService
     private const string SessionTokenKey = "jpl.session.token";
     private const string SessionLeagueIdKey = "jpl.session.leagueId";
     private const string SessionWhatsAppKey = "jpl.session.whatsApp";
+    public const string SessionLastUsernameKey = "jpl.session.lastUsername";
 
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
     private readonly IApiClient _api;
@@ -234,6 +247,10 @@ public sealed class AuthService : IAuthService
     {
         try
         {
+            // Disk first: Android Preferences.Apply() can miss a recents-swipe kill.
+            if (TryRestoreFromDisk())
+                return;
+
             var idText = Preferences.Default.Get(SessionUserIdKey, string.Empty);
             var username = Preferences.Default.Get(SessionUsernameKey, string.Empty);
             var roleText = Preferences.Default.Get(SessionRoleKey, string.Empty);
@@ -271,12 +288,24 @@ public sealed class AuthService : IAuthService
             else
                 _league.Restore();
             ApplyModuleGates();
+            PersistSession(_current, string.IsNullOrWhiteSpace(token) ? null : token);
         }
         catch
         {
+            if (TryRestoreFromDisk())
+                return;
             _current = null;
             _tokens.Clear();
         }
+    }
+
+    /// <summary>Re-write session to disk. Call on pause so a recents-swipe kill still remembers the login.</summary>
+    public void FlushPersistedSession()
+    {
+        if (_current is null)
+            return;
+        var token = _tokens.Token ?? Preferences.Default.Get(SessionTokenKey, string.Empty);
+        PersistSession(_current, string.IsNullOrWhiteSpace(token) ? null : token);
     }
 
     public async Task InitializeAsync(CancellationToken ct = default)
@@ -312,7 +341,7 @@ public sealed class AuthService : IAuthService
             var me = await _api.GetMeAsync(ct).ConfigureAwait(false);
             if (me is null)
             {
-                await LogoutAsync().ConfigureAwait(false);
+                // Generic 401 / timeout already mapped: keep the saved login.
                 return;
             }
 
@@ -436,6 +465,7 @@ public sealed class AuthService : IAuthService
         Preferences.Default.Remove(SessionTokenKey);
         Preferences.Default.Remove(SessionLeagueIdKey);
         Preferences.Default.Remove(SessionWhatsAppKey);
+        SessionDisk.Clear();
         return Task.CompletedTask;
     }
 
@@ -578,6 +608,9 @@ public sealed class AuthService : IAuthService
         else
             Preferences.Default.Remove(SessionWhatsAppKey);
 
+        Preferences.Default.Set(SessionLastUsernameKey, session.Username);
+
+        var savedToken = token;
         if (!string.IsNullOrWhiteSpace(token))
         {
             Preferences.Default.Set(SessionTokenKey, token);
@@ -585,9 +618,77 @@ public sealed class AuthService : IAuthService
         }
         else
         {
-            Preferences.Default.Remove(SessionTokenKey);
-            _tokens.Clear();
+            // Offline / local login must not erase a previously saved API token.
+            var existing = Preferences.Default.Get(SessionTokenKey, string.Empty);
+            if (!string.IsNullOrWhiteSpace(existing))
+            {
+                savedToken = existing;
+                _tokens.Set(existing, session.UserId);
+            }
         }
+
+        SessionDisk.Save(new SessionDisk.Payload(
+            session.UserId.ToString("D"),
+            session.Username,
+            session.Role.ToString(),
+            string.IsNullOrWhiteSpace(savedToken) ? null : savedToken,
+            session.LeagueId is Guid lid ? lid.ToString("D") : null,
+            session.WhatsAppNumber,
+            ReadPersistedWorkspace()));
+    }
+
+    private static int? ReadPersistedWorkspace()
+    {
+        try
+        {
+            if (!Preferences.Default.ContainsKey(AppWorkspaceStore.Key))
+                return null;
+            var raw = Preferences.Default.Get(AppWorkspaceStore.Key, -1);
+            return Enum.IsDefined(typeof(AppWorkspace), raw) ? raw : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private bool TryRestoreFromDisk()
+    {
+        var disk = SessionDisk.Load();
+        if (disk is null ||
+            !Guid.TryParse(disk.UserId, out var userId) ||
+            string.IsNullOrWhiteSpace(disk.Username) ||
+            !Enum.TryParse<AppRole>(disk.Role, out var role))
+            return false;
+
+        Guid? leagueId = Guid.TryParse(disk.LeagueId, out var lid) && lid != Guid.Empty ? lid : null;
+        role = NormalizeBuiltInRole(disk.Username, role);
+        if (role == AppRole.Guest)
+            leagueId = null;
+
+        if (!string.IsNullOrWhiteSpace(disk.Token))
+            _tokens.Set(disk.Token, userId);
+        else
+            _tokens.Clear();
+
+        _current = new AuthSession(
+            userId,
+            disk.Username,
+            role,
+            leagueId,
+            string.IsNullOrWhiteSpace(disk.WhatsApp) ? null : disk.WhatsApp);
+        if (leagueId is Guid bound)
+            _league.Set(bound);
+        else
+            _league.Restore();
+        ApplyModuleGates();
+        if (disk.Workspace is int workspace && Enum.IsDefined(typeof(AppWorkspace), workspace))
+        {
+            Preferences.Default.Set(AppWorkspaceStore.Key, workspace);
+            SessionDisk.FlushPlatformPrefs();
+        }
+        PersistSession(_current, disk.Token);
+        return true;
     }
 
     private void ApplyLeagueAfterLogin(AuthSession session)
@@ -625,16 +726,6 @@ public sealed class AuthService : IAuthService
             };
             user.PasswordHash = _hasher.HashPassword(user, password);
             db.Users.Add(user);
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        }
-
-        var stale = await db.Users
-            .Where(u => u.Username == "AmaanRehan")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-        if (stale.Count > 0)
-        {
-            db.Users.RemoveRange(stale);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
 

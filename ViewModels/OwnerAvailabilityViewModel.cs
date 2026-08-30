@@ -101,8 +101,7 @@ public partial class OwnerAvailabilityViewModel : ObservableObject
     {
         if (_suppressGroundChange || IsBusy)
             return;
-        RebuildCalendar();
-        RebuildHours();
+        _ = LoadAsync();
     }
 
     [RelayCommand]
@@ -128,13 +127,23 @@ public partial class OwnerAvailabilityViewModel : ObservableObject
             ErrorMessage = null;
             IsDetailOpen = false;
             await EnsureGroundsAsync().ConfigureAwait(true);
+            if (SelectedGround?.Id is not Guid groundId)
+            {
+                _monthBookings.Clear();
+                RebuildCalendar();
+                RebuildHours();
+                ErrorMessage = GroundPicks.Count == 0
+                    ? "Add a ground first to see availability."
+                    : "Select a ground to see its availability.";
+                return;
+            }
 
             var from = _visibleMonth.AddDays(-1);
             var to = _visibleMonth.AddMonths(1).AddDays(1);
-            var page = await _api.GetOwnerBookingsAsync(null, null, 500, from, to).ConfigureAwait(true);
+            var page = await _api.GetOwnerBookingsAsync(groundId, null, 500, from, to).ConfigureAwait(true);
 
             _monthBookings.Clear();
-            _monthBookings.AddRange(page.Where(b => b.HoldsSlot));
+            _monthBookings.AddRange(page.Items.Where(b => b.HoldsSlot));
 
             if (SelectedDate.Year != _visibleMonth.Year || SelectedDate.Month != _visibleMonth.Month)
                 SelectedDate = ClampToMonth(SelectedDate, _visibleMonth);
@@ -199,23 +208,19 @@ public partial class OwnerAvailabilityViewModel : ObservableObject
 
     private async Task EnsureGroundsAsync()
     {
-        if (GroundPicks.Count > 0)
-            return;
-
         var page = await _api.GetOwnerGroundsAsync(null, 50).ConfigureAwait(true);
         var grounds = page.Items;
+        var selectedId = SelectedGround?.Id;
         _suppressGroundChange = true;
         try
         {
             GroundPicks.Clear();
-            if (grounds.Count > 1)
-                GroundPicks.Add(GroundPick.All);
             foreach (var g in grounds)
                 GroundPicks.Add(new GroundPick(g.Id, g.Name));
 
-            HasGroundPicker = GroundPicks.Count > 1;
-            SelectedGround = GroundPicks.Count == 1 ? GroundPicks[0]
-                : GroundPicks.FirstOrDefault(p => p.Id is null) ?? GroundPicks.FirstOrDefault();
+            HasGroundPicker = GroundPicks.Count > 0;
+            SelectedGround = GroundPicks.FirstOrDefault(p => p.Id == selectedId)
+                             ?? GroundPicks.FirstOrDefault();
         }
         finally
         {
@@ -285,9 +290,7 @@ public partial class OwnerAvailabilityViewModel : ObservableObject
             {
                 var b = hits[0];
                 var kind = string.IsNullOrWhiteSpace(b.BookingTitle) ? b.Status : b.BookingTitle;
-                title = SelectedGround?.Id is null
-                    ? $"{b.CustomerName} · {b.GroundName}"
-                    : $"{b.CustomerName} · {kind}";
+                title = $"{b.CustomerName} · {kind}";
             }
             else
                 title = $"{hits.Count} bookings";

@@ -11,11 +11,19 @@
 
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto">
-            <Label Text="Sessions"
-                   FontSize="22"
-                   FontAttributes="Bold"
-                   VerticalOptions="Center"
-                   TextColor="{StaticResource Primary}" />
+            <VerticalStackLayout VerticalOptions="Center">
+                <Label Text="Sessions"
+                       FontSize="22"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}" />
+                <Label Text="{x:Static svc:BrandSlogans.Catalog}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       LineBreakMode="WordWrap" />
+                <Label Text="{Binding CountLabel}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
             <Button Grid.Column="1"
                     Text="{Binding AddButtonText}"
                     Style="{StaticResource GoldButton}"
@@ -61,7 +69,9 @@
                      Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}"
                             SelectionMode="None"
-                            VerticalOptions="Fill">
+                            VerticalOptions="Fill"
+                            RemainingItemsThreshold="1"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32" Spacing="8" VerticalOptions="Center">
                         <Label Text="No nets sessions yet"

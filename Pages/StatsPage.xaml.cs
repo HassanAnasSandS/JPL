@@ -1,4 +1,5 @@
 using JPL.ViewModels;
+using JPL.Services;
 using Microsoft.Maui.Controls;
 
 namespace JPL.Pages;
@@ -10,6 +11,8 @@ public partial class StatsPage : ContentPage
     {
         InitializeComponent();
         BindingContext = _vm = vm;
+        InfiniteScroll.AttachScrollView(LeaderboardScroll);
+        ScrollSync.FreezeHeader(LeaderboardScroll, NameHeaderHost, StatsHeaderHost);
     }
 
     protected override void OnAppearing()

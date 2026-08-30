@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
              xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.SeriesPage"
              x:Name="ThisPage"
@@ -16,6 +17,13 @@
                        FontSize="22"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
+                <Label Text="{x:Static svc:BrandSlogans.Catalog}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       LineBreakMode="WordWrap" />
+                <Label Text="{Binding CountLabel}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}" />
                 <Label Text="Two teams · schedule first · play one by one"
                        Style="{StaticResource MutedLabel}"
                        FontSize="12" />
@@ -41,6 +49,8 @@
                      IsRefreshing="{Binding IsBusy}"
                      Command="{Binding LoadCommand}">
             <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+                            RemainingItemsThreshold="1"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="No series yet. Create one, save the schedule, then start matches one by one.">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="vm:SeriesRow">

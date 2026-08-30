@@ -172,9 +172,12 @@ public partial class LeaguePickerViewModel : ObservableObject
     {
         if (row is null)
             return;
-        _league.Set(row.Id, row.Name);
-        _cache.Invalidate();
-        await _navigator.ShowMainAsync().ConfigureAwait(true);
+        await AppBusy.RunAsync(async () =>
+        {
+            _league.Set(row.Id, row.Name);
+            _cache.Invalidate();
+            await _navigator.ShowMainAsync().ConfigureAwait(true);
+        }).ConfigureAwait(true);
     }
 
     [RelayCommand]

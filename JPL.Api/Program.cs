@@ -307,16 +307,6 @@ public class Program
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        var stale = await db.Users
-            .Where(u => u.Username == "AmaanRehan")
-            .ToListAsync()
-            .ConfigureAwait(false);
-        if (stale.Count > 0)
-        {
-            db.Users.RemoveRange(stale);
-            await db.SaveChangesAsync().ConfigureAwait(false);
-        }
-
         await EnsureUser("user", "user123", AppRole.Guest, null).ConfigureAwait(false);
         await EnsureUser("groundowner", "ground123", AppRole.GroundOwner, null).ConfigureAwait(false);
         await EnsureSoleSuperAdminAsync(db, hasher).ConfigureAwait(false);

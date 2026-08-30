@@ -78,6 +78,11 @@ public partial class GroundBookRequestViewModel : ObservableObject
     public ObservableCollection<BookableShopChoice> ShopChoices { get; } = new();
     public IReadOnlyList<string> HourChoices { get; } = ["1", "2", "3", "4", "5", "6", "8"];
 
+    public const string TabBooking = "booking";
+    public const string TabServices = "services";
+    public const string TabShop = "shop";
+    public const string TabConfirm = "confirm";
+
     [ObservableProperty] private string groundName = "Request booking";
     [ObservableProperty] private GroundBookingOfferDto? selectedOffer;
     [ObservableProperty] private string selectedHoursText = "2";
@@ -92,11 +97,18 @@ public partial class GroundBookRequestViewModel : ObservableObject
     [ObservableProperty] private string notes = string.Empty;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string? errorMessage;
+    [ObservableProperty] private string selectedTab = TabBooking;
 
     public bool ShowHours => SelectedOffer?.IsHourly == true;
     public bool HasPaidServices => ServiceChoices.Count > 0;
     public bool HasShopItems => ShopChoices.Count > 0;
+    public bool HasNoServices => !HasPaidServices;
+    public bool HasNoShopItems => !HasShopItems;
     public bool HasExtras => !string.IsNullOrWhiteSpace(ExtrasLine);
+    public bool IsBookingTab => SelectedTab == TabBooking;
+    public bool IsServicesTab => SelectedTab == TabServices;
+    public bool IsShopTab => SelectedTab == TabShop;
+    public bool IsConfirmTab => SelectedTab == TabConfirm;
 
     private int _nightStartsHour = 18;
     private int _nightEndsHour = 6;
@@ -179,11 +191,39 @@ public partial class GroundBookRequestViewModel : ObservableObject
         }
 
         SelectedOffer = OfferChoices.FirstOrDefault();
-        OnPropertyChanged(nameof(HasPaidServices));
-        OnPropertyChanged(nameof(HasShopItems));
+        NotifyExtrasVisibility();
         RefreshQuote();
+        SelectedTab = TabBooking;
         if (OfferChoices.Count == 0)
             ErrorMessage = "This ground has no booking types enabled.";
+    }
+
+    partial void OnSelectedTabChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsBookingTab));
+        OnPropertyChanged(nameof(IsServicesTab));
+        OnPropertyChanged(nameof(IsShopTab));
+        OnPropertyChanged(nameof(IsConfirmTab));
+    }
+
+    [RelayCommand]
+    private void SelectBookingTab() => SelectedTab = TabBooking;
+
+    [RelayCommand]
+    private void SelectServicesTab() => SelectedTab = TabServices;
+
+    [RelayCommand]
+    private void SelectShopTab() => SelectedTab = TabShop;
+
+    [RelayCommand]
+    private void SelectConfirmTab() => SelectedTab = TabConfirm;
+
+    private void NotifyExtrasVisibility()
+    {
+        OnPropertyChanged(nameof(HasPaidServices));
+        OnPropertyChanged(nameof(HasShopItems));
+        OnPropertyChanged(nameof(HasNoServices));
+        OnPropertyChanged(nameof(HasNoShopItems));
     }
 
     partial void OnSelectedOfferChanged(GroundBookingOfferDto? value)

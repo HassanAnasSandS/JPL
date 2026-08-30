@@ -39,6 +39,38 @@ public sealed class SchedulerController : ControllerBase
         return Ok(rows.Select(t => ToListDto(t, names)).ToList());
     }
 
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<SchedulerListDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, Guid? createdBy = null, CancellationToken ct = default)
+    {
+        if (!TryGetOwner(out var userId, out var isPlatformAdmin, out var error))
+            return error;
+
+        (skip, take) = Paging.Clamp(skip, take);
+        await using var db = _dbs.CreateMaster();
+        var query = db.SchedulerTournaments.AsNoTracking().AsQueryable();
+        if (!isPlatformAdmin)
+            query = query.Where(t => t.CreatedByUserId == userId);
+        else if (createdBy is Guid ownerId && ownerId != Guid.Empty)
+            query = query.Where(t => t.CreatedByUserId == ownerId);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(t => EF.Functions.Like(t.Name, like));
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var rows = await query
+            .Include(t => t.Teams)
+            .Include(t => t.Matches)
+            .OrderByDescending(t => t.UpdatedAtUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var names = await LoadUserNamesAsync(db, rows.Select(t => t.CreatedByUserId), ct)
+            .ConfigureAwait(false);
+        return Ok(new PagedResult<SchedulerListDto>(rows.Select(t => ToListDto(t, names)).ToList(), total, skip, take));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<SchedulerDetailDto>> Get(Guid id, CancellationToken ct)
     {

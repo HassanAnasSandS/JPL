@@ -1,4 +1,5 @@
 using JPL.ViewModels;
+using JPL.Services;
 
 namespace JPL.Pages;
 
@@ -10,6 +11,7 @@ public partial class AuctionReportPage : ContentPage
     {
         InitializeComponent();
         BindingContext = _vm = vm;
+        ScrollSync.FreezeHeader(AuctionTableScroll, AuctionNameHeaderHost, AuctionStatsHeaderHost);
     }
 
     protected override void OnAppearing()

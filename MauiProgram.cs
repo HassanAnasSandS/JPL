@@ -39,6 +39,13 @@ public static class MauiProgram
                         if (view is ImageButton button)
                             AppBusyClicks.Attach(button);
                     });
+                Microsoft.Maui.Controls.Handlers.Items.CollectionViewHandler.Mapper.AppendToMapping(
+                    "JplInfiniteScroll",
+                    static (_, view) =>
+                    {
+                        if (view is CollectionView cv)
+                            InfiniteScroll.AttachCollectionView(cv);
+                    });
 #if ANDROID
                 Microsoft.Maui.Handlers.ToolbarHandler.Mapper.AppendToMapping(
                     "JplToolbarTitlePad",

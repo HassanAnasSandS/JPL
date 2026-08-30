@@ -52,6 +52,12 @@
                            FontAttributes="Bold"
                            VerticalOptions="Center"
                            TextColor="{StaticResource Primary}" />
+                    <Label Grid.Column="1"
+                           Text="{x:Static svc:BrandSlogans.Analytics}"
+                           FontSize="11"
+                           VerticalOptions="Center"
+                           LineBreakMode="TailTruncation"
+                           TextColor="{StaticResource TextSecondary}" />
                     <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
                         <Button Text="Teams"
                                 Command="{Binding UseTeamModeCommand}"

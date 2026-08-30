@@ -23,6 +23,8 @@
                        FontSize="11"
                        FontAttributes="Bold"
                        HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       LineBreakMode="WordWrap"
                        TextColor="White" />
             </Border>
 

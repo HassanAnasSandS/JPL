@@ -7,6 +7,7 @@ namespace JPL.Services;
 public interface ILeagueService
 {
     Task<IReadOnlyList<League>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<League>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<League?> GetAsync(Guid id, CancellationToken ct = default);
     Task<League> CreateAsync(string name, byte[]? imageBytes, CancellationToken ct = default);
     Task<League> UpdateAsync(Guid id, string name, byte[]? imageBytes, CancellationToken ct = default);
@@ -50,6 +51,13 @@ public sealed class LeagueService : ILeagueService
         }
 
         return CollapseSameNames(await LoadLocalAsync(ct).ConfigureAwait(false));
+    }
+
+    public async Task<ApiPagedResult<League>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var page = await _api.GetLeaguesPageAsync(skip, q, ct).ConfigureAwait(false);
+        var items = (page.Items ?? []).Select(ToEntity).ToList();
+        return page.WithItems(items);
     }
 
     /// <summary>API historically allowed two active rows with the same name (different Guids).</summary>

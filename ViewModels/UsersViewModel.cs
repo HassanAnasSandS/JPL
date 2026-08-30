@@ -45,8 +45,10 @@ public partial class UsersViewModel : ObservableObject
     private readonly IAuthService _auth;
     private readonly IUsersModuleGate _gate;
     private readonly ILeagueService _leagues;
-    private List<AppUser> _all = new();
     private int _loadGen;
+    private int _loadBusy;
+    private int _filterGen;
+    private int _suppressFilter;
 
     public ObservableCollection<UserRow> Items { get; } = new();
     public ObservableCollection<UserLeagueOption> LeagueFilterOptions { get; } = new();
@@ -67,6 +69,10 @@ public partial class UsersViewModel : ObservableObject
     [ObservableProperty] private int totalCount;
     [ObservableProperty] private int activeCount;
     [ObservableProperty] private int inactiveCount;
+    [ObservableProperty] private bool isLoadingMore;
+    [ObservableProperty] private bool hasMore = true;
+
+    public string CountLabel => TotalCount <= 0 ? "No users" : $"{Items.Count} of {TotalCount}";
 
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
     public bool ShowManagement => IsUnlocked;
@@ -119,7 +125,8 @@ public partial class UsersViewModel : ObservableObject
     partial void OnNameFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadDebouncedAsync();
     }
 
     partial void OnStatusFilterChanged(int value)
@@ -128,22 +135,29 @@ public partial class UsersViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAllFilter));
         OnPropertyChanged(nameof(IsActiveFilter));
         OnPropertyChanged(nameof(IsInactiveFilter));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadAsync();
     }
 
     partial void OnSelectedLeagueFilterChanged(UserLeagueOption? value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadAsync();
     }
 
     partial void OnSelectedRoleFilterChanged(UserRoleOption? value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
-        ApplyFilters();
+        if (_suppressFilter == 0)
+            _ = ReloadAsync();
     }
 
-    partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(AllFilterLabel));
+    partial void OnTotalCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(AllFilterLabel));
+        OnPropertyChanged(nameof(CountLabel));
+    }
     partial void OnActiveCountChanged(int value) => OnPropertyChanged(nameof(ActiveFilterLabel));
     partial void OnInactiveCountChanged(int value) => OnPropertyChanged(nameof(InactiveFilterLabel));
 
@@ -179,7 +193,10 @@ public partial class UsersViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task LoadAsync()
+    public Task LoadAsync() => ReloadAsync();
+
+    [RelayCommand]
+    private async Task ReloadAsync()
     {
         CanWrite = _auth.Current?.CanManageUsers == true;
         if (!CanWrite)
@@ -195,23 +212,58 @@ public partial class UsersViewModel : ObservableObject
             return;
         }
 
+        HasMore = true;
+        Items.Clear();
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadDebouncedAsync()
+    {
+        var gen = Interlocked.Increment(ref _filterGen);
+        await Task.Delay(350).ConfigureAwait(true);
+        if (gen != _filterGen)
+            return;
+        await ReloadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreAsync()
+    {
+        CanWrite = _auth.Current?.CanManageUsers == true;
+        if (!CanWrite || !_gate.IsUnlocked)
+            return;
+        if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
+            return;
+
         var gen = Interlocked.Increment(ref _loadGen);
         try
         {
-            IsBusy = true;
+            if (Items.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
             ErrorMessage = null;
-            CanWrite = _auth.Current?.CanManageUsers == true;
             IsUnlocked = true;
 
-            var users = (await _users.GetAllAsync().ConfigureAwait(true)).ToList();
+            if (Items.Count == 0)
+                await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
             if (gen != Volatile.Read(ref _loadGen))
                 return;
-            _all = users;
-            await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
+
+            var leagueId = SelectedLeagueFilter is { } league && league.Id != Guid.Empty ? league.Id : (Guid?)null;
+            var role = SelectedRoleFilter?.Role?.ToString();
+            var page = await _users.GetPageAsync(Items.Count, NameFilter, StatusFilter, leagueId, role)
+                .ConfigureAwait(true);
             if (gen != Volatile.Read(ref _loadGen))
                 return;
-            RefreshCounts();
-            ApplyFilters();
+
+            TotalCount = page.TotalCount;
+            ActiveCount = page.ActiveCount ?? ActiveCount;
+            InactiveCount = page.InactiveCount ?? InactiveCount;
+            ListPaging.Append(Items, page.Items.Select(ToRow), r => r.Id);
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
         }
         catch (Exception ex)
         {
@@ -222,17 +274,21 @@ public partial class UsersViewModel : ObservableObject
                 : ex.Message;
             if (NetworkUi.IsNetworkFailure(ex))
                 await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
-            _all = new List<AppUser>();
-            await LoadLeagueFilterOptionsAsync().ConfigureAwait(true);
-            if (gen != Volatile.Read(ref _loadGen))
-                return;
-            RefreshCounts();
-            ApplyFilters();
+            if (Items.Count == 0)
+            {
+                TotalCount = 0;
+                ActiveCount = 0;
+                InactiveCount = 0;
+            }
         }
         finally
         {
             if (gen == Volatile.Read(ref _loadGen))
+            {
                 IsBusy = false;
+                IsLoadingMore = false;
+            }
+            Interlocked.Exchange(ref _loadBusy, 0);
         }
     }
 
@@ -250,12 +306,15 @@ public partial class UsersViewModel : ObservableObject
     [RelayCommand]
     private void ClearFilters()
     {
+        Interlocked.Exchange(ref _suppressFilter, 1);
         NameFilter = string.Empty;
         StatusFilter = 0;
         SelectedLeagueFilter = LeagueFilterOptions.FirstOrDefault(l => l.Id == Guid.Empty)
             ?? AllLeaguesOption;
         SelectedRoleFilter = RoleFilterOptions.FirstOrDefault(r => r.Role is null)
             ?? AllRolesOption;
+        Interlocked.Exchange(ref _suppressFilter, 0);
+        _ = ReloadAsync();
     }
 
     private async Task LoadLeagueFilterOptionsAsync()
@@ -286,54 +345,19 @@ public partial class UsersViewModel : ObservableObject
             ?? AllLeaguesOption;
     }
 
-    private void RefreshCounts()
+    private static UserRow ToRow(AppUser u) => new()
     {
-        TotalCount = _all.Count;
-        ActiveCount = _all.Count(u => u.IsActive);
-        InactiveCount = _all.Count(u => !u.IsActive);
-    }
-
-    private void ApplyFilters()
-    {
-        IEnumerable<AppUser> q = _all;
-
-        q = StatusFilter switch
-        {
-            1 => q.Where(u => u.IsActive),
-            2 => q.Where(u => !u.IsActive),
-            _ => q
-        };
-
-        if (SelectedLeagueFilter is { } league && league.Id != Guid.Empty)
-            q = q.Where(u => u.LeagueId == league.Id);
-
-        if (SelectedRoleFilter?.Role is AppRole role)
-            q = q.Where(u => u.Role == role);
-
-        var name = NameFilter?.Trim();
-        if (!string.IsNullOrWhiteSpace(name))
-            q = q.Where(u =>
-                u.Username.Contains(name, StringComparison.OrdinalIgnoreCase)
-                || u.LeagueName.Contains(name, StringComparison.OrdinalIgnoreCase));
-
-        Items.Clear();
-        foreach (var u in q)
-        {
-            Items.Add(new UserRow
-            {
-                Id = u.Id,
-                Username = u.Username,
-                Role = u.Role,
-                RoleLabel = AppRoleLabels.Of(u.Role),
-                LeagueName = u.Role is AppRole.PublicUser or AppRole.Guest or AppRole.GroundOwner || string.IsNullOrWhiteSpace(u.LeagueName)
-                    ? (u.Role == AppRole.PublicUser ? "Public"
-                        : u.Role == AppRole.Guest ? "Guest"
-                        : string.IsNullOrWhiteSpace(u.LeagueName) ? "No league" : u.LeagueName)
-                    : u.LeagueName,
-                IsActive = u.IsActive
-            });
-        }
-    }
+        Id = u.Id,
+        Username = u.Username,
+        Role = u.Role,
+        RoleLabel = AppRoleLabels.Of(u.Role),
+        LeagueName = u.Role is AppRole.PublicUser or AppRole.Guest or AppRole.GroundOwner || string.IsNullOrWhiteSpace(u.LeagueName)
+            ? (u.Role == AppRole.PublicUser ? "Public"
+                : u.Role == AppRole.Guest ? "Guest"
+                : string.IsNullOrWhiteSpace(u.LeagueName) ? "No league" : u.LeagueName)
+            : u.LeagueName,
+        IsActive = u.IsActive
+    };
 
     [RelayCommand]
     private async Task AddAsync()

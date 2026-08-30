@@ -103,6 +103,7 @@ public sealed record TournamentDraft(
 public interface ITournamentService
 {
     Task<IReadOnlyList<TournamentListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<TournamentListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default);
     Task<TournamentDetail?> GetAsync(Guid id, CancellationToken ct = default);
     Task<TournamentDetail> CreateAsync(TournamentDraft draft, CancellationToken ct = default);
     Task<TournamentDetail> UpdateAsync(Guid id, TournamentDraft draft, CancellationToken ct = default);
@@ -155,6 +156,30 @@ public sealed class TournamentService : ITournamentService
         }
 
         return list;
+    }
+
+    public async Task<ApiPagedResult<TournamentListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
+    {
+        var remote = await _api.GetTournamentsPageAsync(skip, q, ct).ConfigureAwait(false);
+        var pendingTours = await _sync.GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
+        var list = new List<TournamentListItem>();
+        foreach (var t in remote.Items ?? [])
+        {
+            var pending = pendingTours.Contains(t.Id);
+            var ready = pending && await IsReadyToSyncAsync(t.Id, ct).ConfigureAwait(false);
+            list.Add(new TournamentListItem
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Status = t.Status,
+                StatusText = t.StatusText,
+                MetaLine = $"{t.GroupCount} group{(t.GroupCount == 1 ? "" : "s")} · Qualify {t.QualifyPerGroup} · {t.TeamCount} teams · {t.FixtureCount} fixtures",
+                WinnerLine = string.IsNullOrWhiteSpace(t.WinnerTeamName) ? "" : $"Champion: {t.WinnerTeamName}",
+                NeedsSync = ready
+            });
+        }
+
+        return remote.WithItems(list);
     }
 
     public async Task<TournamentDetail?> GetAsync(Guid id, CancellationToken ct = default)

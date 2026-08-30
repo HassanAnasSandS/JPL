@@ -28,8 +28,8 @@
 		<ApplicationId>com.jpl.cricketscorer</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>2.3</ApplicationDisplayVersion>
-		<ApplicationVersion>45</ApplicationVersion>
+		<ApplicationDisplayVersion>1.0.3</ApplicationDisplayVersion>
+		<ApplicationVersion>6</ApplicationVersion>
 
 		<!-- Unpackaged desktop exe — avoids MSIX packaging issues for local debug. -->
 		<WindowsPackageType>None</WindowsPackageType>

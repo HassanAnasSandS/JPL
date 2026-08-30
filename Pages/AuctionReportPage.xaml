@@ -52,7 +52,8 @@
                        Margin="4,0,4,0"
                        TextColor="{StaticResource Primary}" />
 
-                <ScrollView Orientation="Vertical"
+                <ScrollView x:Name="AuctionTableScroll"
+                            Orientation="Vertical"
                             VerticalOptions="Fill"
                             VerticalScrollBarVisibility="Always"
                             HorizontalScrollBarVisibility="Never">
@@ -61,31 +62,9 @@
                         <Border StrokeThickness="0"
                                 BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
                                 Padding="0">
+                            <Grid>
                             <VerticalStackLayout Spacing="0">
-                                <Grid HeightRequest="28"
-                                      Padding="4,6"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Label Text="Player"
-                                           FontAttributes="Bold"
-                                           FontSize="10"
-                                           VerticalOptions="Center"
-                                           TextColor="White" />
-                                </Grid>
-                                <Grid HeightRequest="36"
-                                      Padding="2,4"
-                                      BackgroundColor="{AppThemeBinding Light=#F5F5F5, Dark=#212121}">
-                                    <Button Text="Player"
-                                            FontSize="9"
-                                            FontAttributes="Bold"
-                                            TextColor="{StaticResource Primary}"
-                                            BackgroundColor="Transparent"
-                                            BorderWidth="0"
-                                            Padding="0"
-                                            Margin="0"
-                                            HeightRequest="28"
-                                            Command="{Binding SortCommand}"
-                                            CommandParameter="PlayerName" />
-                                </Grid>
+                                <BoxView HeightRequest="64" Color="Transparent" />
                                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0">
                                     <BindableLayout.EmptyView>
                                         <Label Text="No auction participation yet."
@@ -113,13 +92,72 @@
                                     </BindableLayout.ItemTemplate>
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
+                            <VerticalStackLayout x:Name="AuctionNameHeaderHost"
+                                                 VerticalOptions="Start"
+                                                 ZIndex="20"
+                                                 Spacing="0"
+                                                 BackgroundColor="{StaticResource Primary}">
+                                <Grid HeightRequest="28"
+                                      Padding="4,6"
+                                      BackgroundColor="{StaticResource Primary}">
+                                    <Label Text="Player"
+                                           FontAttributes="Bold"
+                                           FontSize="10"
+                                           VerticalOptions="Center"
+                                           TextColor="White" />
+                                </Grid>
+                                <Grid HeightRequest="36"
+                                      Padding="2,4"
+                                      BackgroundColor="{AppThemeBinding Light=#F5F5F5, Dark=#212121}">
+                                    <Button Text="Player"
+                                            FontSize="9"
+                                            FontAttributes="Bold"
+                                            TextColor="{StaticResource Primary}"
+                                            BackgroundColor="Transparent"
+                                            BorderWidth="0"
+                                            Padding="0"
+                                            Margin="0"
+                                            HeightRequest="28"
+                                            Command="{Binding SortCommand}"
+                                            CommandParameter="PlayerName" />
+                                </Grid>
+                            </VerticalStackLayout>
+                            </Grid>
                         </Border>
 
                         <ScrollView Grid.Column="1"
                                     Orientation="Horizontal"
                                     HorizontalScrollBarVisibility="Always"
                                     VerticalScrollBarVisibility="Never">
+                            <Grid>
                             <VerticalStackLayout Spacing="0">
+                                <BoxView HeightRequest="64" Color="Transparent" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:AuctionReportRow">
+                                            <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
+                                                  HeightRequest="36"
+                                                  Padding="2,0">
+                                                <Label Text="{Binding AuctionsParticipated}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="1" Text="{Binding TimesSold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="2" Text="{Binding TimesUnsold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="3" Text="{Binding TotalBasePrice, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="4" Text="{Binding TotalSoldAmount, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="5" Text="{Binding AverageSoldPrice, StringFormat='{0:N1}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="6" Text="{Binding HighestSoldPrice, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="7" Text="{Binding TimesAsCaptain}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="8" Text="{Binding TotalWalletAssigned, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="9" Text="{Binding TotalSpentAsCaptain, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="10" Text="{Binding WalletRemaining, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                            <VerticalStackLayout x:Name="AuctionStatsHeaderHost"
+                                                 VerticalOptions="Start"
+                                                 ZIndex="20"
+                                                 Spacing="0">
                                 <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
                                       HeightRequest="28"
                                       Padding="4,6"
@@ -143,7 +181,6 @@
                                            HorizontalTextAlignment="Center"
                                            TextColor="{StaticResource Secondary}" />
                                 </Grid>
-
                                 <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
                                       HeightRequest="36"
                                       Padding="2,4"
@@ -160,29 +197,8 @@
                                     <Button Grid.Column="9" Text="Spent" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TotalSpentAsCaptain" />
                                     <Button Grid.Column="10" Text="Left" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="WalletRemaining" />
                                 </Grid>
-
-                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0">
-                                    <BindableLayout.ItemTemplate>
-                                        <DataTemplate x:DataType="svc:AuctionReportRow">
-                                            <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
-                                                  HeightRequest="36"
-                                                  Padding="2,0">
-                                                <Label Text="{Binding AuctionsParticipated}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="1" Text="{Binding TimesSold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="2" Text="{Binding TimesUnsold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="3" Text="{Binding TotalBasePrice, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="4" Text="{Binding TotalSoldAmount, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="5" Text="{Binding AverageSoldPrice, StringFormat='{0:N1}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="6" Text="{Binding HighestSoldPrice, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="7" Text="{Binding TimesAsCaptain}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="8" Text="{Binding TotalWalletAssigned, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="9" Text="{Binding TotalSpentAsCaptain, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                                <Label Grid.Column="10" Text="{Binding WalletRemaining, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </BindableLayout.ItemTemplate>
-                                </VerticalStackLayout>
                             </VerticalStackLayout>
+                            </Grid>
                         </ScrollView>
                     </Grid>
                 </ScrollView>

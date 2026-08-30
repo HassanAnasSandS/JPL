@@ -9,7 +9,6 @@ public partial class App : Application
     private readonly IServiceProvider _services;
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
-    private readonly ILeagueContext _league;
     private readonly IAppStartupStatus _startup;
     private int _lifecycleSyncBusy;
     private DateTime _lastLifecycleSyncUtc = DateTime.MinValue;
@@ -18,7 +17,6 @@ public partial class App : Application
         IServiceProvider services,
         IAuthService auth,
         IAppNavigator navigator,
-        ILeagueContext league,
         IAppStartupStatus startup)
     {
         InitializeComponent();
@@ -27,23 +25,24 @@ public partial class App : Application
         _services = services;
         _auth = auth;
         _navigator = navigator;
-        _league = league;
         _startup = startup;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
         MauiProgram.StartInitialize(_services);
-
-        // Preferences may hold a token from another database (e.g. JPL → JPLTesting).
-        // Always open Login first; promote to Shell only after local DB is ready.
         _auth.RestoreLocalSession();
-        if (_auth.IsAuthenticated)
-            _startup.SetBusy("Restoring session…");
+
+        var startingMessage = _auth.IsAuthenticated ? "Opening your account…" : "Starting Cric360…";
+        _startup.SetBusy(startingMessage);
+
+        var splash = new Pages.SplashPage(_startup);
+        splash.SetStatus(startingMessage);
 
         var main = new Window
         {
-            Title = "Cric360"
+            Title = "Cric360",
+            Page = splash
 #if WINDOWS
             ,
             Width = 1280,
@@ -51,69 +50,61 @@ public partial class App : Application
 #endif
         };
         _navigator.Attach(main);
-        main.Page = _services.GetRequiredService<Pages.LoginPage>();
 
+        // Do not build AppShell here — that used to freeze the native splash logo
+        // for several seconds with no spinner. Paint splash first, then continue.
         main.Created += async (_, _) =>
         {
             try
             {
-                if (_auth.IsAuthenticated)
-                    _startup.SetBusy("Preparing…");
-
-                // DB seed only — do NOT wait on network here (was making cold start feel hung).
-                await MauiProgram.WhenReadyAsync().WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(true);
-
+                await Task.Delay(80).ConfigureAwait(true);
+                _auth.RestoreLocalSession();
                 if (_auth.IsAuthenticated)
                 {
-                    _startup.SetBusy("Checking account…");
-                    try
-                    {
-                        // Do not use a short CTS here: cancelling an in-flight HTTPS call
-                        // aborts the socket and Visual Studio reports TaskCanceledException
-                        // at AuthHttpMessageHandler. HttpClient.Timeout already bounds the wait.
-                        await _auth.ValidateRemoteSessionAsync().ConfigureAwait(true);
-                    }
-                    catch
-                    {
-                        /* offline / timeout — keep local session */
-                    }
+                    _startup.SetBusy("Opening your account…");
+                    splash.SetStatus("Opening your account…");
+                    await _navigator.ContinueAfterAuthAsync(freshLogin: false).ConfigureAwait(true);
+                    if (_auth.IsAuthenticated)
+                        _ = ValidateSessionInBackgroundAsync();
+                    else
+                        await _navigator.ShowLoginAsync().ConfigureAwait(true);
                 }
-
-                if (_auth.IsAuthenticated)
+                else
                 {
-                    try
-                    {
-                        _startup.SetBusy("Opening…");
-                        await _navigator.ContinueAfterAuthAsync(freshLogin: false).ConfigureAwait(true);
-                        return;
-                    }
-                    catch
-                    {
-                        await _auth.LogoutAsync().ConfigureAwait(true);
-                    }
+                    await _navigator.ShowLoginAsync().ConfigureAwait(true);
                 }
-
-                await _navigator.ShowLoginAsync().ConfigureAwait(true);
-            }
-            catch (SessionExpiredException)
-            {
-                await _navigator.ShowLoginAsync().ConfigureAwait(true);
             }
             catch
             {
-                await _navigator.ShowLoginAsync().ConfigureAwait(true);
+                _auth.RestoreLocalSession();
+                if (_auth.IsAuthenticated)
+                    await _navigator.ContinueAfterAuthAsync(freshLogin: false).ConfigureAwait(true);
+                else
+                    await _navigator.ShowLoginAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                _startup.Clear();
             }
         };
 
+        main.Resumed += (_, _) => RequestBackgroundSync();
         main.Stopped += (_, _) =>
         {
+            // Recents swipe kills the process after Stopped. Flush login to disk
+            // here — never call the API (a 401 used to wipe the saved session).
+            _auth.FlushPersistedSession();
             CheckpointLocalDb();
-            RequestBackgroundSync();
         };
         main.Deactivated += (_, _) =>
         {
+            _auth.FlushPersistedSession();
             CheckpointLocalDb();
-            RequestBackgroundSync();
+        };
+        main.Destroying += (_, _) =>
+        {
+            _auth.FlushPersistedSession();
+            CheckpointLocalDb();
         };
 
         return main;
@@ -126,6 +117,8 @@ public partial class App : Application
             await _auth.ValidateRemoteSessionAsync().ConfigureAwait(false);
             if (_auth.IsAuthenticated)
                 return;
+
+            // Only deleted / deactivated accounts clear the session.
 
             await MainThread.InvokeOnMainThreadAsync(async () =>
             {

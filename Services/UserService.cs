@@ -13,6 +13,8 @@ public sealed record UserDraft(
 public interface IUserService
 {
     Task<IReadOnlyList<AppUser>> GetAllAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<AppUser>> GetPageAsync(
+        int skip, string? q, int status, Guid? leagueId, string? role, CancellationToken ct = default);
     Task<AppUser?> GetAsync(Guid id, CancellationToken ct = default);
     Task<AppUser> CreateAsync(UserDraft draft, CancellationToken ct = default);
     Task<AppUser> UpdateAsync(Guid id, UserDraft draft, CancellationToken ct = default);
@@ -45,6 +47,20 @@ public sealed class UserService : IUserService
             .OrderByDescending(u => u.Role)
             .ThenBy(u => u.Username)
             .ToList();
+    }
+
+    public async Task<ApiPagedResult<AppUser>> GetPageAsync(
+        int skip, string? q, int status, Guid? leagueId, string? role, CancellationToken ct = default)
+    {
+        var statusKey = status switch
+        {
+            1 => "active",
+            2 => "inactive",
+            _ => null
+        };
+        var page = await _api.GetUsersPageAsync(skip, q, statusKey, leagueId, role, ct).ConfigureAwait(false);
+        var items = (page.Items ?? []).Select(ToEntity).ToList();
+        return page.WithItems(items);
     }
 
     public async Task<AppUser?> GetAsync(Guid id, CancellationToken ct = default)

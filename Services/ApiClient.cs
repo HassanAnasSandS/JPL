@@ -55,6 +55,15 @@ public sealed record ApiTeamDto(
     bool IsActive,
     IReadOnlyList<Guid>? PlayingPlayerIds = null);
 
+public sealed record ApiTeamListDto(
+    Guid Id,
+    string Name,
+    Guid? CaptainPlayerId,
+    string? CaptainName,
+    int PlayerCount,
+    int PlayingCount,
+    bool IsActive);
+
 public sealed record ApiMatchSummaryDto(
     Guid Id,
     string Title,
@@ -431,12 +440,17 @@ public interface IApiClient
     Task<ApiLoginResult?> GetMeAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiUserDto>> GetUsersAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiUserDto>> GetUsersPageAsync(
+        int skip, string? q = null, string? status = null, Guid? leagueId = null, string? role = null,
+        CancellationToken ct = default);
     Task<ApiUserDto?> GetUserAsync(Guid id, CancellationToken ct = default);
     Task<ApiUserDto> CreateUserAsync(object body, CancellationToken ct = default);
     Task<ApiUserDto> UpdateUserAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteUserAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiPlayerDto>> GetPlayersAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiPlayerDto>> GetPlayersPageAsync(
+        int skip, string? q = null, string? status = null, CancellationToken ct = default);
     Task<ApiPlayerDto?> GetPlayerAsync(Guid id, CancellationToken ct = default);
     Task<ApiPlayerDto> CreatePlayerAsync(object body, CancellationToken ct = default);
     Task<ApiPlayerDto> UpdatePlayerAsync(Guid id, object body, CancellationToken ct = default);
@@ -447,6 +461,8 @@ public interface IApiClient
     Task DeletePlayerImageAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiTeamDto>> GetTeamsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiTeamListDto>> GetTeamsPageAsync(
+        int skip, string? q = null, string? captain = null, string? status = null, CancellationToken ct = default);
     Task<ApiTeamDto?> GetTeamAsync(Guid id, CancellationToken ct = default);
     Task<ApiTeamDto> CreateTeamAsync(object body, CancellationToken ct = default);
     Task<ApiTeamDto> UpdateTeamAsync(Guid id, object body, CancellationToken ct = default);
@@ -458,16 +474,31 @@ public interface IApiClient
 
     /// <summary>Completed matches from server (ongoing stays local).</summary>
     Task<IReadOnlyList<ApiMatchSummaryDto>> GetCompletedMatchesAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiMatchSummaryDto>> GetCompletedMatchesPageAsync(
+        int skip, string? q = null, string? captain = null, string? date = null, CancellationToken ct = default);
     Task<IReadOnlyList<ApiMatchSummaryDto>> GetLiveMatchesAsync(CancellationToken ct = default);
     Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default);
     Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default);
 
     /// <summary>Completed nets sessions from server (live scoring stays local until complete + outbox sync).</summary>
     Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetCompletedNetSessionsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiNetSessionSummaryDto>> GetCompletedNetSessionsPageAsync(
+        int skip, string? q = null, string? date = null, CancellationToken ct = default);
     Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetLiveNetSessionsAsync(CancellationToken ct = default);
     Task<NetSessionScorecard?> GetNetSessionScorecardAsync(Guid sessionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<PlayerCareerSummary>> GetStatsLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<ApiPagedResult<PlayerCareerSummary>> GetStatsLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
@@ -479,12 +510,30 @@ public interface IApiClient
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<RankingRow>> GetRankingsPageAsync(
+        int skip,
+        string category,
+        string? q = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
     Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
     Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<ApiPagedResult<TeamCareerSummary>> GetTeamLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
@@ -498,32 +547,43 @@ public interface IApiClient
         IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
     Task<HallOfFameBundle> GetHallOfFameAsync(IReadOnlyList<Guid>? formatIds = null, CancellationToken ct = default);
+    Task<ApiPagedResult<TrophyRow>> GetHallOfFamePageAsync(
+        int skip,
+        string category,
+        string? q = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiFormatDto>> GetFormatsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiFormatDto>> GetFormatsPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiFormatDto?> GetFormatAsync(Guid id, CancellationToken ct = default);
     Task<ApiFormatDto> CreateFormatAsync(object body, CancellationToken ct = default);
     Task<ApiFormatDto> UpdateFormatAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteFormatAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiAuctionDto>> GetAuctionsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiAuctionDto>> GetAuctionsPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiAuctionDto> CreateAuctionAsync(object body, CancellationToken ct = default);
     Task<ApiAuctionDto> UpdateAuctionAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteAuctionAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<AuctionReportRow>> GetAuctionReportAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiVenueDto>> GetVenuesAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiVenueDto>> GetVenuesPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiVenueDto?> GetVenueAsync(Guid id, CancellationToken ct = default);
     Task<ApiVenueDto> CreateVenueAsync(object body, CancellationToken ct = default);
     Task<ApiVenueDto> UpdateVenueAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteVenueAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiVenueBookingDto>> GetVenueBookingsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiVenueBookingDto>> GetVenueBookingsPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiVenueBookingDto?> GetVenueBookingAsync(Guid id, CancellationToken ct = default);
     Task<ApiVenueBookingDto> CreateVenueBookingAsync(object body, CancellationToken ct = default);
     Task<ApiVenueBookingDto> UpdateVenueBookingAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteVenueBookingAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiTournamentListDto>> GetTournamentsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiTournamentListDto>> GetTournamentsPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiTournamentDetailDto?> GetTournamentAsync(Guid id, CancellationToken ct = default);
     Task<ApiTournamentDetailDto> CreateTournamentAsync(object body, CancellationToken ct = default);
     Task<ApiTournamentDetailDto> UpdateTournamentAsync(Guid id, object body, CancellationToken ct = default);
@@ -532,6 +592,7 @@ public interface IApiClient
     Task DeleteTournamentAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiSeriesListDto>> GetSeriesListAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiSeriesListDto>> GetSeriesPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiSeriesDetailDto?> GetSeriesAsync(Guid id, CancellationToken ct = default);
     Task<ApiSeriesDetailDto> CreateSeriesAsync(object body, CancellationToken ct = default);
     Task<ApiSeriesDetailDto> UpdateSeriesAsync(Guid id, object body, CancellationToken ct = default);
@@ -540,12 +601,14 @@ public interface IApiClient
     Task DeleteSeriesAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiSchedulerListDto>> GetSchedulerListAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiSchedulerListDto>> GetSchedulerPageAsync(int skip, string? q = null, Guid? createdBy = null, CancellationToken ct = default);
     Task<ApiSchedulerDetailDto?> GetSchedulerAsync(Guid id, CancellationToken ct = default);
     Task<ApiSchedulerDetailDto> CreateSchedulerAsync(object body, CancellationToken ct = default);
     Task<ApiSchedulerDetailDto> UpdateSchedulerAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteSchedulerAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiLeagueDto>> GetLeaguesAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiLeagueDto>> GetLeaguesPageAsync(int skip, string? q = null, CancellationToken ct = default);
     Task<ApiLeagueDto?> GetLeagueAsync(Guid id, CancellationToken ct = default);
     Task<ApiLeagueDto> CreateLeagueAsync(object body, CancellationToken ct = default);
     Task<ApiLeagueDto> UpdateLeagueAsync(Guid id, object body, CancellationToken ct = default);
@@ -566,6 +629,16 @@ public sealed class ApiClient : IApiClient
     {
         _httpClientFactory = httpClientFactory;
     }
+
+    private Task<ApiPagedResult<T>> GetPagedAsync<T>(string url, CancellationToken ct)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiPagedResult<T>>(JsonOptions, ct)
+                .ConfigureAwait(false)
+                ?? new ApiPagedResult<T>([], 0);
+        }, ct);
 
     public async Task<bool> PingAsync(CancellationToken ct = default)
     {
@@ -621,7 +694,15 @@ public sealed class ApiClient : IApiClient
         {
             using var response = await http.GetAsync("api/auth/me", ct).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                if (AuthMessages.IsAccountGone(body))
+                    throw new SessionExpiredException(
+                        string.IsNullOrWhiteSpace(body)
+                            ? "Your account is no longer active. Please sign in again."
+                            : body);
                 return null;
+            }
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             return await response.Content.ReadFromJsonAsync<ApiLoginResult>(JsonOptions, ct)
                 .ConfigureAwait(false);
@@ -636,6 +717,17 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<ApiUserDto>)(list ?? new List<ApiUserDto>());
         }, ct);
+
+    public Task<ApiPagedResult<ApiUserDto>> GetUsersPageAsync(
+        int skip, string? q = null, string? status = null, Guid? leagueId = null, string? role = null,
+        CancellationToken ct = default)
+        => GetPagedAsync<ApiUserDto>(
+            "api/users/page" + ListPaging.Query(skip,
+                ("q", q),
+                ("status", status),
+                ("leagueId", leagueId is Guid id && id != Guid.Empty ? id.ToString("D") : null),
+                ("role", role)),
+            ct);
 
     public Task<ApiUserDto?> GetUserAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
@@ -670,6 +762,11 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<ApiPlayerDto>)(list ?? new List<ApiPlayerDto>());
         }, ct);
+
+    public Task<ApiPagedResult<ApiPlayerDto>> GetPlayersPageAsync(
+        int skip, string? q = null, string? status = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiPlayerDto>(
+            "api/players/page" + ListPaging.Query(skip, ("q", q), ("status", status)), ct);
 
     public Task<ApiPlayerDto?> GetPlayerAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
@@ -747,6 +844,11 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiTeamDto>)(list ?? new List<ApiTeamDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiTeamListDto>> GetTeamsPageAsync(
+        int skip, string? q = null, string? captain = null, string? status = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiTeamListDto>(
+            "api/teams/page" + ListPaging.Query(skip, ("q", q), ("captain", captain), ("status", status)), ct);
+
     public Task<ApiTeamDto?> GetTeamAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -823,6 +925,11 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiMatchSummaryDto>)(list ?? new List<ApiMatchSummaryDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiMatchSummaryDto>> GetCompletedMatchesPageAsync(
+        int skip, string? q = null, string? captain = null, string? date = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiMatchSummaryDto>(
+            "api/matches/page" + ListPaging.Query(skip, ("q", q), ("captain", captain), ("date", date)), ct);
+
     public Task<IReadOnlyList<ApiMatchSummaryDto>> GetLiveMatchesAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -862,6 +969,11 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<ApiNetSessionSummaryDto>)(list ?? new List<ApiNetSessionSummaryDto>());
         }, ct);
+
+    public Task<ApiPagedResult<ApiNetSessionSummaryDto>> GetCompletedNetSessionsPageAsync(
+        int skip, string? q = null, string? date = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiNetSessionSummaryDto>(
+            "api/netsessions/page" + ListPaging.Query(skip, ("q", q), ("date", date)), ct);
 
     public Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetLiveNetSessionsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
@@ -910,6 +1022,21 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<PlayerCareerSummary>)(list ?? new List<PlayerCareerSummary>());
         }, ct);
+
+    public Task<ApiPagedResult<PlayerCareerSummary>> GetStatsLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+        => GetPagedAsync<PlayerCareerSummary>(
+            "api/stats/leaderboard/page" + StatsPageQuery(skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source, formatIds),
+            ct);
 
     public Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default)
         => RunAsync(async http =>
@@ -981,6 +1108,18 @@ public sealed class ApiClient : IApiClient
             return dto ?? new RankingsBundle();
         }, ct);
 
+    public Task<ApiPagedResult<RankingRow>> GetRankingsPageAsync(
+        int skip,
+        string category,
+        string? q = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+        => GetPagedAsync<RankingRow>(
+            "api/stats/rankings/page" + StatsPageQuery(skip, q, sort: null, ascending: false, fromUtc, toExclusiveUtc, venueId: null, source: null, formatIds, category),
+            ct);
+
     public Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
@@ -1030,6 +1169,20 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<TeamCareerSummary>)(list ?? new List<TeamCareerSummary>());
         }, ct);
 
+    public Task<ApiPagedResult<TeamCareerSummary>> GetTeamLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+        => GetPagedAsync<TeamCareerSummary>(
+            "api/stats/teams/page" + StatsPageQuery(skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source: null, formatIds),
+            ct);
+
     public Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
         Guid teamId,
         DateTime? fromUtc = null,
@@ -1069,6 +1222,16 @@ public sealed class ApiClient : IApiClient
             return dto ?? new HallOfFameBundle();
         }, ct);
 
+    public Task<ApiPagedResult<TrophyRow>> GetHallOfFamePageAsync(
+        int skip,
+        string category,
+        string? q = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+        => GetPagedAsync<TrophyRow>(
+            "api/hall-of-fame/page" + StatsPageQuery(skip, q, sort: null, ascending: false, fromUtc: null, toExclusiveUtc: null, venueId: null, source: null, formatIds, category),
+            ct);
+
     public Task<IReadOnlyList<ApiFormatDto>> GetFormatsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1078,6 +1241,9 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<ApiFormatDto>)(list ?? new List<ApiFormatDto>());
         }, ct);
+
+    public Task<ApiPagedResult<ApiFormatDto>> GetFormatsPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiFormatDto>("api/formats/page" + ListPaging.Query(skip, ("q", q)), ct);
 
     public Task<ApiFormatDto?> GetFormatAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1113,6 +1279,9 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiAuctionDto>)(list ?? new List<ApiAuctionDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiAuctionDto>> GetAuctionsPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiAuctionDto>("api/auctions/page" + ListPaging.Query(skip, ("q", q)), ct);
+
     public Task<ApiAuctionDto> CreateAuctionAsync(object body, CancellationToken ct = default)
         => SendJsonAsync<ApiAuctionDto>(HttpMethod.Post, "api/auctions", body, ct);
 
@@ -1145,6 +1314,9 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<ApiVenueDto>)(list ?? new List<ApiVenueDto>());
         }, ct);
+
+    public Task<ApiPagedResult<ApiVenueDto>> GetVenuesPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiVenueDto>("api/venues/page" + ListPaging.Query(skip, ("q", q)), ct);
 
     public Task<ApiVenueDto?> GetVenueAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1180,6 +1352,9 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiVenueBookingDto>)(list ?? new List<ApiVenueBookingDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiVenueBookingDto>> GetVenueBookingsPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiVenueBookingDto>("api/venuebookings/page" + ListPaging.Query(skip, ("q", q)), ct);
+
     public Task<ApiVenueBookingDto?> GetVenueBookingAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1213,6 +1388,9 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<ApiTournamentListDto>)(list ?? new List<ApiTournamentListDto>());
         }, ct);
+
+    public Task<ApiPagedResult<ApiTournamentListDto>> GetTournamentsPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiTournamentListDto>("api/tournaments/page" + ListPaging.Query(skip, ("q", q)), ct);
 
     public Task<ApiTournamentDetailDto?> GetTournamentAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1267,6 +1445,9 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiSeriesListDto>)(list ?? new List<ApiSeriesListDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiSeriesListDto>> GetSeriesPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiSeriesListDto>("api/series/page" + ListPaging.Query(skip, ("q", q)), ct);
+
     public Task<ApiSeriesDetailDto?> GetSeriesAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1320,6 +1501,12 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiSchedulerListDto>)(list ?? new List<ApiSchedulerListDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiSchedulerListDto>> GetSchedulerPageAsync(int skip, string? q = null, Guid? createdBy = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiSchedulerListDto>(
+            "api/scheduler/page" + ListPaging.Query(skip, ("q", q),
+                ("createdBy", createdBy is Guid id && id != Guid.Empty ? id.ToString("D") : null)),
+            ct);
+
     public Task<ApiSchedulerDetailDto?> GetSchedulerAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1354,6 +1541,9 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ApiLeagueDto>)(list ?? new List<ApiLeagueDto>());
         }, ct);
 
+    public Task<ApiPagedResult<ApiLeagueDto>> GetLeaguesPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiLeagueDto>("api/leagues/page" + ListPaging.Query(skip, ("q", q)), ct);
+
     public Task<ApiLeagueDto?> GetLeagueAsync(Guid id, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1376,6 +1566,43 @@ public sealed class ApiClient : IApiClient
             using var response = await http.DeleteAsync($"api/leagues/{id:D}", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
+
+    private static string StatsPageQuery(
+        int skip,
+        string? q,
+        string? sort,
+        bool ascending,
+        DateTime? fromUtc,
+        DateTime? toExclusiveUtc,
+        Guid? venueId,
+        string? source,
+        IReadOnlyList<Guid>? formatIds,
+        string? category = null)
+    {
+        var extra = new List<(string Key, string? Value)>
+        {
+            ("q", q),
+            ("sort", sort),
+            ("dir", sort is null ? null : ascending ? "asc" : "desc"),
+            ("category", category),
+            ("source", string.IsNullOrWhiteSpace(source)
+                       || string.Equals(source, "matches", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : source),
+            ("fromUtc", fromUtc?.ToString("O")),
+            ("toExclusiveUtc", toExclusiveUtc?.ToString("O")),
+            ("venueId", venueId is Guid vid && vid != Guid.Empty ? vid.ToString("D") : null)
+        };
+        var qs = ListPaging.Query(skip, extra.ToArray());
+        if (formatIds is null)
+            return qs;
+        foreach (var id in formatIds)
+        {
+            if (id != Guid.Empty)
+                qs += $"&formatIds={id:D}";
+        }
+        return qs;
+    }
 
     private static void AppendFormatIds(List<string> query, IReadOnlyList<Guid>? formatIds)
     {

@@ -177,6 +177,13 @@ public sealed class AppNavigator : IAppNavigator
             workspace.Set(AppWorkspace.Grounds);
         }
 
+        if (workspace.Current == AppWorkspace.Grounds && session.IsGroundOwner)
+        {
+            workspace.Set(AppWorkspace.GroundOwner);
+            await ShowMainAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (workspace.Current == AppWorkspace.Grounds)
         {
             await ShowMainAsync().ConfigureAwait(true);

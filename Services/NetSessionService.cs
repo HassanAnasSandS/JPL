@@ -101,6 +101,9 @@ public sealed class NetSessionScorecard
 public interface INetSessionService
 {
     Task<IReadOnlyList<NetSessionListItem>> GetAllAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<NetSessionListItem>> GetPinnedListAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<NetSessionListItem>> GetCompletedPageAsync(
+        int skip, string? q, string? date, CancellationToken ct = default);
     Task<NetSessionListItem?> GetActiveAsync(CancellationToken ct = default);
     Task<HashSet<Guid>> GetPendingSyncIdsAsync(CancellationToken ct = default);
     Task<NetSession> CreateAsync(NetSessionDraft draft, CancellationToken ct = default);
@@ -184,6 +187,54 @@ public sealed class NetSessionService : INetSessionService
             .OrderByDescending(s => s.IsActive)
             .ThenByDescending(s => s.SessionDateUtc)
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<NetSessionListItem>> GetPinnedListAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var pending = await _sync.GetPendingNetSessionIdsAsync(ct).ConfigureAwait(false);
+        var pendingIds = pending.ToList();
+        var allow = _auth.CanWrite;
+        var sessions = await db.NetSessions.AsNoTracking()
+            .Where(s => s.Status == NetSessionStatus.Setup
+                        || s.Status == NetSessionStatus.InProgress
+                        || (s.Status == NetSessionStatus.Completed && pendingIds.Contains(s.Id)))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var byId = new Dictionary<Guid, NetSessionListItem>();
+        foreach (var s in sessions)
+        {
+            var balls = await db.NetDeliveries.AsNoTracking()
+                .Where(d => d.SessionId == s.Id)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            byId[s.Id] = ToListItem(s, balls, pending.Contains(s.Id), allow);
+        }
+
+        return byId.Values
+            .OrderByDescending(s => s.IsActive)
+            .ThenByDescending(s => s.SessionDateUtc)
+            .ToList();
+    }
+
+    public async Task<ApiPagedResult<NetSessionListItem>> GetCompletedPageAsync(
+        int skip, string? q, string? date, CancellationToken ct = default)
+    {
+        var pending = await _sync.GetPendingNetSessionIdsAsync(ct).ConfigureAwait(false);
+        var allow = _auth.CanWrite;
+        try
+        {
+            var page = await _api.GetCompletedNetSessionsPageAsync(skip, q, date, ct).ConfigureAwait(false);
+            var items = (page.Items ?? [])
+                .Select(row => FromApi(row, pending.Contains(row.Id), allow))
+                .ToList();
+            return page.WithItems(items);
+        }
+        catch
+        {
+            return new ApiPagedResult<NetSessionListItem>([], 0, skip, ListPaging.PageSize);
+        }
     }
 
     public async Task<NetSessionListItem?> GetActiveAsync(CancellationToken ct = default)

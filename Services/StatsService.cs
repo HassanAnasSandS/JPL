@@ -18,7 +18,28 @@ public interface IStatsService
         string source = "matches",
         IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
+    Task<ApiPagedResult<PlayerCareerSummary>> GetLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
     Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<ApiPagedResult<TeamCareerSummary>> GetTeamLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
@@ -32,6 +53,14 @@ public interface IStatsService
         IReadOnlyList<Guid>? formatIds = null,
         CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default);
+    Task<ApiPagedResult<RankingRow>> GetRankingsPageAsync(
+        int skip,
+        string category,
+        string? q = null,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
@@ -76,6 +105,24 @@ public sealed class StatsService : IStatsService
         return await _api.GetStatsLeaderboardAsync(fromUtc, toExclusiveUtc, venueId, source, formatIds, ct).ConfigureAwait(false);
     }
 
+    public async Task<ApiPagedResult<PlayerCareerSummary>> GetLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        string source = "matches",
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetStatsLeaderboardPageAsync(
+                skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source, formatIds, ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
@@ -85,6 +132,23 @@ public sealed class StatsService : IStatsService
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
         return await _api.GetTeamLeaderboardAsync(fromUtc, toExclusiveUtc, venueId, formatIds, ct).ConfigureAwait(false);
+    }
+
+    public async Task<ApiPagedResult<TeamCareerSummary>> GetTeamLeaderboardPageAsync(
+        int skip,
+        string? q = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetTeamLeaderboardPageAsync(
+                skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            .ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
@@ -148,6 +212,20 @@ public sealed class StatsService : IStatsService
             bundle.Team = Array.Empty<RankingRow>();
         }
         return bundle;
+    }
+
+    public async Task<ApiPagedResult<RankingRow>> GetRankingsPageAsync(
+        int skip,
+        string category,
+        string? q = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetRankingsPageAsync(skip, category, q, fromUtc, toExclusiveUtc, formatIds, ct)
+            .ConfigureAwait(false);
     }
 
     private Task FlushCompletedMatchesAsync(CancellationToken ct)

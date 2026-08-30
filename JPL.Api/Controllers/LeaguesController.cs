@@ -37,6 +37,31 @@ public sealed class LeaguesController : ControllerBase
         return Ok(list.Select(l => ToDto(l, live.GetValueOrDefault(l.Id))).ToList());
     }
 
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<LeagueDto>>> GetPage(
+        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        await using var db = _dbs.CreateMaster();
+        var list = await db.Leagues.AsNoTracking()
+            .Where(l => l.IsActive)
+            .OrderBy(l => l.Name)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var userCounts = await LeagueNameDeduper.LoadUserCountsAsync(db, ct).ConfigureAwait(false);
+        list = LeagueNameDeduper.CollapseActiveByName(list, userCounts).ToList();
+        var like = q?.Trim();
+        if (!string.IsNullOrEmpty(like))
+            list = list.Where(l => l.Name.Contains(like, StringComparison.OrdinalIgnoreCase)).ToList();
+        var total = list.Count;
+        list = list.Skip(skip).Take(take).ToList();
+        var live = await db.LeagueLiveIndexes.AsNoTracking()
+            .ToDictionaryAsync(x => x.LeagueId, ct)
+            .ConfigureAwait(false);
+        return Ok(new PagedResult<LeagueDto>(
+            list.Select(l => ToDto(l, live.GetValueOrDefault(l.Id))).ToList(), total, skip, take));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<LeagueDto>> Get(Guid id, CancellationToken ct)
     {
