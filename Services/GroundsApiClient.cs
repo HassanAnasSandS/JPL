@@ -396,11 +396,11 @@ public interface IGroundsApiClient
     Task<GroundSearchPageDto> SearchAsync(
         string? postalCode, string? q,
         string? country, string? state, string? city, string? area,
-        decimal? minRate, decimal? maxRate, string? cursor, int take = 5,
+        decimal? minRate, decimal? maxRate, string? cursor, int take = 15,
         CancellationToken ct = default);
     Task<GroundLocationOptionsDto> GetLocationOptionsAsync(
         string? country, string? state, string? city, CancellationToken ct = default);
-    Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 5, CancellationToken ct = default);
+    Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 15, CancellationToken ct = default);
     Task<GroundDetailDto?> GetGroundAsync(Guid id, CancellationToken ct = default);
     Task<GroundDetailDto> CreateGroundAsync(object body, CancellationToken ct = default);
     Task<GroundDetailDto> UpdateGroundAsync(Guid id, object body, CancellationToken ct = default);
@@ -409,9 +409,9 @@ public interface IGroundsApiClient
     Task DeleteGroundImageAsync(Guid groundId, Guid imageId, CancellationToken ct = default);
     Task<GroundBookingDto> RequestBookingAsync(Guid groundId, object body, CancellationToken ct = default);
     Task<GroundBookingDto> CreateOwnerBookingAsync(Guid groundId, object body, CancellationToken ct = default);
-    Task<BookingPageDto> GetMyBookingsAsync(string? cursor, int take = 5, CancellationToken ct = default);
+    Task<BookingPageDto> GetMyBookingsAsync(string? cursor, int take = 15, CancellationToken ct = default);
     Task<BookingPageDto> GetOwnerBookingsAsync(
-        Guid? groundId, string? cursor, int take = 5,
+        Guid? groundId, string? cursor, int take = 15,
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default);
     Task<GroundBookingDto?> GetBookingAsync(Guid id, CancellationToken ct = default);
@@ -434,7 +434,7 @@ public interface IGroundsApiClient
     Task<ShopCatalogItemDto> CreateShopCatalogAsync(string name, CancellationToken ct = default);
     Task<ShopCatalogItemDto> UpdateShopCatalogAsync(Guid id, string name, CancellationToken ct = default);
     Task DeleteShopCatalogAsync(Guid id, CancellationToken ct = default);
-    Task<GroundReviewPageDto> GetGroundReviewsAsync(Guid groundId, string? cursor, int take = 5, CancellationToken ct = default);
+    Task<GroundReviewPageDto> GetGroundReviewsAsync(Guid groundId, string? cursor, int take = 15, CancellationToken ct = default);
     Task<GroundReviewDto?> GetBookingReviewAsync(Guid bookingId, CancellationToken ct = default);
     Task<GroundReviewDto> CreateBookingReviewAsync(Guid bookingId, int rating, string? comment, CancellationToken ct = default);
     Task<GroundReviewDto> UpdateBookingReviewAsync(Guid bookingId, int rating, string? comment, CancellationToken ct = default);
@@ -460,7 +460,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
     public async Task<GroundSearchPageDto> SearchAsync(
         string? postalCode, string? q,
         string? country, string? state, string? city, string? area,
-        decimal? minRate, decimal? maxRate, string? cursor, int take = 5,
+        decimal? minRate, decimal? maxRate, string? cursor, int take = 15,
         CancellationToken ct = default)
     {
         var qs = Query(
@@ -489,7 +489,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
                ?? new GroundLocationOptionsDto([], [], [], []);
     }
 
-    public async Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 5, CancellationToken ct = default)
+    public async Task<GroundSearchPageDto> GetOwnerGroundsAsync(string? cursor, int take = 15, CancellationToken ct = default)
     {
         var qs = Query(("cursor", cursor), ("take", take.ToString()));
         return await GetAsync<GroundSearchPageDto>($"api/owner/grounds{qs}", ct).ConfigureAwait(false)
@@ -538,7 +538,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
     public Task<GroundBookingDto> CreateOwnerBookingAsync(Guid groundId, object body, CancellationToken ct = default)
         => PostAsync<GroundBookingDto>($"api/owner/grounds/{groundId:D}/bookings", body, ct);
 
-    public async Task<BookingPageDto> GetMyBookingsAsync(string? cursor, int take = 5, CancellationToken ct = default)
+    public async Task<BookingPageDto> GetMyBookingsAsync(string? cursor, int take = 15, CancellationToken ct = default)
     {
         var qs = Query(("cursor", cursor), ("take", take.ToString()));
         return await GetAsync<BookingPageDto>($"api/bookings/mine{qs}", ct).ConfigureAwait(false)
@@ -546,7 +546,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
     }
 
     public async Task<BookingPageDto> GetOwnerBookingsAsync(
-        Guid? groundId, string? cursor, int take = 5,
+        Guid? groundId, string? cursor, int take = 15,
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default)
     {
@@ -627,7 +627,7 @@ public sealed class GroundsApiClient : IGroundsApiClient
         => DeleteAsync($"api/platform/shop/{id:D}", ct);
 
     public async Task<GroundReviewPageDto> GetGroundReviewsAsync(
-        Guid groundId, string? cursor, int take = 5, CancellationToken ct = default)
+        Guid groundId, string? cursor, int take = 15, CancellationToken ct = default)
     {
         var qs = Query(("cursor", cursor), ("take", take.ToString()));
         return await GetAsync<GroundReviewPageDto>($"api/grounds/{groundId:D}/reviews{qs}", ct).ConfigureAwait(false)

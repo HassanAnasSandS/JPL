@@ -16,7 +16,7 @@ public sealed record ApiPagedResult<T>(
 
 public static class ListPaging
 {
-    public const int PageSize = 5;
+    public const int PageSize = 15;
 
     public static string Query(int skip, params (string Key, string? Value)[] extra)
     {

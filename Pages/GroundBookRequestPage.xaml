@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.GroundBookRequestPage"
@@ -102,7 +103,7 @@
                                          Spacing="2">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="vm:BookableServiceChoice">
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,2">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,2" jpl:ToggleOnTap.Enable="True">
                                     <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
                                     <Label Grid.Column="1"
                                            Text="{Binding Name}"

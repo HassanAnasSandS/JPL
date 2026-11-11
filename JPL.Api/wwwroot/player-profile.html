@@ -5,139 +5,1023 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{PLAYER_NAME}} · Cric360</title>
   <meta property="og:title" content="{{PLAYER_NAME}} · {{LEAGUE_NAME}}" />
-  <meta property="og:description" content="Public cricket identity on Cric360 — full career, rankings and honours. No paywall." />
+  <meta property="og:description" content="Full career stats, rankings and honours on Cric360." />
+  <meta property="og:image" content="{{PHOTO_URL}}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="{{PHOTO_URL}}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg:#0b1220; --card:#0d1b2a; --line:#243447; --gold:#d4af37; --text:#f4f7fb; --muted:#8fa3b8; --green:#7CFF6B; }
+    :root {
+      --bg: #070d16;
+      --bg2: #0c1624;
+      --card: rgba(16, 28, 44, 0.88);
+      --card-solid: #101c2c;
+      --line: rgba(212, 175, 55, 0.14);
+      --line-strong: rgba(212, 175, 55, 0.28);
+      --gold: #e3c56b;
+      --gold-deep: #c9a227;
+      --text: #f3f6fb;
+      --muted: #8ea0b5;
+      --good: #5dde8a;
+      --warn: #ffb454;
+      --bad: #ff6b7a;
+      --glow: rgba(227, 197, 107, 0.18);
+      --radius: 18px;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
     * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font-family: Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    a { color:var(--gold); text-decoration:none; }
-    .top { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; }
-    .brand { font-weight:800; letter-spacing:.06em; color:var(--gold); font-size:12px; }
-    .social { margin-left:auto; display:flex; flex-wrap:wrap; gap:12px; font-size:12px; font-weight:700; }
-    .wrap { max-width:860px; margin:0 auto; padding:16px; }
-    .hero { display:grid; grid-template-columns:88px 1fr; gap:14px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
-    .photo { width:88px; height:88px; border-radius:16px; object-fit:cover; background:#182a3e; }
-    .name { font-size:22px; font-weight:800; margin:0; }
-    .nick { color:var(--gold); font-size:13px; margin:2px 0 6px; }
-    .meta { color:var(--muted); font-size:12px; }
-    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-    .chip { background:#182a3e; border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:11px; font-weight:700; }
-    .chip.gold { background:var(--gold); color:#0d1b2a; border-color:var(--gold); }
-    .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-    button, .btn { appearance:none; border:1px solid var(--line); background:#182a3e; color:var(--text); font-weight:700; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:12px; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin-top:14px; }
-    .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; }
-    .stat b { display:block; font-size:20px; color:var(--gold); }
-    .stat span { font-size:11px; color:var(--muted); }
-    h2 { font-size:13px; color:var(--gold); letter-spacing:.08em; margin:22px 0 8px; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
-    .insight { font-size:13px; line-height:1.45; margin:0 0 8px; color:var(--text); }
-    .bar { height:8px; background:#182a3e; border-radius:8px; overflow:hidden; }
-    .bar > i { display:block; height:100%; background:var(--gold); }
-    .form { display:flex; gap:6px; flex-wrap:wrap; }
-    .pill { background:#182a3e; border-radius:8px; padding:6px 8px; font-size:12px; font-weight:700; }
-    table { width:100%; border-collapse:collapse; font-size:13px; }
-    td { padding:6px 0; border-bottom:1px solid var(--line); }
-    td:last-child { text-align:right; color:var(--gold); font-weight:700; }
-    .bio { font-size:14px; line-height:1.5; color:var(--text); }
+    html { scroll-behavior: smooth; overflow-x: hidden; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      width: 100%;
+      color: var(--text);
+      font-family: Outfit, system-ui, sans-serif;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(227, 197, 107, 0.16), transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, rgba(56, 120, 220, 0.14), transparent 50%),
+        linear-gradient(180deg, var(--bg2), var(--bg) 40%, #060a12);
+    }
+    a { color: var(--gold); text-decoration: none; }
+    button, .btn {
+      appearance: none;
+      border: 1px solid var(--line-strong);
+      background: linear-gradient(180deg, #1a2b40, #132234);
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: .02em;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color .2s, transform .15s, box-shadow .2s;
+    }
+    button:hover, .btn:hover {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 1px rgba(227,197,107,.2);
+      transform: translateY(-1px);
+    }
+
+    .top {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(16px);
+      background: rgba(7, 13, 22, 0.78);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 18px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .brand {
+      font-weight: 800; letter-spacing: .12em; color: var(--gold); font-size: 12px;
+    }
+    .league-pill {
+      color: var(--muted); font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+    }
+    .social { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; font-weight: 700; }
+    .social a { color: var(--gold); opacity: .9; white-space: nowrap; }
+    .social a:hover { opacity: 1; }
+
+    .wrap { max-width: 980px; margin: 0 auto; padding: 18px 16px 48px; width: 100%; }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 128px minmax(0, 1fr);
+      gap: 16px 18px;
+      align-items: start;
+      background: linear-gradient(145deg, rgba(24,38,58,.95), rgba(12,22,36,.92));
+      border: 1px solid var(--line-strong);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+    .hero::before {
+      content: "";
+      position: absolute; inset: -40% auto auto -20%;
+      width: 280px; height: 280px;
+      background: radial-gradient(circle, var(--glow), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .photo-wrap {
+      position: relative;
+      z-index: 1;
+      width: 128px;
+      aspect-ratio: 1 / 1;
+      flex-shrink: 0;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 3px solid rgba(227,197,107,.65);
+      box-shadow: 0 0 0 4px rgba(227,197,107,.12), 0 12px 30px rgba(0,0,0,.35);
+      background: #101c2c;
+      cursor: zoom-in;
+    }
+    .photo {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center center;
+      background: #101c2c;
+    }
+    .photo-fallback {
+      display: none;
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      align-items: center; justify-content: center;
+      background: linear-gradient(160deg, #243b58, #152338);
+      font-size: 42px; font-weight: 800; color: var(--gold);
+    }
+    .lightbox {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      align-items: center; justify-content: center;
+      padding: 18px;
+      background: rgba(3, 8, 16, 0.88);
+      backdrop-filter: blur(8px);
+      cursor: zoom-out;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img {
+      max-width: min(920px, 100%);
+      max-height: min(90vh, 100%);
+      width: auto; height: auto;
+      object-fit: contain;
+      border-radius: 16px;
+      border: 1px solid var(--line-strong);
+      box-shadow: 0 24px 60px rgba(0,0,0,.55);
+      background: #0b1220;
+    }
+    .lightbox .close {
+      position: absolute; top: 14px; right: 14px;
+      border: 1px solid var(--line-strong);
+      background: #132234; color: var(--text);
+      border-radius: 999px; width: 40px; height: 40px;
+      font-size: 20px; font-weight: 700; cursor: pointer;
+    }
+    .hero > div:last-child { position: relative; z-index: 1; min-width: 0; }
+    .name { font-size: clamp(26px, 5vw, 34px); font-weight: 800; margin: 0; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }
+    .nick { color: var(--gold); font-size: 14px; margin: 4px 0 6px; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 13px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .chip.gold {
+      background: linear-gradient(180deg, #efd78a, #c9a227);
+      color: #1a1405;
+      border-color: transparent;
+    }
+    .chip.soft { color: var(--muted); }
+    .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .kpi .cell {
+      background: rgba(0,0,0,.18);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 10px;
+      text-align: center;
+    }
+    .kpi b {
+      display: block;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 22px;
+      color: var(--gold);
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .kpi span { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+
+    .tabs {
+      position: sticky; top: 52px; z-index: 15;
+      display: flex; gap: 6px; overflow-x: auto;
+      margin: 18px 0 8px;
+      padding: 6px;
+      background: rgba(7,13,22,.82);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex: 0 0 auto;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      box-shadow: none;
+      transform: none;
+    }
+    .tab:hover { color: var(--text); border-color: transparent; box-shadow: none; transform: none; }
+    .tab.active {
+      background: linear-gradient(180deg, rgba(227,197,107,.22), rgba(227,197,107,.08));
+      color: var(--gold);
+      border: 1px solid var(--line-strong);
+    }
+
+    section.panel { display: none; animation: fade .28s ease; }
+    section.panel.active { display: block; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .sec-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+      margin: 18px 0 10px;
+    }
+    .sec-head h2 {
+      margin: 0;
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 800;
+    }
+    .sec-head .hint { color: var(--muted); font-size: 12px; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+    .insights {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .insight-card {
+      position: relative;
+      overflow: hidden;
+      min-height: 118px;
+      padding: 14px 14px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(145deg, rgba(227,197,107,.10), transparent 42%),
+        linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.14));
+      box-shadow: 0 10px 26px rgba(0,0,0,.18);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color .2s, transform .15s;
+    }
+    .insight-card:hover {
+      border-color: rgba(227,197,107,.42);
+      transform: translateY(-1px);
+    }
+    .insight-card::after {
+      content: "";
+      position: absolute; right: -18px; top: -18px;
+      width: 70px; height: 70px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(227,197,107,.16), transparent 70%);
+      pointer-events: none;
+    }
+    .insight-top {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .insight-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 10px; font-weight: 800;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: #1a1405;
+      background: linear-gradient(180deg, #efd78a, #c9a227);
+    }
+    .insight-tag.soft {
+      color: var(--gold);
+      background: rgba(227,197,107,.12);
+      border: 1px solid rgba(227,197,107,.28);
+    }
+    .insight-mark {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 18px; font-weight: 700; color: var(--gold);
+      line-height: 1;
+    }
+    .insight-body {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: #e8eef7;
+      font-weight: 600;
+    }
+    .insight-body b {
+      color: var(--gold);
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 700;
+    }
+    .insight-foot {
+      margin-top: auto;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      gap: 8px;
+    }
+    .stat {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.12));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 10px;
+      min-height: 74px;
+    }
+    .stat b {
+      display: block;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 20px;
+      color: var(--gold);
+      font-weight: 700;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .stat span {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .stat.accent { border-color: rgba(227,197,107,.35); background: linear-gradient(160deg, rgba(227,197,107,.12), rgba(0,0,0,.1)); }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .top { padding: 10px 12px; gap: 8px; }
+      .social { gap: 8px; font-size: 11px; margin-left: 0; width: 100%; }
+      .hero {
+        grid-template-columns: 96px minmax(0, 1fr);
+        gap: 12px 14px;
+        padding: 14px;
+        border-radius: 18px;
+      }
+      .photo-wrap { width: 104px; border-width: 2px; }
+      .photo-fallback { font-size: 28px; }
+      .name { font-size: clamp(22px, 7vw, 28px); }
+      .meta { font-size: 12px; }
+      .chip { font-size: 10px; padding: 4px 8px; }
+      .actions { width: 100%; }
+      .actions .btn, .actions button { flex: 1 1 auto; text-align: center; }
+      .kpi { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .kpi b { font-size: 18px; }
+      .split { grid-template-columns: 1fr; }
+      .tabs { top: 56px; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .insights { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 420px) {
+      .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+      .hero > div:last-child { width: 100%; }
+      .photo-wrap { width: 132px; }
+      .chips, .actions { justify-content: center; }
+      .meta { justify-self: center; }
+    }
+
+    .bar-row { margin: 10px 0; }
+    .bar-lab { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+    .bar-lab span { color: var(--muted); }
+    .bar-lab b { color: var(--gold); font-family: "JetBrains Mono", monospace; font-size: 12px; }
+    .bar {
+      height: 9px; border-radius: 999px; overflow: hidden;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--line);
+    }
+    .bar > i {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, #a8861f, var(--gold));
+      border-radius: inherit;
+      width: 0;
+      transition: width .7s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .form {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .pill {
+      min-width: 64px;
+      text-align: center;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 8px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .pill.hot { border-color: rgba(93,222,138,.35); color: var(--good); }
+    .pill.warm { border-color: rgba(255,180,84,.35); color: var(--warn); }
+    .pill.cold { color: var(--muted); }
+    .duel-list { display: flex; flex-direction: column; gap: 10px; }
+    .duel-card {
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .duel-vs {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px;
+      align-items: center; margin-bottom: 10px;
+    }
+    .duel-vs b {
+      font-size: 13px; font-weight: 700; color: var(--gold);
+      text-align: center; line-height: 1.25; overflow-wrap: anywhere;
+    }
+    .duel-vs span {
+      font-size: 11px; font-weight: 800; color: var(--muted);
+      letter-spacing: .08em; text-align: center;
+    }
+    .duel-kpi {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+      margin-bottom: 8px;
+    }
+    .duel-kpi div {
+      text-align: center;
+      background: rgba(0,0,0,.16);
+      border-radius: 10px;
+      padding: 8px 4px;
+      border: 1px solid rgba(255,255,255,.03);
+    }
+    .duel-kpi b {
+      display: block; font-family: "JetBrains Mono", monospace;
+      font-size: 14px; color: var(--text); font-weight: 700;
+    }
+    .duel-kpi span {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      letter-spacing: .03em; text-transform: uppercase;
+    }
+    .duel-meta {
+      font-size: 11px; color: var(--muted); line-height: 1.45;
+      font-family: "JetBrains Mono", monospace;
+    }
+    .duel-meta strong { color: var(--text); font-weight: 700; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left; color: var(--muted); font-size: 11px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase;
+      padding: 0 0 8px; border-bottom: 1px solid var(--line);
+    }
+    th:last-child, td:last-child { text-align: right; }
+    td { padding: 10px 0; border-bottom: 1px solid rgba(36,52,71,.65); }
+    tr:last-child td { border-bottom: 0; }
+    td.mono { font-family: "JetBrains Mono", monospace; color: var(--gold); font-weight: 700; }
+    .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+    .bio {
+      margin: 14px 0 0;
+      font-size: 14px; line-height: 1.55; color: #d5deea;
+    }
+    .footer {
+      margin-top: 28px; padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted); font-size: 12px;
+    }
+    .loading {
+      padding: 40px 10px; text-align: center; color: var(--muted);
+    }
   </style>
 </head>
 <body>
   <div class="top">
     <a class="brand" href="/p/{{LEAGUE_ID}}">CRIC360</a>
-    <span class="meta" id="league">{{LEAGUE_NAME}}</span>
+    <span class="league-pill" id="league">{{LEAGUE_NAME}}</span>
     <span class="social">
+      <a href="https://www.facebook.com/profile.php?id=61593997581019" target="_blank" rel="noopener">Facebook</a>
+      <a href="https://wa.me/923222857730" target="_blank" rel="noopener">WhatsApp</a>
       <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a>
       <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a>
       <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a>
     </span>
   </div>
-  <div class="wrap">
-    <div class="hero">
-      <img class="photo" id="photo" alt="" />
-      <div>
-        <h1 class="name" id="name">{{PLAYER_NAME}}</h1>
-        <div class="nick" id="nick"></div>
-        <div class="meta" id="styles"></div>
-        <div class="chips" id="chips"></div>
-        <div class="row">
-          <button type="button" id="share">Copy public link</button>
-          <a class="btn" href="/p/{{LEAGUE_ID}}">All players</a>
-        </div>
-      </div>
-    </div>
-    <p class="bio" id="bio"></p>
-    <h2>INSIGHTS</h2>
-    <div class="card" id="insights"></div>
-    <h2>CAREER</h2>
-    <div class="grid" id="career"></div>
-    <h2>LEAGUE RANKS · FREE</h2>
-    <div class="chips" id="ranks"></div>
-    <h2>HONOURS</h2>
-    <div class="chips" id="honours"></div>
-    <h2>STRENGTH vs LEAGUE</h2>
-    <div class="card" id="strength"></div>
-    <h2>RECENT FORM</h2>
-    <div class="form" id="form"></div>
-    <h2>VS BOWLERS</h2>
-    <div class="card"><table id="vsBowl"></table></div>
-    <h2>VS BATTERS</h2>
-    <div class="card"><table id="vsBat"></table></div>
-    <h2>NETS</h2>
-    <div class="card" id="nets">No nets identity on CricHeroes. Here it is first-class.</div>
-    <p class="meta" style="margin-top:22px">Follow Cric360 · <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> · <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> · <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a></p>
+
+  <div class="wrap" id="app">
+    <div class="loading" id="boot">Loading profile…</div>
   </div>
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full photo">
+    <button type="button" class="close" id="lightboxClose" aria-label="Close">×</button>
+    <img id="lightboxImg" alt="" />
+  </div>
+
   <script>
     const leagueId = "{{LEAGUE_ID}}";
     const playerId = "{{PLAYER_ID}}";
-    function esc(s) {
-      return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+    }[c]));
+
+    const lightbox = document.getElementById("lightbox");
+    const lightboxImg = document.getElementById("lightboxImg");
+    function openPhoto(src, name) {
+      lightboxImg.src = src;
+      lightboxImg.alt = name || "Player photo";
+      lightbox.classList.add("open");
+      document.body.style.overflow = "hidden";
     }
-    const photo = document.getElementById("photo");
-    photo.src = "/api/public/leagues/" + leagueId + "/players/" + playerId + "/image";
-    photo.onerror = () => { photo.style.display = "none"; };
+    function closePhoto() {
+      lightbox.classList.remove("open");
+      lightboxImg.removeAttribute("src");
+      document.body.style.overflow = "";
+    }
+    document.getElementById("lightboxClose").onclick = (e) => { e.stopPropagation(); closePhoto(); };
+    lightbox.onclick = closePhoto;
+    lightboxImg.onclick = (e) => e.stopPropagation();
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePhoto(); });
 
-    fetch("/api/public/leagues/" + leagueId + "/players/" + playerId, { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(p => {
-        document.getElementById("name").textContent = p.fullName;
-        document.getElementById("nick").textContent = p.nickName ? "“" + p.nickName + "”" : "";
-        document.getElementById("styles").textContent = [p.playingRole, p.battingStyle, p.bowlingStyle].filter(Boolean).join(" · ");
-        document.getElementById("bio").textContent = p.bio || "";
-        const chips = [];
-        (p.teams || []).forEach(t => chips.push(t));
-        if (!p.isActive) chips.push("Inactive");
-        document.getElementById("chips").innerHTML = chips.map(c => "<span class='chip'>" + esc(c) + "</span>").join("");
-        document.getElementById("insights").innerHTML = (p.insights || []).map(t => "<p class='insight'>" + esc(t) + "</p>").join("");
-        const m = p.matches || {};
-        const sr = m.ballsFaced ? (m.runs * 100 / m.ballsFaced).toFixed(1) : "-";
-        const econ = m.oversBowledBalls ? (m.runsConceded * 6 / m.oversBowledBalls).toFixed(2) : "-";
-        const avg = m.dismissals ? (m.runs / m.dismissals).toFixed(1) : (m.runs || "-");
-        const stats = [
-          ["Matches", m.matches], ["Runs", m.runs], ["HS", m.highestScoreText], ["Avg", avg],
-          ["SR", sr], ["4s / 6s", (m.fours||0) + " / " + (m.sixes||0)],
-          ["Wickets", m.wickets], ["Best", m.bestBowlingText], ["Econ", econ],
-          ["Catches", m.catches], ["POTM", (p.honours||[]).filter(h => /Player of the Match/.test(h.label)).map(h => h.count)[0] || 0]
-        ];
-        document.getElementById("career").innerHTML = stats.map(s => "<div class='stat'><b>" + esc(s[1] ?? "-") + "</b><span>" + esc(s[0]) + "</span></div>").join("");
-        document.getElementById("ranks").innerHTML = (p.ranks || []).map(r => "<span class='chip gold'>#" + esc(r.rank) + " " + esc(r.category) + "</span>").join("") || "<span class='chip'>Unranked</span>";
-        document.getElementById("honours").innerHTML = (p.honours || []).map(h => "<span class='chip gold'>" + esc(h.count) + "× " + esc(h.label) + "</span>").join("") || "<span class='chip'>No trophies yet</span>";
-        document.getElementById("strength").innerHTML = (p.strength || []).map(s =>
-          "<div style='margin:8px 0'><div class='meta'>" + esc(s.label) + " · " + esc(s.score) + "</div><div class='bar'><i style='width:" + Number(s.score || 0) + "%'></i></div></div>").join("");
-        document.getElementById("form").innerHTML = (p.recentForm || []).map(f => "<span class='pill'>" + esc(f.text) + "</span>").join("") || "<span class='meta'>No innings yet</span>";
-        document.getElementById("vsBowl").innerHTML = (p.vsBowlers || []).map(d => "<tr><td>" + esc(d.opponent) + "</td><td>" + esc(d.line) + "</td></tr>").join("");
-        document.getElementById("vsBat").innerHTML = (p.vsBatters || []).map(d => "<tr><td>" + esc(d.opponent) + "</td><td>" + esc(d.line) + "</td></tr>").join("");
-        if (p.nets) {
-          document.getElementById("nets").innerHTML = "<b>" + esc(p.nets.sessions) + " sessions</b> · " + esc(p.nets.runs) + " runs · " + esc(p.nets.wickets) + " wickets";
-        }
-      })
-      .catch(() => { document.getElementById("bio").textContent = "Profile unavailable."; });
-
-    document.getElementById("share").onclick = async () => {
-      const url = location.href;
-      try { await navigator.clipboard.writeText(url); document.getElementById("share").textContent = "Link copied"; }
-      catch { prompt("Copy this public profile", url); }
+    const num = (v, d = 0) => (v == null || Number.isNaN(Number(v)) ? d : Number(v));
+    const dash = v => (v == null || v === "" || v === "-" ? "—" : v);
+    const overs = balls => {
+      const b = num(balls);
+      if (!b) return "0.0";
+      return `${Math.floor(b / 6)}.${b % 6}`;
     };
+    const avg = (runs, outs) => outs > 0 ? (runs / outs).toFixed(1) : (runs ? runs.toFixed?.(1) ?? runs : "—");
+    const sr = (runs, balls) => balls > 0 ? ((runs * 100) / balls).toFixed(1) : "—";
+    const econ = (runs, balls) => balls > 0 ? ((runs * 6) / balls).toFixed(2) : "—";
+    const bowlAvg = (runs, wkts) => wkts > 0 ? (runs / wkts).toFixed(1) : "—";
+    const bowlSr = (balls, wkts) => wkts > 0 ? (balls / wkts).toFixed(1) : "—";
+
+    function stat(label, value, accent) {
+      return `<div class="stat${accent ? " accent" : ""}"><b>${esc(dash(value))}</b><span>${esc(label)}</span></div>`;
+    }
+    function grid(items) {
+      return `<div class="grid">${items.map(([l, v, a]) => stat(l, v, a)).join("")}</div>`;
+    }
+    function duelCard(leftName, rightName, d, asBowler) {
+      const balls = num(d.balls);
+      const runs = num(d.runs);
+      const outs = num(d.outs);
+      const sr = balls > 0 ? (runs * 100 / balls).toFixed(1) : "0";
+      const avg = outs > 0 ? (runs / outs).toFixed(2) : "-";
+      const econ = balls > 0 ? (((runs + num(d.extrasConceded)) * 6) / balls).toFixed(2) : "0";
+      const wkts = outs > 0
+        ? `<div class="duel-meta" style="margin-top:6px">Wickets — Bowled <strong>${esc(d.bowled || 0)}</strong> · Caught <strong>${esc(d.caught || 0)}</strong> · LBW <strong>${esc(d.lbw || 0)}</strong> · Run out <strong>${esc(d.runOut || 0)}</strong> · Stumped <strong>${esc(d.stumped || 0)}</strong> · Hit wicket <strong>${esc(d.hitWicket || 0)}</strong></div>`
+        : "";
+      return `<article class="duel-card">
+        <div class="duel-vs">
+          <b>${esc(leftName)}</b>
+          <span>VS</span>
+          <b>${esc(rightName)}</b>
+        </div>
+        <div class="duel-kpi">
+          <div><b>${esc(balls)}</b><span>Balls</span></div>
+          <div><b>${esc(runs)}</b><span>Runs</span></div>
+          <div><b>${esc(outs)}</b><span>${asBowler ? "Wkts" : "Outs"}</span></div>
+          <div><b>${esc(sr)}</b><span>SR</span></div>
+        </div>
+        <div class="duel-meta">0:<strong>${esc(d.dots || 0)}</strong>  1:<strong>${esc(d.ones || 0)}</strong>  2:<strong>${esc(d.twos || 0)}</strong>  4:<strong>${esc(d.fours || 0)}</strong>  6:<strong>${esc(d.sixes || 0)}</strong>  ·  Avg <strong>${esc(avg)}</strong>  ·  Econ <strong>${esc(econ)}</strong></div>
+        ${wkts}
+      </article>`;
+    }
+
+    function render(p) {
+      const m = p.matches || {};
+      const potm = (p.honours || []).filter(h => /Player of the Match/i.test(h.label)).map(h => h.count)[0] || 0;
+      const topRank = (p.ranks || []).slice().sort((a, b) => a.rank - b.rank)[0];
+      const batRank = (p.ranks || []).find(r => r.category === "Batting");
+      const bowlRank = (p.ranks || []).find(r => r.category === "Bowling");
+      const initials = (p.fullName || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join("").toUpperCase();
+
+      const winPct = m.matches > 0 ? Math.round((num(m.won) * 100) / m.matches) : 0;
+      const boundaryPct = m.runs > 0
+        ? Math.round(((num(m.fours) * 4 + num(m.sixes) * 6) * 100) / m.runs)
+        : 0;
+
+      document.title = `${p.fullName} · Cric360`;
+      document.getElementById("league").textContent = p.leagueName || "{{LEAGUE_NAME}}";
+
+      const app = document.getElementById("app");
+      const photoSrc = p.photoUrl || ("/api/public/leagues/" + leagueId + "/players/" + playerId + "/image");
+      const photoHtml = p.hasPhoto
+        ? '<img class="photo" id="photo" alt="' + esc(p.fullName) + '" width="128" height="128" decoding="async" src="' + esc(photoSrc) + '" title="Tap to open full photo" />'
+        : '<img class="photo" id="photo" alt="" width="128" height="128" style="display:none" />';
+      app.innerHTML = `
+        <div class="hero">
+          <div class="photo-wrap" id="photoWrap" title="Tap to open full photo">
+            ${photoHtml}
+            <div class="photo-fallback" id="photoFallback" style="${p.hasPhoto ? "" : "display:flex"}">${esc(initials)}</div>
+          </div>
+          <div>
+            <h1 class="name">${esc(p.fullName)}</h1>
+            <div class="nick" id="nick">${p.nickName ? "“" + esc(p.nickName) + "”" : ""}</div>
+            <div class="meta">${esc([p.playingRole, p.battingStyle, p.bowlingStyle].filter(Boolean).join(" · ") || "Cric360 player")}</div>
+            <div class="chips" id="chips">
+              ${(p.ranks || []).slice(0, 4).map(r => `<span class="chip gold">#${esc(r.rank)} ${esc(r.category)}</span>`).join("")}
+              ${p.isActive ? "" : `<span class="chip soft">Inactive</span>`}
+            </div>
+            <div class="chips" id="teams"></div>
+            <div class="actions">
+              <button type="button" id="share">Copy link</button>
+              <a class="btn" href="/p/${esc(leagueId)}">All players</a>
+            </div>
+          </div>
+        </div>
+
+        ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ""}
+
+        <div class="kpi">
+          <div class="cell"><b>${esc(m.runs ?? 0)}</b><span>Runs</span></div>
+          <div class="cell"><b>${esc(m.wickets ?? 0)}</b><span>Wickets</span></div>
+          <div class="cell"><b>${esc(potm)}</b><span>POTM</span></div>
+          <div class="cell"><b>${topRank ? "#" + topRank.rank : "—"}</b><span>${topRank ? topRank.category : "Rank"}</span></div>
+        </div>
+
+        <nav class="tabs" id="tabs">
+          <button class="tab active" data-tab="overview">Overview</button>
+          <button class="tab" data-tab="batting">Batting</button>
+          <button class="tab" data-tab="bowling">Bowling</button>
+          <button class="tab" data-tab="fielding">Fielding</button>
+          <button class="tab" data-tab="captain">Captain</button>
+          <button class="tab" data-tab="events">Events</button>
+          <button class="tab" data-tab="duels">Head to Head</button>
+          <button class="tab" data-tab="nets">Nets</button>
+        </nav>
+
+        <section class="panel active" id="tab-overview">
+          <div class="sec-head"><h2>Insights</h2><span class="hint">highlights</span></div>
+          <div class="insights">
+            ${renderInsights(p.insights || [])}
+          </div>
+
+          <div class="sec-head"><h2>Career snapshot</h2><span class="hint">${esc(m.matches || 0)} matches · ${winPct}% win</span></div>
+          ${grid([
+            ["Matches", m.matches, true],
+            ["W–L–T", `${m.won || 0}–${m.loss || 0}–${m.tied || 0}`],
+            ["Runs", m.runs, true],
+            ["HS", m.highestScoreText || "—", true],
+            ["Avg", avg(num(m.runs), num(m.dismissals))],
+            ["SR", sr(num(m.runs), num(m.ballsFaced))],
+            ["50 / 100", `${m.fifties || 0} / ${m.hundreds || 0}`],
+            ["4s / 6s", `${m.fours || 0} / ${m.sixes || 0}`],
+            ["Wickets", m.wickets, true],
+            ["Best", m.bestBowlingText || "—", true],
+            ["Econ", econ(num(m.runsConceded), num(m.oversBowledBalls))],
+            ["Maidens", m.maidens],
+            ["Hat-tricks", m.hatTricks, true],
+            ["5W", m.fiveWicketHauls],
+            ["Catches", m.catches],
+            ["Field total", num(m.catches) + num(m.runOutsEffected) + num(m.stumpings), true],
+            ["POTM", potm, true],
+            ["Tournaments", m.tournaments],
+            ["Series", m.series],
+            ["Attendance", m.attendancePctText || "—"]
+          ])}
+
+          <div class="split" style="margin-top:12px">
+            <div>
+              <div class="sec-head"><h2>Strength vs league</h2></div>
+              <div class="card" id="strength">
+                ${(p.strength || []).map(s => `
+                  <div class="bar-row">
+                    <div class="bar-lab"><span>${esc(s.label)}</span><b>${esc(s.score)}</b></div>
+                    <div class="bar"><i data-w="${num(s.score)}"></i></div>
+                  </div>`).join("") || `<p class="empty">No strength data.</p>`}
+              </div>
+            </div>
+            <div>
+              <div class="sec-head"><h2>Honours</h2></div>
+              <div class="card">
+                <div class="chips">
+                  ${(p.honours || []).map(h => `<span class="chip gold">${esc(h.count)}× ${esc(h.label)}</span>`).join("") || `<span class="chip soft">No trophies yet</span>`}
+                </div>
+                <div class="sec-head" style="margin-top:16px"><h2>League ranks</h2><span class="hint">points bar</span></div>
+                ${(p.ranks || []).length ? (p.ranks || []).map(r => `
+                  <div class="bar-row">
+                    <div class="bar-lab">
+                      <span>#${esc(r.rank)} ${esc(r.category)}</span>
+                      <b>${esc(r.primary || r.detail || "")}</b>
+                    </div>
+                    <div class="bar"><i data-w="${Math.round(Math.max(0, Math.min(1, num(r.barRatio))) * 100)}" style="background:linear-gradient(90deg, ${esc(r.barColor || "#F5B400")}, ${esc(r.barColor || "#F5B400")}cc)"></i></div>
+                  </div>`).join("") : `<span class="chip soft">Unranked</span>`}
+              </div>
+            </div>
+          </div>
+
+          <div class="sec-head"><h2>Recent form</h2><span class="hint">last innings</span></div>
+          <div class="card">
+            <div class="form">
+              ${(p.recentForm || []).map(f => {
+                const cls = f.runs >= 30 ? "hot" : f.runs >= 15 ? "warm" : "cold";
+                return `<span class="pill ${cls}">${esc(f.text)}</span>`;
+              }).join("") || `<p class="empty">No innings yet</p>`}
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="tab-batting">
+          <div class="sec-head"><h2>Batting</h2><span class="hint">${batRank ? "#" + batRank.rank + " in league" : "career"}</span></div>
+          ${grid([
+            ["Inns", m.inningsBatted, true],
+            ["NO", m.notOuts],
+            ["Runs", m.runs, true],
+            ["HS", m.highestScoreText || "—", true],
+            ["Avg", avg(num(m.runs), num(m.dismissals)), true],
+            ["BF", m.ballsFaced],
+            ["SR", sr(num(m.runs), num(m.ballsFaced)), true],
+            ["100s", m.hundreds],
+            ["50s", m.fifties],
+            ["4s", m.fours],
+            ["6s", m.sixes, true],
+            ["Dots", m.dots],
+            ["1s / 2s / 3s", `${m.ones || 0} / ${m.twos || 0} / ${m.threes || 0}`],
+            ["Bound %", boundaryPct + "%"],
+            ["Ducks", m.ducks],
+            ["Golden ducks", m.goldenDucks],
+            ["Wides faced", m.widesFaced],
+            ["No-balls faced", m.noBallsFaced]
+          ])}
+          <div class="sec-head"><h2>Dismissals</h2></div>
+          ${grid([
+            ["Outs", m.dismissals, true],
+            ["Caught", m.caughtOut],
+            ["Bowled", m.bowledOut],
+            ["LBW", m.lbwOut],
+            ["Run out", m.runOut],
+            ["Partner RO", m.partnerRunOuts, true],
+            ["Stumped", m.stumpedOut],
+            ["Hit wicket", m.hitWicketOut],
+            ["Retired", m.retiredOut],
+            ["Other", m.otherOut]
+          ])}
+        </section>
+
+        <section class="panel" id="tab-bowling">
+          <div class="sec-head"><h2>Bowling</h2><span class="hint">${bowlRank ? "#" + bowlRank.rank + " in league" : "career"}</span></div>
+          ${grid([
+            ["Inns", m.inningsBowled, true],
+            ["Overs", overs(m.oversBowledBalls), true],
+            ["Maidens", m.maidens],
+            ["Runs", m.runsConceded],
+            ["Wickets", m.wickets, true],
+            ["Best", m.bestBowlingText || "—", true],
+            ["Avg", bowlAvg(num(m.runsConceded), num(m.wickets)), true],
+            ["Econ", econ(num(m.runsConceded), num(m.oversBowledBalls)), true],
+            ["SR", bowlSr(num(m.oversBowledBalls), num(m.wickets))],
+            ["5W", m.fiveWicketHauls, true],
+            ["Hat-tricks", m.hatTricks],
+            ["Dots", m.dotBallsBowled],
+            ["4s conc.", m.foursConceded],
+            ["6s conc.", m.sixesConceded],
+            ["Wides", m.widesBowled],
+            ["No-balls", m.noBallsBowled],
+            ["Byes", m.byesConceded],
+            ["Leg byes", m.legByesConceded],
+            ["Duck wkts", m.duckWkts],
+            ["Golden duck wkts", m.goldenDuckWkts]
+          ])}
+          <div class="sec-head"><h2>Wicket types</h2></div>
+          ${grid([
+            ["Caught", m.caughtWkts],
+            ["Bowled", m.bowledWkts, true],
+            ["LBW", m.lbwWkts],
+            ["Stumped", m.stumpedWkts],
+            ["Hit wicket", m.hitWicketWkts],
+            ["Run out (bowl)", m.runOutWkts]
+          ])}
+        </section>
+
+        <section class="panel" id="tab-fielding">
+          <div class="sec-head"><h2>Fielding</h2></div>
+          ${grid([
+            ["Catches", m.catches, true],
+            ["Run outs", m.runOutsEffected, true],
+            ["Stumpings", m.stumpings],
+            ["Dropped", m.droppedCatches],
+            ["Total dismissals", num(m.catches) + num(m.runOutsEffected) + num(m.stumpings), true]
+          ])}
+        </section>
+
+        <section class="panel" id="tab-captain">
+          <div class="sec-head"><h2>Captaincy</h2></div>
+          ${grid([
+            ["Matches", m.captainMatches, true],
+            ["Won", m.captainWon, true],
+            ["Lost", m.captainLoss],
+            ["Tied", m.captainTied],
+            ["Points", m.captainPoints, true],
+            ["NRR", m.captainNrrText || "—"],
+            ["RF / RA", `${m.captainRunsFor || 0} / ${m.captainRunsAgainst || 0}`],
+            ["Tournaments", m.captainTournaments],
+            ["Tour. won", m.captainTournamentWon],
+            ["Tour. lost", m.captainTournamentLoss],
+            ["Series", m.captainSeries],
+            ["Series won", m.captainSeriesWon]
+          ])}
+        </section>
+
+        <section class="panel" id="tab-events">
+          <div class="sec-head"><h2>Tournaments &amp; series</h2></div>
+          ${grid([
+            ["Tournaments", m.tournaments, true],
+            ["Tour. won", m.tournamentWon, true],
+            ["Tour. lost", m.tournamentLoss],
+            ["Tour. tied", m.tournamentTied],
+            ["Series", m.series, true],
+            ["Series won", m.seriesWon, true],
+            ["Series lost", m.seriesLoss],
+            ["Series tied", m.seriesTied],
+            ["Attendance", `${m.attendancePresent || 0}/${m.attendanceTotal || 0}`, true],
+            ["Attend %", m.attendancePctText || "—"]
+          ])}
+        </section>
+
+        <section class="panel" id="tab-duels">
+          <div class="sec-head"><h2>Vs bowlers</h2><span class="hint">as batter · same as app</span></div>
+          <div class="duel-list">
+            ${(p.vsBowlers || []).length
+              ? p.vsBowlers.map(d => duelCard(p.fullName, d.opponent, d, false)).join("")
+              : `<div class="card"><p class="empty">No batting head-to-head yet.</p></div>`}
+          </div>
+          <div class="sec-head"><h2>Vs batters</h2><span class="hint">as bowler · same as app</span></div>
+          <div class="duel-list">
+            ${(p.vsBatters || []).length
+              ? p.vsBatters.map(d => duelCard(d.opponent, p.fullName, d, true)).join("")
+              : `<div class="card"><p class="empty">No bowling head-to-head yet.</p></div>`}
+          </div>
+        </section>
+
+        <section class="panel" id="tab-nets">
+          <div class="sec-head"><h2>Nets</h2></div>
+          <div class="card">
+            ${p.nets ? grid([
+              ["Sessions", p.nets.sessions, true],
+              ["Runs", p.nets.runs, true],
+              ["Wickets", p.nets.wickets, true],
+              ["Balls faced", p.nets.ballsFaced],
+              ["Overs", overs(p.nets.oversBowledBalls)],
+              ["Catches", p.nets.catches],
+              ["HS", p.nets.highestScoreText || "—"],
+              ["Best", p.nets.bestBowlingText || "—"],
+              ["Maidens", p.nets.maidens],
+              ["Hat-tricks", p.nets.hatTricks]
+            ]) : `<p class="empty">No nets sessions scored yet.</p>`}
+          </div>
+        </section>
+
+        <p class="footer">Follow Cric360 ·
+          <a href="https://www.facebook.com/profile.php?id=61593997581019" target="_blank" rel="noopener">Facebook</a> ·
+          <a href="https://wa.me/923222857730" target="_blank" rel="noopener">WhatsApp</a> ·
+          <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> ·
+          <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> ·
+          <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a>
+        </p>
+      `;
+
+      const photo = document.getElementById("photo");
+      const fallback = document.getElementById("photoFallback");
+      const showFallback = () => {
+        if (photo) photo.style.display = "none";
+        if (fallback) fallback.style.display = "flex";
+      };
+      if (photo && p.hasPhoto) {
+        photo.addEventListener("error", () => {
+          if (!photo.dataset.retried) {
+            photo.dataset.retried = "1";
+            photo.src = "/api/public/leagues/" + leagueId + "/players/" + playerId + "/image?v=" + Date.now();
+            return;
+          }
+          showFallback();
+        });
+        photo.addEventListener("load", () => {
+          photo.style.display = "block";
+          if (fallback) fallback.style.display = "none";
+        }, { once: true });
+        const wrap = document.getElementById("photoWrap");
+        if (wrap) wrap.addEventListener("click", () => openPhoto(photoSrc, p.fullName));
+      } else {
+        showFallback();
+        const wrap = document.getElementById("photoWrap");
+        if (wrap) wrap.style.cursor = "default";
+      }
+
+      const teamsEl = document.getElementById("teams");
+      const teams = p.teams || [];
+      let teamsOpen = false;
+      const renderTeams = () => {
+        const show = teamsOpen ? teams : teams.slice(0, 5);
+        const more = teams.length - show.length;
+        teamsEl.innerHTML =
+          show.map(t => `<span class="chip">${esc(t)}</span>`).join("") +
+          (more > 0 ? `<button type="button" class="chip soft" id="moreTeams">+${more} teams</button>` : "") +
+          (teamsOpen && teams.length > 5 ? `<button type="button" class="chip soft" id="moreTeams">Show less</button>` : "");
+        const btn = document.getElementById("moreTeams");
+        if (btn) btn.onclick = () => { teamsOpen = !teamsOpen; renderTeams(); };
+      };
+      renderTeams();
+
+      document.getElementById("share").onclick = async () => {
+        const url = location.href.split("#")[0];
+        try {
+          await navigator.clipboard.writeText(url);
+          const btn = document.getElementById("share");
+          btn.textContent = "Copied";
+          setTimeout(() => { btn.textContent = "Copy link"; }, 1600);
+        } catch {
+          prompt("Copy this profile link", url);
+        }
+      };
+
+      document.querySelectorAll(".tab").forEach(btn => {
+        btn.onclick = () => {
+          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+          document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+          requestAnimationFrame(animateBars);
+        };
+      });
+
+      requestAnimationFrame(animateBars);
+    }
+
+    function animateBars() {
+      document.querySelectorAll(".bar > i").forEach(el => {
+        el.style.width = Math.max(0, Math.min(100, num(el.getAttribute("data-w")))) + "%";
+      });
+    }
+
+    function renderInsights(list) {
+      if (!list.length) return `<p class="empty">No insights yet.</p>`;
+      return list.map((raw, i) => {
+        const t = String(raw || "");
+        const low = t.toLowerCase();
+        let tag = "Insight";
+        let mark = "#" + (i + 1);
+        let foot = "Career signal";
+        if (/batter|batting/.test(low)) { tag = "Batting"; foot = "League rank"; }
+        else if (/bowler|bowling|wicket/.test(low)) { tag = "Bowling"; foot = "League rank"; }
+        else if (/strike rate|hs /.test(low)) { tag = "Strike"; foot = "Form & power"; }
+        else if (/player of the match|potm/.test(low)) { tag = "POTM"; foot = "Match awards"; }
+        else if (/nets/.test(low)) { tag = "Nets"; foot = "Practice sessions"; }
+
+        const rank = t.match(/#(\d+)/);
+        const potm = t.match(/(\d+)\s*[×x]/i);
+        const sr = t.match(/strike rate\s+([\d.]+)/i);
+        const hs = t.match(/HS\s+([0-9*()]+)/i);
+        const best = t.match(/best bowling\s+([\d/]+)/i);
+        const wkts = t.match(/([\d]+)\s+wickets?/i);
+        if (rank) mark = "#" + rank[1];
+        else if (potm) mark = potm[1] + "×";
+        else if (sr) mark = sr[1];
+        else if (best) mark = best[1];
+        else if (hs) mark = hs[1];
+        else if (wkts) mark = wkts[1];
+
+        const pretty = esc(t).replace(/(#\d+|\d+\/\d+|\d+(?:\.\d+)?(?:\(\d+\))?\*?|\d+[×x])/g, "<b>$1</b>");
+
+        const tagClass = /batting|bowling|potm/i.test(tag) ? "insight-tag" : "insight-tag soft";
+        return `<article class="insight-card">
+          <div class="insight-top">
+            <span class="${tagClass}">${esc(tag)}</span>
+            <span class="insight-mark">${esc(mark)}</span>
+          </div>
+          <p class="insight-body">${pretty}</p>
+          <div class="insight-foot">${esc(foot)}</div>
+        </article>`;
+      }).join("");
+    }
+
+    fetch(`/api/public/leagues/${leagueId}/players/${playerId}`, { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(render)
+      .catch(() => {
+        document.getElementById("app").innerHTML = `<div class="card"><p class="empty">Profile unavailable.</p></div>`;
+      });
   </script>
 </body>
 </html>

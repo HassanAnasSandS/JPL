@@ -36,7 +36,9 @@ public partial class NetsScoringViewModel : ObservableObject
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool isWicket;
+    [ObservableProperty] private bool isDroppedCatch;
     [ObservableProperty] private bool needsFielder;
+    private bool _suppressFieldingToggle;
 
     public bool CanScoreBalls => CanWrite && !IsBusy && Batter is not null && Bowler is not null;
 
@@ -149,7 +151,28 @@ public partial class NetsScoringViewModel : ObservableObject
 
     partial void OnIsBusyChanged(bool value) => NotifyScoreCanExecute();
     partial void OnCanWriteChanged(bool value) => NotifyScoreCanExecute();
-    partial void OnIsWicketChanged(bool value) => UpdateWicketUiFlags();
+    partial void OnIsWicketChanged(bool value)
+    {
+        if (!_suppressFieldingToggle && value && IsDroppedCatch)
+        {
+            _suppressFieldingToggle = true;
+            IsDroppedCatch = false;
+            _suppressFieldingToggle = false;
+        }
+        UpdateWicketUiFlags();
+    }
+
+    partial void OnIsDroppedCatchChanged(bool value)
+    {
+        if (!_suppressFieldingToggle && value && IsWicket)
+        {
+            _suppressFieldingToggle = true;
+            IsWicket = false;
+            _suppressFieldingToggle = false;
+        }
+        UpdateWicketUiFlags();
+    }
+
     partial void OnSelectedWicketOptionChanged(SelectOption<WicketType>? value) => UpdateWicketUiFlags();
 
     private void NotifyScoreCanExecute()
@@ -161,7 +184,8 @@ public partial class NetsScoringViewModel : ObservableObject
     private void UpdateWicketUiFlags()
     {
         var type = SelectedWicketOption?.Value ?? WicketType.None;
-        NeedsFielder = IsWicket && type is WicketType.Caught or WicketType.RunOut or WicketType.Stumped;
+        NeedsFielder = IsDroppedCatch
+            || (IsWicket && type is WicketType.Caught or WicketType.RunOut or WicketType.Stumped);
     }
 
     [RelayCommand(CanExecute = nameof(CanScoreBalls))]
@@ -171,6 +195,8 @@ public partial class NetsScoringViewModel : ObservableObject
             return;
         if (!int.TryParse(runsText, out var runs))
             return;
+        if (runs is < 0 or 5 or > 6)
+            return;
         if (Batter is null || Bowler is null)
         {
             ErrorMessage = "Select batter and bowler.";
@@ -178,9 +204,11 @@ public partial class NetsScoringViewModel : ObservableObject
         }
 
         var wicketType = SelectedWicketOption?.Value ?? WicketType.Bowled;
-        if (IsWicket && NeedsFielder && Fielder is null)
+        if (NeedsFielder && Fielder is null)
         {
-            ErrorMessage = "Select fielder (catch / run-out / stumped).";
+            ErrorMessage = IsDroppedCatch
+                ? "Select fielder who dropped the catch."
+                : "Select fielder (catch / run-out / stumped).";
             return;
         }
 
@@ -190,7 +218,9 @@ public partial class NetsScoringViewModel : ObservableObject
             ErrorMessage = null;
 
             var extra = SelectedExtraOption?.Value ?? ExtraType.None;
-            var needsFielder = IsWicket && wicketType is WicketType.Caught or WicketType.RunOut or WicketType.Stumped;
+            var dropCatch = IsDroppedCatch && !IsWicket;
+            var needsFielder = dropCatch
+                || (IsWicket && wicketType is WicketType.Caught or WicketType.RunOut or WicketType.Stumped);
             var input = new DeliveryInput(
                 Batter.Id,
                 Batter.Id,
@@ -201,7 +231,8 @@ public partial class NetsScoringViewModel : ObservableObject
                 IsWicket,
                 IsWicket ? wicketType : WicketType.None,
                 IsWicket ? Batter.Id : null,
-                needsFielder ? Fielder?.Id : null);
+                needsFielder ? Fielder?.Id : null,
+                dropCatch);
 
             input = extra switch
             {
@@ -218,6 +249,7 @@ public partial class NetsScoringViewModel : ObservableObject
 
             SelectedExtraOption = ExtraOptions[0];
             IsWicket = false;
+            IsDroppedCatch = false;
 
             await RefreshScoreAsync().ConfigureAwait(true);
             await RefreshScorecardAsync().ConfigureAwait(true);

@@ -18,7 +18,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Api",
-        version = "1.0.2",
+        version = "1.0.4",
         time = DateTime.Now
     });
 }
@@ -161,7 +161,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<UserDto>>> GetPage(
         int skip = 0,
-        int take = 5,
+        int take = 15,
         string? q = null,
         string? status = null,
         Guid? leagueId = null,
@@ -487,7 +487,7 @@ public sealed class PlayersController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<PlayerDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, string? status = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, string? status = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var baseQuery = _db.Players.AsNoTracking().Where(p => !p.IsDeleted);
@@ -755,7 +755,7 @@ public sealed class TeamsController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<TeamListDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, string? captain = null, string? status = null,
+        int skip = 0, int take = 15, string? q = null, string? captain = null, string? status = null,
         CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
@@ -1137,7 +1137,7 @@ public sealed class MatchesController : ControllerBase
     /// <summary>Completed matches only — ongoing scoring stays on devices.</summary>
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<MatchSummaryDto>>> GetCompletedPage(
-        int skip = 0, int take = 5, string? q = null, string? captain = null, string? date = null,
+        int skip = 0, int take = 15, string? q = null, string? captain = null, string? date = null,
         CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
@@ -1318,6 +1318,97 @@ public sealed class MatchesController : ControllerBase
         return Ok(MatchAnalyticsBuilder.Build(match.Title, teamA, teamB, result, Math.Max(match.OversLimit, 1), rows, names));
     }
 
+    /// <summary>
+    /// Raw scoring rows for one match. A reinstalled device has an empty SQLite file,
+    /// and the scorecard DTO cannot be scored against — this rebuilds the real graph.
+    /// </summary>
+    [HttpGet("{id:guid}/export")]
+    public async Task<ActionResult<MatchExportDto>> GetExport(Guid id, CancellationToken ct)
+    {
+        var match = await _db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == id && !m.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (match is null)
+            return NotFound();
+
+        var innings = await _db.Innings.AsNoTracking()
+            .Where(i => i.MatchId == id)
+            .OrderBy(i => i.InningsNumber)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var deliveries = await _db.Deliveries.AsNoTracking()
+            .Where(d => d.MatchId == id)
+            .OrderBy(d => d.InningsId)
+            .ThenBy(d => d.Sequence)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return Ok(new MatchExportDto(
+            new MatchRowDto(
+                match.Id,
+                match.Title,
+                match.TeamAId,
+                match.TeamBId,
+                match.TeamACaptainId,
+                match.TeamBCaptainId,
+                match.OversLimit,
+                (byte)match.OversMode,
+                (byte)match.Format,
+                match.FormatId,
+                match.MatchDateUtc,
+                match.Venue,
+                (byte)match.Status,
+                match.TossWinnerTeamId,
+                match.TossWinnerBatsFirst,
+                match.LastBatsmanCanBatAsSingleWicket,
+                match.BowlerMaxOvers,
+                match.PlayerOfTheMatchPlayerId,
+                match.TournamentId,
+                match.TournamentFixtureId,
+                match.SeriesId,
+                match.SeriesFixtureId,
+                match.Version,
+                match.CreatedAtUtc,
+                match.UpdatedAtUtc,
+                match.IsDeleted,
+                match.SquadRosterJson,
+                match.IsLiveTelecast,
+                match.LiveStreamUrl,
+                match.StartedByUserId,
+                match.StartedOnDeviceId),
+            innings.Select(i => new InningsRowDto(
+                i.Id,
+                i.MatchId,
+                i.InningsNumber,
+                i.BattingTeamId,
+                i.BowlingTeamId,
+                i.IsCompleted,
+                i.IsFollowOn,
+                i.StartedAtUtc)).ToList(),
+            deliveries.Select(d => new DeliveryRowDto(
+                d.Id,
+                d.MatchId,
+                d.InningsId,
+                d.Sequence,
+                d.OverNumber,
+                d.BallInOver,
+                d.BatterId,
+                d.NonStrikerId,
+                d.BowlerId,
+                d.RunsOffBat,
+                d.ExtraRuns,
+                (byte)d.ExtraType,
+                d.IsWicket,
+                (byte)d.WicketType,
+                d.DismissedPlayerId,
+                d.FielderId,
+                d.IsDroppedCatch,
+                d.IsLegalDelivery,
+                d.CreatedAtUtc,
+                d.Version)).ToList()));
+    }
+
     /// <summary>Full batting/bowling scorecard for every innings of a completed match.</summary>
     [HttpGet("{id:guid}/scorecard")]
     public async Task<ActionResult<MatchScorecardDto>> GetScorecard(Guid id, CancellationToken ct)
@@ -1354,6 +1445,7 @@ public sealed class MatchesController : ControllerBase
             .Concat(squadRows.Select(tp => tp.PlayerId))
             .Concat(squadSnap?.PlayersOfTeamA() ?? [])
             .Concat(squadSnap?.PlayersOfTeamB() ?? [])
+            .Concat(squadSnap?.SubstituteIds().AsEnumerable() ?? [])
             .Where(pid => pid != Guid.Empty)
             .Distinct()
             .ToList();
@@ -1370,6 +1462,8 @@ public sealed class MatchesController : ControllerBase
             .ConfigureAwait(false);
 
         string NameOf(Guid pid) => names.GetValueOrDefault(pid, "?");
+
+        var substituteIds = SubstituteIdsForMatch(squadSnap, squadRows, match.TeamAId, match.TeamBId);
 
         Guid? CaptainOf(Guid teamId)
         {
@@ -1416,7 +1510,8 @@ public sealed class MatchesController : ControllerBase
                 CaptainOf(inn.BattingTeamId),
                 CaptainOf(inn.BowlingTeamId),
                 SquadOf(inn.BattingTeamId),
-                SquadOf(inn.BowlingTeamId));
+                SquadOf(inn.BowlingTeamId),
+                substituteIds);
             sections.Add(section);
         }
 
@@ -1543,6 +1638,68 @@ public sealed class MatchesController : ControllerBase
         });
     }
 
+    [HttpGet("{id:guid}/players/{playerId:guid}/report")]
+    public async Task<ActionResult<PlayerMatchReportDto>> GetPlayerReport(Guid id, Guid playerId, CancellationToken ct)
+    {
+        var match = await _db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == id && !m.IsDeleted, ct)
+            .ConfigureAwait(false);
+        if (match is null)
+            return NotFound();
+
+        var innings = await _db.Innings.AsNoTracking()
+            .Where(i => i.MatchId == id)
+            .Include(i => i.Deliveries)
+            .OrderBy(i => i.InningsNumber)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var teamIds = new[] { match.TeamAId, match.TeamBId };
+        var teams = await _db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+
+        var squadRows = await _db.TeamPlayers.AsNoTracking()
+            .Where(tp => tp.TeamId == match.TeamAId || tp.TeamId == match.TeamBId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var squadSnap = MatchSquadSnapshot.TryParse(match.SquadRosterJson);
+
+        var playerIds = innings
+            .SelectMany(i => i.Deliveries)
+            .SelectMany(d => new[] { d.BatterId, d.BowlerId, d.DismissedPlayerId ?? Guid.Empty, d.FielderId ?? Guid.Empty })
+            .Concat(squadRows.Select(tp => tp.PlayerId))
+            .Append(playerId)
+            .Where(pid => pid != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        var names = await _db.Players.AsNoTracking()
+            .Where(p => playerIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+            .ConfigureAwait(false);
+
+        var teamA = teams.GetValueOrDefault(match.TeamAId, "Team A");
+        var teamB = teams.GetValueOrDefault(match.TeamBId, "Team B");
+        var playerName = names.GetValueOrDefault(playerId, "Player");
+        var onA = squadSnap?.PlayersOfTeamA().Contains(playerId) == true
+                  || squadRows.Any(tp => tp.TeamId == match.TeamAId && tp.PlayerId == playerId);
+        var teamName = onA ? teamA
+            : squadSnap?.PlayersOfTeamB().Contains(playerId) == true
+              || squadRows.Any(tp => tp.TeamId == match.TeamBId && tp.PlayerId == playerId)
+                ? teamB
+                : string.Empty;
+
+        var rows = innings.Select(inn => (
+            inn.InningsNumber,
+            inn.BattingTeamId == match.TeamAId ? teamA : teamB,
+            (IReadOnlyList<Delivery>)inn.Deliveries.OrderBy(d => d.Sequence).ToList()
+        )).ToList();
+
+        return Ok(PlayerMatchReportBuilder.Build(playerId, playerName, teamName, match.Title, rows, names));
+    }
+
     private static (bool IsChase, string ChaseNeed, string RequiredRunRate) ComputeChase(
         Match match, IReadOnlyList<Innings> innings)
     {
@@ -1666,13 +1823,21 @@ public sealed class MatchesController : ControllerBase
         Guid? battingCaptainId = null,
         Guid? bowlingCaptainId = null,
         IReadOnlyList<(Guid Id, string Name, bool IsCaptain)>? battingSquad = null,
-        IReadOnlyList<(Guid Id, string Name, bool IsCaptain)>? bowlingSquad = null)
+        IReadOnlyList<(Guid Id, string Name, bool IsCaptain)>? bowlingSquad = null,
+        IReadOnlySet<Guid>? substituteIds = null)
     {
         string NameOf(Guid id)
         {
             var n = rawNameOf(id);
             if (battingCaptainId == id || bowlingCaptainId == id)
                 return $"{n} (C)";
+            return n;
+        }
+        string FielderOf(Guid id)
+        {
+            var n = rawNameOf(id);
+            if (substituteIds is not null && substituteIds.Contains(id))
+                n = $"{n} (Substitute)";
             return n;
         }
 
@@ -1698,7 +1863,7 @@ public sealed class MatchesController : ControllerBase
                 Sixes = faced.Count(d => d.RunsOffBat == 6),
                 IsOut = outDelivery is not null,
                 IsCaptain = battingCaptainId == pid,
-                Dismissal = outDelivery is null ? string.Empty : FormatDismissal(outDelivery, NameOf)
+                Dismissal = outDelivery is null ? string.Empty : FormatDismissal(outDelivery, NameOf, FielderOf)
             });
         }
 
@@ -1722,6 +1887,10 @@ public sealed class MatchesController : ControllerBase
                 Wickets = bowled.Count(d =>
                     d.IsWicket && d.WicketType is not WicketType.RunOut and not WicketType.Retired and not WicketType.None),
                 Maidens = CountMaidens(bowled),
+                Wides = bowled.Where(d => d.ExtraType == ExtraType.Wide).Sum(d => d.ExtraRuns),
+                NoBalls = bowled.Where(d => d.ExtraType == ExtraType.NoBall).Sum(d => d.ExtraRuns),
+                Byes = bowled.Where(d => d.ExtraType == ExtraType.Bye).Sum(d => d.ExtraRuns),
+                LegByes = bowled.Where(d => d.ExtraType == ExtraType.LegBye).Sum(d => d.ExtraRuns),
                 IsCaptain = bowlingCaptainId == pid
             });
         }
@@ -1765,6 +1934,47 @@ public sealed class MatchesController : ControllerBase
             : $"{label}: {string.Join(", ", leftover)}";
     }
 
+    private static HashSet<Guid> SubstituteIdsForMatch(
+        MatchSquadSnapshot? snap,
+        IReadOnlyList<TeamPlayer> squadRows,
+        Guid teamAId,
+        Guid teamBId)
+    {
+        var ids = new HashSet<Guid>();
+        if (snap is not null)
+        {
+            foreach (var id in snap.SubstituteIds())
+                ids.Add(id);
+        }
+
+        void AddBench(Guid teamId, IReadOnlyList<Guid> playing)
+        {
+            var chosen = playing.ToHashSet();
+            foreach (var tp in squadRows.Where(r => r.TeamId == teamId && !chosen.Contains(r.PlayerId)))
+                ids.Add(tp.PlayerId);
+        }
+
+        var playingA = snap?.PlayersOfTeamA() ?? [];
+        var playingB = snap?.PlayersOfTeamB() ?? [];
+        if (playingA.Count > 0)
+            AddBench(teamAId, playingA);
+        else
+        {
+            foreach (var tp in squadRows.Where(r => r.TeamId == teamAId && !r.IsPlaying))
+                ids.Add(tp.PlayerId);
+        }
+
+        if (playingB.Count > 0)
+            AddBench(teamBId, playingB);
+        else
+        {
+            foreach (var tp in squadRows.Where(r => r.TeamId == teamBId && !r.IsPlaying))
+                ids.Add(tp.PlayerId);
+        }
+
+        return ids;
+    }
+
     private static int CountMaidens(List<Delivery> bowled)
     {
         var maidens = 0;
@@ -1786,15 +1996,16 @@ public sealed class MatchesController : ControllerBase
         return maidens;
     }
 
-    private static string FormatDismissal(Delivery d, Func<Guid, string> nameOf)
+    private static string FormatDismissal(Delivery d, Func<Guid, string> nameOf, Func<Guid, string>? fielderOf = null)
     {
+        var field = fielderOf ?? nameOf;
         var how = d.WicketType switch
         {
             WicketType.Bowled => "b",
-            WicketType.Caught => d.FielderId is Guid f ? $"c {nameOf(f)} b" : "c b",
+            WicketType.Caught => d.FielderId is Guid f ? $"c {field(f)} b" : "c b",
             WicketType.Lbw => "lbw b",
-            WicketType.RunOut => d.FielderId is Guid f ? $"run out ({nameOf(f)})" : "run out",
-            WicketType.Stumped => d.FielderId is Guid f ? $"st {nameOf(f)} b" : "st b",
+            WicketType.RunOut => d.FielderId is Guid f ? $"run out ({field(f)})" : "run out",
+            WicketType.Stumped => d.FielderId is Guid f ? $"st {field(f)} b" : "st b",
             WicketType.HitWicket => "hit wicket b",
             WicketType.Retired => "retired",
             _ => "out"
@@ -1888,7 +2099,7 @@ public sealed class NetSessionsController : ControllerBase
     /// <summary>Completed nets sessions only — setup/live scoring stays on devices and arrives via sync.</summary>
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<NetSessionSummaryDto>>> GetCompletedPage(
-        int skip = 0, int take = 5, string? q = null, string? date = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, string? date = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.NetSessions.AsNoTracking()
@@ -2018,7 +2229,11 @@ public sealed class NetSessionsController : ControllerBase
                 BallsBowled = legal,
                 RunsConceded = bowled.Sum(d => d.RunsOffBat + d.ExtraRuns),
                 Wickets = bowled.Count(d => d.IsWicket && d.WicketType is not WicketType.RunOut and not WicketType.Retired),
-                Maidens = CountNetMaidens(bowled)
+                Maidens = CountNetMaidens(bowled),
+                Wides = bowled.Where(d => d.ExtraType == ExtraType.Wide).Sum(d => d.ExtraRuns),
+                NoBalls = bowled.Where(d => d.ExtraType == ExtraType.NoBall).Sum(d => d.ExtraRuns),
+                Byes = bowled.Where(d => d.ExtraType == ExtraType.Bye).Sum(d => d.ExtraRuns),
+                LegByes = bowled.Where(d => d.ExtraType == ExtraType.LegBye).Sum(d => d.ExtraRuns)
             };
         }).ToList();
 
@@ -2467,7 +2682,18 @@ public sealed class SyncController : ControllerBase
         if (existing.StartedOnDeviceId is Guid deviceId
             && dto.StartedOnDeviceId is Guid incomingDevice
             && incomingDevice != deviceId)
-            throw new InvalidOperationException("This match can only be updated from the device that started it.");
+        {
+            // Reinstalling the app mints a new device id, so the original scorer would be
+            // locked out of a match they are still scoring. The owning admin may take the
+            // match over onto the calling device while it is unfinished.
+            var callerOwnsMatch = existing.StartedByUserId is Guid reclaimOwner
+                                  && TryGetSyncCaller(out var reclaimCaller)
+                                  && reclaimOwner == reclaimCaller;
+            var unfinished = existing.Status is MatchStatus.Setup or MatchStatus.InProgress;
+            if (!callerOwnsMatch || !unfinished)
+                throw new InvalidOperationException("This match can only be updated from the device that started it.");
+            existing.StartedOnDeviceId = incomingDevice;
+        }
 
         existing.Title = dto.Title;
         existing.TeamAId = dto.TeamAId;
@@ -2655,6 +2881,7 @@ public sealed class SyncController : ControllerBase
         existing.WicketType = dto.WicketType;
         existing.DismissedPlayerId = dto.DismissedPlayerId;
         existing.FielderId = dto.FielderId;
+        existing.IsDroppedCatch = dto.IsDroppedCatch;
         existing.IsLegalDelivery = dto.IsLegalDelivery;
         existing.ShotZone = dto.ShotZone;
         existing.Version = dto.Version;
@@ -2746,6 +2973,7 @@ public sealed class SyncController : ControllerBase
         existing.WicketType = dto.WicketType;
         existing.DismissedPlayerId = dto.DismissedPlayerId;
         existing.FielderId = dto.FielderId;
+        existing.IsDroppedCatch = dto.IsDroppedCatch;
         existing.IsLegalDelivery = dto.IsLegalDelivery;
         existing.Version = dto.Version;
     }
@@ -2807,6 +3035,64 @@ public sealed class StatsController : ControllerBase
 
     public StatsController(ApiDbContext db) => _db = db;
 
+    /// <summary>Dropdown options for Statistics tournament / series / match filters.</summary>
+    [HttpGet("filter-options")]
+    public async Task<ActionResult<StatsFilterOptionsDto>> FilterOptions(CancellationToken ct)
+    {
+        try
+        {
+            var tours = await _db.Tournaments.AsNoTracking()
+                .Where(t => !t.IsDeleted)
+                .OrderByDescending(t => t.UpdatedAtUtc)
+                .Select(t => new StatsFilterOptionDto { Id = t.Id, Name = t.Name })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            var series = await _db.Series.AsNoTracking()
+                .Where(s => !s.IsDeleted)
+                .OrderByDescending(s => s.UpdatedAtUtc)
+                .Select(s => new StatsFilterOptionDto { Id = s.Id, Name = s.Name })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            var matchRows = await _db.Matches.AsNoTracking()
+                .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed)
+                .OrderByDescending(m => m.MatchDateUtc)
+                .Select(m => new { m.Id, m.Title, m.TeamAId, m.TeamBId, m.MatchDateUtc })
+                .Take(300)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var teamIds = matchRows.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
+            var teamNames = teamIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _db.Teams.AsNoTracking()
+                    .Where(t => teamIds.Contains(t.Id))
+                    .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+                    .ConfigureAwait(false);
+
+            var matches = matchRows.Select(m =>
+            {
+                var a = teamNames.GetValueOrDefault(m.TeamAId, "?");
+                var b = teamNames.GetValueOrDefault(m.TeamBId, "?");
+                var title = string.IsNullOrWhiteSpace(m.Title) ? $"{a} vs {b}" : m.Title.Trim();
+                var when = m.MatchDateUtc.ToString("dd MMM yyyy");
+                return new StatsFilterOptionDto { Id = m.Id, Name = $"{title} · {when}" };
+            }).ToList();
+
+            return Ok(new StatsFilterOptionsDto
+            {
+                Tournaments = tours,
+                Series = series,
+                Matches = matches
+            });
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Client navigated away / cancelled — not a server fault (avoids debugger break).
+            return new EmptyResult();
+        }
+    }
+
     /// <summary>Full player leaderboard from server SQL database (synced match deliveries).</summary>
     [HttpGet("leaderboard")]
     public async Task<ActionResult<IReadOnlyList<PlayerCareerDto>>> Leaderboard(
@@ -2815,7 +3101,11 @@ public sealed class StatsController : ControllerBase
         [FromQuery] Guid? venueId,
         [FromQuery] string? source,
         [FromQuery] Guid[]? formatIds,
-        CancellationToken ct)
+        [FromQuery] Guid[]? tournamentIds,
+        [FromQuery] Guid[]? seriesIds,
+        [FromQuery] Guid[]? matchIds,
+        [FromQuery] bool attendanceFromDebut = false,
+        CancellationToken ct = default)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
@@ -2828,14 +3118,16 @@ public sealed class StatsController : ControllerBase
         }
 
         return Ok(await StatsCalculator
-            .BuildLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            .BuildLeaderboardAsync(
+                _db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds,
+                attendanceFromDebut, ct)
             .ConfigureAwait(false));
     }
 
     [HttpGet("leaderboard/page")]
     public async Task<ActionResult<PagedResult<PlayerCareerDto>>> LeaderboardPage(
         int skip = 0,
-        int take = 5,
+        int take = 15,
         string? q = null,
         string? sort = null,
         string? dir = null,
@@ -2844,6 +3136,10 @@ public sealed class StatsController : ControllerBase
         [FromQuery] Guid? venueId = null,
         [FromQuery] string? source = null,
         [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
+        [FromQuery] bool attendanceFromDebut = false,
         CancellationToken ct = default)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
@@ -2851,7 +3147,9 @@ public sealed class StatsController : ControllerBase
 
         var board = IsNetsSource(source)
             ? await StatsCalculator.BuildNetsLeaderboardAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false)
-            : await StatsCalculator.BuildLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            : await StatsCalculator.BuildLeaderboardAsync(
+                    _db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds,
+                    attendanceFromDebut, ct)
                 .ConfigureAwait(false);
 
         IEnumerable<PlayerCareerDto> filtered = board;
@@ -2871,29 +3169,38 @@ public sealed class StatsController : ControllerBase
         [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toExclusiveUtc,
         [FromQuery] Guid[]? formatIds,
+        [FromQuery] Guid[]? tournamentIds,
+        [FromQuery] Guid[]? seriesIds,
+        [FromQuery] Guid[]? matchIds,
         CancellationToken ct)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
-        return Ok(await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false));
+        return Ok(await StatsCalculator
+            .BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, tournamentIds, seriesIds, matchIds, ct)
+            .ConfigureAwait(false));
     }
 
     [HttpGet("rankings/page")]
     public async Task<ActionResult<PagedResult<RankingRowDto>>> RankingsPage(
         int skip = 0,
-        int take = 5,
+        int take = 15,
         string? q = null,
         string? category = null,
         [FromQuery] DateTime? fromUtc = null,
         [FromQuery] DateTime? toExclusiveUtc = null,
         [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
         CancellationToken ct = default)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
-        var bundle = await StatsCalculator.BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct)
+        var bundle = await StatsCalculator
+            .BuildRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, tournamentIds, seriesIds, matchIds, ct)
             .ConfigureAwait(false);
         var rows = category?.Trim().ToLowerInvariant() switch
         {
@@ -2913,12 +3220,17 @@ public sealed class StatsController : ControllerBase
         [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toExclusiveUtc,
         [FromQuery] Guid[]? formatIds,
+        [FromQuery] Guid[]? tournamentIds,
+        [FromQuery] Guid[]? seriesIds,
+        [FromQuery] Guid[]? matchIds,
         CancellationToken ct)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
-        return Ok(await StatsCalculator.BuildTeamRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false));
+        return Ok(await StatsCalculator
+            .BuildTeamRankingsAsync(_db, fromUtc, toExclusiveUtc, formatIds, tournamentIds, seriesIds, matchIds, ct)
+            .ConfigureAwait(false));
     }
 
     /// <summary>Team leaderboard for Statistics · Teams (matches, NRR, tournaments, series).</summary>
@@ -2928,20 +3240,23 @@ public sealed class StatsController : ControllerBase
         [FromQuery] DateTime? toExclusiveUtc,
         [FromQuery] Guid? venueId,
         [FromQuery] Guid[]? formatIds,
+        [FromQuery] Guid[]? tournamentIds,
+        [FromQuery] Guid[]? seriesIds,
+        [FromQuery] Guid[]? matchIds,
         CancellationToken ct)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
         return Ok(await StatsCalculator
-            .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds, ct)
             .ConfigureAwait(false));
     }
 
     [HttpGet("teams/page")]
     public async Task<ActionResult<PagedResult<TeamCareerDto>>> TeamsPage(
         int skip = 0,
-        int take = 5,
+        int take = 15,
         string? q = null,
         string? sort = null,
         string? dir = null,
@@ -2949,13 +3264,16 @@ public sealed class StatsController : ControllerBase
         [FromQuery] DateTime? toExclusiveUtc = null,
         [FromQuery] Guid? venueId = null,
         [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
         CancellationToken ct = default)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
             return BadRequest("From date must be before or equal to To date.");
 
         var board = await StatsCalculator
-            .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, ct)
+            .BuildTeamLeaderboardAsync(_db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds, ct)
             .ConfigureAwait(false);
 
         IEnumerable<TeamCareerDto> filtered = board;
@@ -2967,6 +3285,27 @@ public sealed class StatsController : ControllerBase
 
         var ordered = StatsListSort.OrderTeams(filtered, sort, StatsListSort.Ascending(dir));
         return Ok(Paging.Slice(ordered, skip, take));
+    }
+
+    /// <summary>1 vs 1 for one team vs every opponent faced (Statistics · Teams detail).</summary>
+    [HttpGet("teams/{teamId:guid}/vs")]
+    public async Task<ActionResult<IReadOnlyList<TeamVsDto>>> TeamVs(
+        Guid teamId,
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toExclusiveUtc,
+        [FromQuery] Guid? venueId,
+        [FromQuery] Guid[]? formatIds,
+        [FromQuery] Guid[]? tournamentIds,
+        [FromQuery] Guid[]? seriesIds,
+        [FromQuery] Guid[]? matchIds,
+        CancellationToken ct)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before or equal to To date.");
+
+        return Ok(await StatsCalculator
+            .BuildTeamVsAsync(_db, teamId, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds, ct)
+            .ConfigureAwait(false));
     }
 
     [HttpGet("players/{playerId:guid}")]
@@ -3013,6 +3352,21 @@ public sealed class StatsController : ControllerBase
             : await StatsCalculator.BuildConfrontationsAsync(_db, playerId, asBatterPerspective: false, ct)
                 .ConfigureAwait(false));
 
+    [HttpGet("confrontations/{playerId:guid}/vs-fielding")]
+    public async Task<ActionResult<IReadOnlyList<FieldingVsDto>>> FieldingVsBatters(
+        Guid playerId,
+        [FromQuery] string? source,
+        CancellationToken ct)
+        => Ok(IsNetsSource(source)
+            ? await StatsCalculator.BuildNetsFieldingVsAsync(_db, playerId, ct).ConfigureAwait(false)
+            : await StatsCalculator.BuildFieldingVsAsync(_db, playerId, ct).ConfigureAwait(false));
+
+    [HttpGet("confrontations/{playerId:guid}/vs-captains")]
+    public async Task<ActionResult<IReadOnlyList<CaptainVsDto>>> CaptainVsCaptains(
+        Guid playerId,
+        CancellationToken ct)
+        => Ok(await StatsCalculator.BuildCaptainVsAsync(_db, playerId, ct).ConfigureAwait(false));
+
     private static bool IsNetsSource(string? source)
         => string.Equals(source, "nets", StringComparison.OrdinalIgnoreCase);
 }
@@ -3028,58 +3382,102 @@ public sealed class HallOfFameController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<HallOfFameDto>> Get(
         [FromQuery] Guid[]? formatIds,
+        [FromQuery] Guid[]? tournamentIds,
+        [FromQuery] Guid[]? seriesIds,
+        [FromQuery] Guid[]? matchIds,
         CancellationToken ct)
-        => Ok(await BuildAsync(formatIds, ct).ConfigureAwait(false));
+        => Ok(await BuildAsync(formatIds, tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false));
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<TrophyRowDto>>> GetPage(
         int skip = 0,
-        int take = 5,
+        int take = 15,
         string? q = null,
         string? category = null,
         [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
         CancellationToken ct = default)
     {
-        var bundle = await BuildAsync(formatIds, ct).ConfigureAwait(false);
+        var bundle = await BuildAsync(formatIds, tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false);
         var rows = category?.Trim().ToLowerInvariant() switch
         {
             "captain" => bundle.CaptainTrophies,
             "tourchamp" => bundle.TournamentChampionTrophies,
             "serieschamp" => bundle.SeriesChampionTrophies,
+            "potour" => bundle.PlayerOfTheTournament,
+            "poseries" => bundle.PlayerOfTheSeries,
+            "bestbat" => bundle.BestBatsman,
+            "bestbowl" => bundle.BestBowler,
+            "bestfield" => bundle.BestFielder,
             _ => bundle.PlayerOfTheMatch
         };
         return Ok(Paging.Slice(rows, skip, take, r => r.PlayerName, q));
     }
 
-    private async Task<HallOfFameDto> BuildAsync(Guid[]? formatIds, CancellationToken ct)
+    private async Task<HallOfFameDto> BuildAsync(
+        Guid[]? formatIds,
+        Guid[]? tournamentIds,
+        Guid[]? seriesIds,
+        Guid[]? matchIds,
+        CancellationToken ct)
     {
         var formatIdList = StatsCalculator.NormalizeFormatIds(formatIds);
+        var tourIdFilter = StatsCalculator.NormalizeIds(tournamentIds);
+        var seriesIdFilter = StatsCalculator.NormalizeIds(seriesIds);
+        var matchIdFilter = StatsCalculator.NormalizeIds(matchIds);
+        var eventScoped = StatsCalculator.HasEventScope(tournamentIds, seriesIds, matchIds);
 
         var matchQuery = _db.Matches.AsNoTracking()
             .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed);
         if (formatIdList is not null)
             matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = StatsCalculator.ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIds);
         var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
 
         var tournamentQuery = _db.Tournaments.AsNoTracking()
-            .Where(t => !t.IsDeleted
-                        && t.Status == TournamentStatus.Completed
-                        && t.WinnerTeamId != null);
+            .Where(t => !t.IsDeleted && t.Status == TournamentStatus.Completed);
         if (formatIdList is not null)
             tournamentQuery = tournamentQuery.Where(t => formatIdList.Contains(t.FormatId ?? Guid.Empty));
+        if (tourIdFilter is not null)
+            tournamentQuery = tournamentQuery.Where(t => tourIdFilter.Contains(t.Id));
+        else if (eventScoped)
+        {
+            var fromMatches = matches
+                .Where(m => m.TournamentId is Guid)
+                .Select(m => m.TournamentId!.Value)
+                .Distinct()
+                .ToList();
+            tournamentQuery = fromMatches.Count == 0
+                ? tournamentQuery.Where(_ => false)
+                : tournamentQuery.Where(t => fromMatches.Contains(t.Id));
+        }
         var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
 
         var potmCounts = new Dictionary<Guid, int>();
         var captainCounts = new Dictionary<Guid, int>();
         var tourChampCounts = new Dictionary<Guid, int>();
         var seriesChampCounts = new Dictionary<Guid, int>();
+        var potTourCounts = new Dictionary<Guid, int>();
+        var potSeriesCounts = new Dictionary<Guid, int>();
+        var bestBatCounts = new Dictionary<Guid, int>();
+        var bestBowlCounts = new Dictionary<Guid, int>();
+        var bestFieldCounts = new Dictionary<Guid, int>();
         var playerIds = new HashSet<Guid>();
+
+        static void Bump(Dictionary<Guid, int> map, HashSet<Guid> ids, Guid? playerId)
+        {
+            if (playerId is not Guid id) return;
+            ids.Add(id);
+            map[id] = map.GetValueOrDefault(id) + 1;
+        }
 
         if (matches.Count > 0)
         {
-            var matchIds = matches.Select(m => m.Id).ToList();
+            var completedMatchIds = matches.Select(m => m.Id).ToList();
             var innings = await _db.Innings.AsNoTracking()
-                .Where(i => matchIds.Contains(i.MatchId))
+                .Where(i => completedMatchIds.Contains(i.MatchId))
                 .Include(i => i.Deliveries)
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
@@ -3116,51 +3514,82 @@ public sealed class HallOfFameController : ControllerBase
         if (tournaments.Count > 0)
         {
             var winnerTeamIds = tournaments
+                .Where(t => t.WinnerTeamId is Guid)
                 .Select(t => t.WinnerTeamId!.Value)
                 .Distinct()
                 .ToList();
-            var teams = await _db.Teams.AsNoTracking()
-                .Where(t => winnerTeamIds.Contains(t.Id) && !t.IsDeleted)
-                .ToDictionaryAsync(t => t.Id, t => t, ct)
-                .ConfigureAwait(false);
+            var teams = winnerTeamIds.Count == 0
+                ? new Dictionary<Guid, Team>()
+                : await _db.Teams.AsNoTracking()
+                    .Where(t => winnerTeamIds.Contains(t.Id) && !t.IsDeleted)
+                    .ToDictionaryAsync(t => t.Id, t => t, ct)
+                    .ConfigureAwait(false);
 
             foreach (var tour in tournaments)
             {
-                if (!teams.TryGetValue(tour.WinnerTeamId!.Value, out var team)
-                    || team.CaptainPlayerId is not Guid capId)
-                    continue;
-                playerIds.Add(capId);
-                tourChampCounts[capId] = tourChampCounts.GetValueOrDefault(capId) + 1;
+                if (tour.WinnerTeamId is Guid wid
+                    && teams.TryGetValue(wid, out var team)
+                    && team.CaptainPlayerId is Guid capId)
+                {
+                    playerIds.Add(capId);
+                    tourChampCounts[capId] = tourChampCounts.GetValueOrDefault(capId) + 1;
+                }
+
+                Bump(potTourCounts, playerIds, tour.PlayerOfTheTournamentPlayerId);
+                Bump(bestBatCounts, playerIds, tour.BestBatsmanPlayerId);
+                Bump(bestBowlCounts, playerIds, tour.BestBowlerPlayerId);
+                Bump(bestFieldCounts, playerIds, tour.BestFielderPlayerId);
             }
         }
 
         var seriesQuery = _db.Series.AsNoTracking()
-            .Where(s => !s.IsDeleted
-                        && s.Status == SeriesStatus.Completed
-                        && s.WinnerTeamId != null
-                        && !s.IsTied);
+            .Where(s => !s.IsDeleted && s.Status == SeriesStatus.Completed);
         if (formatIdList is not null)
             seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
+        if (seriesIdFilter is not null)
+            seriesQuery = seriesQuery.Where(s => seriesIdFilter.Contains(s.Id));
+        else if (eventScoped)
+        {
+            var fromMatches = matches
+                .Where(m => m.SeriesId is Guid)
+                .Select(m => m.SeriesId!.Value)
+                .Distinct()
+                .ToList();
+            seriesQuery = fromMatches.Count == 0
+                ? seriesQuery.Where(_ => false)
+                : seriesQuery.Where(s => fromMatches.Contains(s.Id));
+        }
         var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
 
         if (seriesList.Count > 0)
         {
             var winnerTeamIds = seriesList
+                .Where(s => s.WinnerTeamId is Guid && !s.IsTied)
                 .Select(s => s.WinnerTeamId!.Value)
                 .Distinct()
                 .ToList();
-            var teams = await _db.Teams.AsNoTracking()
-                .Where(t => winnerTeamIds.Contains(t.Id) && !t.IsDeleted)
-                .ToDictionaryAsync(t => t.Id, t => t, ct)
-                .ConfigureAwait(false);
+            var teams = winnerTeamIds.Count == 0
+                ? new Dictionary<Guid, Team>()
+                : await _db.Teams.AsNoTracking()
+                    .Where(t => winnerTeamIds.Contains(t.Id) && !t.IsDeleted)
+                    .ToDictionaryAsync(t => t.Id, t => t, ct)
+                    .ConfigureAwait(false);
 
             foreach (var series in seriesList)
             {
-                if (!teams.TryGetValue(series.WinnerTeamId!.Value, out var team)
-                    || team.CaptainPlayerId is not Guid capId)
-                    continue;
-                playerIds.Add(capId);
-                seriesChampCounts[capId] = seriesChampCounts.GetValueOrDefault(capId) + 1;
+                if (!series.IsTied
+                    && series.WinnerTeamId is Guid wid
+                    && teams.TryGetValue(wid, out var team)
+                    && team.CaptainPlayerId is Guid capId)
+                {
+                    playerIds.Add(capId);
+                    seriesChampCounts[capId] = seriesChampCounts.GetValueOrDefault(capId) + 1;
+                }
+
+                Bump(potSeriesCounts, playerIds, series.PlayerOfTheSeriesPlayerId);
+                Bump(bestBatCounts, playerIds, series.BestBatsmanPlayerId);
+                Bump(bestBowlCounts, playerIds, series.BestBowlerPlayerId);
+                Bump(bestFieldCounts, playerIds, series.BestFielderPlayerId);
             }
         }
 
@@ -3190,7 +3619,12 @@ public sealed class HallOfFameController : ControllerBase
             PlayerOfTheMatch = ToRows(potmCounts, names, "Player of the Match"),
             CaptainTrophies = ToRows(captainCounts, names, "Captain win trophy"),
             TournamentChampionTrophies = ToRows(tourChampCounts, names, "Tournament champion (captain)"),
-            SeriesChampionTrophies = ToRows(seriesChampCounts, names, "Series champion (captain)")
+            SeriesChampionTrophies = ToRows(seriesChampCounts, names, "Series champion (captain)"),
+            PlayerOfTheTournament = ToRows(potTourCounts, names, "Player of the Tournament"),
+            PlayerOfTheSeries = ToRows(potSeriesCounts, names, "Player of the Series"),
+            BestBatsman = ToRows(bestBatCounts, names, "Best Batsman"),
+            BestBowler = ToRows(bestBowlCounts, names, "Best Bowler"),
+            BestFielder = ToRows(bestFieldCounts, names, "Best Fielder")
         };
     }
 
@@ -3234,7 +3668,7 @@ public sealed class AuctionsController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<AuctionDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.Auctions.AsNoTracking().Where(a => !a.IsDeleted);
@@ -3538,7 +3972,7 @@ public sealed class VenuesController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<VenueDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.Venues.AsNoTracking().Where(v => !v.IsDeleted);
@@ -3660,7 +4094,7 @@ public sealed class FormatsController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<FormatDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.Formats.AsNoTracking().Where(f => !f.IsDeleted);
@@ -3800,6 +4234,8 @@ public sealed class VenueBookingsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<VenueBookingDto>>> List(CancellationToken ct)
     {
+        await EnsureCreatedByHasanAnasAsync(ct).ConfigureAwait(false);
+
         var list = await _db.VenueBookings.AsNoTracking()
             .Where(b => !b.IsDeleted)
             .Include(b => b.Participants)
@@ -3813,8 +4249,10 @@ public sealed class VenueBookingsController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<VenueBookingDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
+        await EnsureCreatedByHasanAnasAsync(ct).ConfigureAwait(false);
+
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.VenueBookings.AsNoTracking().Where(b => !b.IsDeleted);
         var like = Paging.LikePattern(q);
@@ -3840,6 +4278,8 @@ public sealed class VenueBookingsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<VenueBookingDto>> Get(Guid id, CancellationToken ct)
     {
+        await EnsureCreatedByHasanAnasAsync(ct).ConfigureAwait(false);
+
         var entity = await _db.VenueBookings.AsNoTracking()
             .Include(b => b.Participants)
             .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted, ct)
@@ -3879,7 +4319,8 @@ public sealed class VenueBookingsController : ControllerBase
                 {
                     VenueBookingId = id,
                     PlayerId = p.PlayerId,
-                    Status = VenueBookingPaymentStatus.Normalize(p.Status)
+                    Status = VenueBookingPaymentStatus.Normalize(p.Status),
+                    Amount = Math.Max(0, p.Amount)
                 }).ToList()
         };
 
@@ -3925,7 +4366,8 @@ public sealed class VenueBookingsController : ControllerBase
             {
                 VenueBookingId = id,
                 PlayerId = p.PlayerId,
-                Status = VenueBookingPaymentStatus.Normalize(p.Status)
+                Status = VenueBookingPaymentStatus.Normalize(p.Status),
+                Amount = Math.Max(0, p.Amount)
             });
         }
 
@@ -4037,10 +4479,46 @@ public sealed class VenueBookingsController : ControllerBase
     private async Task<Dictionary<Guid, string>> LoadUserNamesAsync(IReadOnlyList<Guid> userIds, CancellationToken ct)
     {
         await using var master = _dbs.CreateMaster();
-        return await master.Users.AsNoTracking()
+        var rows = await master.Users.AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.Username, ct)
+            .Select(u => new { u.Id, u.Username })
+            .ToListAsync(ct)
             .ConfigureAwait(false);
+        return rows.ToDictionary(u => u.Id, u => FormatCreatorDisplay(u.Username));
+    }
+
+    /// <summary>Platform admin login is HassanAnas — show the friendly name on booking cards.</summary>
+    private static string FormatCreatorDisplay(string? username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return "?";
+        if (PlatformAdmin.Is(username))
+            return "Hasan Anas";
+        return username.Trim();
+    }
+
+    /// <summary>Backfill: every booking belongs to platform admin Hasan Anas when creator is missing/wrong.</summary>
+    private async Task EnsureCreatedByHasanAnasAsync(CancellationToken ct)
+    {
+        await using var master = _dbs.CreateMaster();
+        var adminId = await master.Users.AsNoTracking()
+            .Where(u => u.Username == PlatformAdmin.Username)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (adminId == Guid.Empty)
+            return;
+
+        var stale = await _db.VenueBookings
+            .Where(b => !b.IsDeleted && b.CreatedByUserId != adminId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (stale.Count == 0)
+            return;
+
+        foreach (var b in stale)
+            b.CreatedByUserId = adminId;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     private static IEnumerable<VenueBookingParticipantRequest> DedupParticipants(
@@ -4070,6 +4548,8 @@ public sealed class VenueBookingsController : ControllerBase
                 return "Duplicate participant player.";
             if (!VenueBookingPaymentStatus.IsValid(p.Status))
                 return "Participant status must be Pending or Paid.";
+            if (p.Amount < 0)
+                return "Participant amount cannot be negative.";
         }
 
         return null;
@@ -4082,7 +4562,7 @@ public sealed class VenueBookingsController : ControllerBase
         {
             Id = b.Id,
             CreatedByUserId = b.CreatedByUserId,
-            CreatedByUsername = names.Users.GetValueOrDefault(b.CreatedByUserId, "?"),
+            CreatedByUsername = names.Users.GetValueOrDefault(b.CreatedByUserId, FormatCreatorDisplay(null)),
             VenueId = b.VenueId,
             VenueName = names.Venues.GetValueOrDefault(b.VenueId, "?"),
             BookingDateUtc = b.BookingDateUtc,
@@ -4097,7 +4577,8 @@ public sealed class VenueBookingsController : ControllerBase
             {
                 PlayerId = p.PlayerId,
                 PlayerName = names.Players.GetValueOrDefault(p.PlayerId, "?"),
-                Status = p.Status
+                Status = p.Status,
+                Amount = p.Amount
             }).ToList()
         };
 }
@@ -4147,7 +4628,7 @@ public sealed class TournamentsController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<TournamentListDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.Tournaments.AsNoTracking().Where(t => !t.IsDeleted);
@@ -4218,7 +4699,8 @@ public sealed class TournamentsController : ControllerBase
     {
         var name = RequireName(body.Name);
         var teams = NormalizeTeams(body);
-        TournamentEngine.ValidateSetup(body.GroupCount, body.QualifyPerGroup, teams);
+        ApplyRoundRobinDefaults(body, teams);
+        TournamentEngine.ValidateSetup(body.GroupCount, body.QualifyPerGroup, teams, body.RoundRobinType, body.KnockoutFormat);
         await ValidateMatchDefaultsAsync(body, ct).ConfigureAwait(false);
 
         var entity = new Tournament
@@ -4227,6 +4709,10 @@ public sealed class TournamentsController : ControllerBase
             Name = name,
             GroupCount = body.GroupCount,
             QualifyPerGroup = body.QualifyPerGroup,
+            KnockoutFormat = body.KnockoutFormat,
+            RoundRobinType = body.RoundRobinType,
+            MatchesPerTeam = body.MatchesPerTeam,
+            CustomPairsJson = body.CustomPairsJson,
             VenueId = body.VenueId,
             FormatId = body.FormatId,
             Format = body.Format,
@@ -4252,12 +4738,17 @@ public sealed class TournamentsController : ControllerBase
 
         var name = RequireName(body.Name);
         var teams = NormalizeTeams(body);
-        TournamentEngine.ValidateSetup(body.GroupCount, body.QualifyPerGroup, teams);
+        ApplyRoundRobinDefaults(body, teams);
+        TournamentEngine.ValidateSetup(body.GroupCount, body.QualifyPerGroup, teams, body.RoundRobinType, body.KnockoutFormat);
         await ValidateMatchDefaultsAsync(body, ct).ConfigureAwait(false);
 
         t.Name = name;
         t.GroupCount = body.GroupCount;
         t.QualifyPerGroup = body.QualifyPerGroup;
+        t.KnockoutFormat = body.KnockoutFormat;
+        t.RoundRobinType = body.RoundRobinType;
+        t.MatchesPerTeam = body.MatchesPerTeam;
+        t.CustomPairsJson = body.CustomPairsJson;
         t.VenueId = body.VenueId;
         t.FormatId = body.FormatId;
         t.Format = body.Format;
@@ -4281,21 +4772,40 @@ public sealed class TournamentsController : ControllerBase
         if (t.Status != TournamentStatus.Draft)
             return BadRequest(new { message = "Tournament already saved. Edit / delete is only allowed while Draft." });
 
-        TournamentEngine.ValidateSetup(t.GroupCount, t.QualifyPerGroup, t.Teams.ToList());
+        TournamentEngine.ValidateSetup(t.GroupCount, t.QualifyPerGroup, t.Teams.ToList(), t.RoundRobinType, t.KnockoutFormat);
+        if (t.RoundRobinType == TournamentEngine.RoundRobinCustom)
+        {
+            var customTeamIds = t.Teams.Select(x => x.TeamId).ToList();
+            var pairs = TournamentEngine.ReadCustomPairs(t.CustomPairsJson);
+            TournamentEngine.ValidateCustomPairings(customTeamIds, t.MatchesPerTeam, pairs);
+        }
+
         if (t.Fixtures.Count > 0)
             _db.TournamentFixtures.RemoveRange(t.Fixtures);
 
-        var fixtures = TournamentEngine.BuildFixtures(t);
+        var teamIds = t.Teams.Select(x => x.TeamId).Distinct().ToList();
+        var teamNames = teamIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Teams.AsNoTracking()
+                .Where(x => teamIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.Name, ct)
+                .ConfigureAwait(false);
+
+        var fixtures = TournamentEngine.BuildFixtures(t, teamNames);
         foreach (var f in fixtures)
             _db.TournamentFixtures.Add(f);
 
         t.Status = TournamentStatus.Scheduled;
         t.WinnerTeamId = null;
+        t.PlayerOfTheTournamentPlayerId = null;
+        t.BestBatsmanPlayerId = null;
+        t.BestBowlerPlayerId = null;
+        t.BestFielderPlayerId = null;
         t.UpdatedAtUtc = DateTime.Now;
         t.Version++;
 
-        // 1 group / 1 qualify with a single team and no RR games → champion immediately
-        if (t.GroupCount == 1 && t.QualifyPerGroup == 1 && fixtures.Count == 0)
+        // Knockout=No with no fixtures → champion immediately when only one team in pool
+        if (t.KnockoutFormat == TournamentEngine.KnockoutNone && fixtures.Count == 0)
         {
             var only = t.Teams.FirstOrDefault(x => x.GroupNumber == 1);
             if (only is not null)
@@ -4400,6 +4910,42 @@ public sealed class TournamentsController : ControllerBase
             })
             .ToList();
 
+    private static void ApplyRoundRobinDefaults(TournamentUpsertRequest body, List<TournamentTeam> teams)
+    {
+        if (body.RoundRobinType is not (
+            TournamentEngine.RoundRobinSingle
+            or TournamentEngine.RoundRobinDouble
+            or TournamentEngine.RoundRobinCustom))
+            body.RoundRobinType = TournamentEngine.RoundRobinSingle;
+
+        if (body.KnockoutFormat is > TournamentEngine.KnockoutNone)
+            body.KnockoutFormat = TournamentEngine.KnockoutSemiFinals;
+
+        if (body.RoundRobinType == TournamentEngine.RoundRobinCustom)
+        {
+            body.GroupCount = 1;
+            foreach (var team in teams)
+                team.GroupNumber = 1;
+
+            var pairs = TournamentEngine.ReadCustomPairs(body.CustomPairsJson);
+            // Drop pairs that reference unselected teams; keep draft-friendly incomplete graphs.
+            var ids = teams.Select(t => t.TeamId).ToHashSet();
+            pairs = pairs.Where(p => ids.Contains(p.A) && ids.Contains(p.B) && p.A != p.B).ToList();
+            body.CustomPairsJson = pairs.Count == 0 ? null : TournamentEngine.WriteCustomPairs(pairs);
+            if (body.MatchesPerTeam < 0)
+                body.MatchesPerTeam = 0;
+        }
+        else
+        {
+            body.MatchesPerTeam = 0;
+            body.CustomPairsJson = null;
+        }
+
+        var qualifyOpts = TournamentEngine.QualifyOptions(body.GroupCount, body.KnockoutFormat);
+        if (qualifyOpts.Count > 0 && !qualifyOpts.Contains(body.QualifyPerGroup))
+            body.QualifyPerGroup = qualifyOpts[0];
+    }
+
     private static string StatusText(TournamentStatus s) => s switch
     {
         TournamentStatus.Draft => "Draft",
@@ -4412,6 +4958,8 @@ public sealed class TournamentsController : ControllerBase
     private static string StageText(TournamentFixtureStage s) => s switch
     {
         TournamentFixtureStage.Group => "Group",
+        TournamentFixtureStage.QuarterFinal => "Quarter-final",
+        TournamentFixtureStage.Playoff => "Playoff",
         TournamentFixtureStage.SemiFinal => "Semi-final",
         TournamentFixtureStage.Final => "Final",
         _ => s.ToString()
@@ -4431,6 +4979,24 @@ public sealed class TournamentsController : ControllerBase
             : await _db.Teams.AsNoTracking()
                 .Where(x => teamIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, x => x.Name, ct)
+                .ConfigureAwait(false);
+
+        var awardPlayerIds = new[]
+            {
+                t.PlayerOfTheTournamentPlayerId,
+                t.BestBatsmanPlayerId,
+                t.BestBowlerPlayerId,
+                t.BestFielderPlayerId
+            }
+            .Where(id => id is Guid)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var playerNames = awardPlayerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Players.AsNoTracking()
+                .Where(p => awardPlayerIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
                 .ConfigureAwait(false);
 
         var venueName = await _db.Venues.AsNoTracking()
@@ -4505,12 +5071,22 @@ public sealed class TournamentsController : ControllerBase
             }
         }
 
+        var customPairs = TournamentEngine.ReadCustomPairs(t.CustomPairsJson);
+        var customTeamIds = t.Teams.Select(x => x.TeamId).ToList();
+        var customReady = t.RoundRobinType != TournamentEngine.RoundRobinCustom
+            || TournamentEngine.IsCustomPairingComplete(customTeamIds, t.MatchesPerTeam, customPairs);
+
         return new TournamentDetailDto
         {
             Id = t.Id,
             Name = t.Name,
             GroupCount = t.GroupCount,
             QualifyPerGroup = t.QualifyPerGroup,
+            KnockoutFormat = t.KnockoutFormat,
+            RoundRobinType = t.RoundRobinType,
+            MatchesPerTeam = t.MatchesPerTeam,
+            CustomPairsJson = t.CustomPairsJson,
+            CustomFixturesReady = customReady,
             VenueId = t.VenueId,
             VenueName = venueName,
             FormatId = t.FormatId,
@@ -4524,6 +5100,22 @@ public sealed class TournamentsController : ControllerBase
             StatusText = StatusText(t.Status),
             WinnerTeamId = t.WinnerTeamId,
             WinnerTeamName = t.WinnerTeamId is Guid w2 ? names.GetValueOrDefault(w2) : null,
+            PlayerOfTheTournamentPlayerId = t.PlayerOfTheTournamentPlayerId,
+            PlayerOfTheTournamentName = t.PlayerOfTheTournamentPlayerId is Guid pot
+                ? playerNames.GetValueOrDefault(pot)
+                : null,
+            BestBatsmanPlayerId = t.BestBatsmanPlayerId,
+            BestBatsmanName = t.BestBatsmanPlayerId is Guid bat
+                ? playerNames.GetValueOrDefault(bat)
+                : null,
+            BestBowlerPlayerId = t.BestBowlerPlayerId,
+            BestBowlerName = t.BestBowlerPlayerId is Guid bowl
+                ? playerNames.GetValueOrDefault(bowl)
+                : null,
+            BestFielderPlayerId = t.BestFielderPlayerId,
+            BestFielderName = t.BestFielderPlayerId is Guid field
+                ? playerNames.GetValueOrDefault(field)
+                : null,
             Version = t.Version,
             CreatedAtUtc = t.CreatedAtUtc,
             UpdatedAtUtc = t.UpdatedAtUtc,

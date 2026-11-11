@@ -10,6 +10,7 @@ public partial class RankingsViewModel : ObservableObject
     private readonly IStatsService _stats;
     private readonly StatsViewModel _statsVm;
     public FormatFilterViewModel FormatFilter { get; }
+    public EventScopeFilterViewModel EventScope { get; }
     private int _loadBusy;
     private int _filterGen;
 
@@ -22,7 +23,7 @@ public partial class RankingsViewModel : ObservableObject
     [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private string categoryTitle = "Batting Ranking";
-    [ObservableProperty] private string categoryHint = "Runs, boundaries, SR, avg  ·  dots/ducks/dismissals (−)";
+    [ObservableProperty] private string categoryHint = string.Empty;
     [ObservableProperty] private string nameColumnTitle = "Player";
     [ObservableProperty] private string searchPlaceholder = "Filter by player name";
     [ObservableProperty] private string nameFilter = string.Empty;
@@ -38,7 +39,8 @@ public partial class RankingsViewModel : ObservableObject
     private RankingRow? _openedRow;
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
-    public bool HasActiveFilters => !string.IsNullOrWhiteSpace(NameFilter) || FilterByDate || FormatFilter.HasSelection;
+    public bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(NameFilter) || FilterByDate || FormatFilter.HasSelection || EventScope.HasSelection;
     public bool IsBatting => SelectedCategory == 0;
     public bool IsBowling => SelectedCategory == 1;
     public bool IsAllRounder => SelectedCategory == 2;
@@ -60,11 +62,12 @@ public partial class RankingsViewModel : ObservableObject
         _ => "batting"
     };
 
-    public RankingsViewModel(IStatsService stats, StatsViewModel statsVm, IFormatService formats)
+    public RankingsViewModel(IStatsService stats, StatsViewModel statsVm, IFormatService formats, ILeagueContext league)
     {
         _stats = stats;
         _statsVm = statsVm;
         FormatFilter = new FormatFilterViewModel(formats);
+        EventScope = new EventScopeFilterViewModel(stats, league);
         FormatFilter.Committed += (_, _) =>
         {
             OnPropertyChanged(nameof(HasActiveFilters));
@@ -73,6 +76,16 @@ public partial class RankingsViewModel : ObservableObject
         FormatFilter.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(FormatFilterViewModel.HasSelection) or null)
+                OnPropertyChanged(nameof(HasActiveFilters));
+        };
+        EventScope.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasActiveFilters));
+            _ = LoadAsync();
+        };
+        EventScope.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(EventScopeFilterViewModel.HasSelection) or null)
                 OnPropertyChanged(nameof(HasActiveFilters));
         };
     }
@@ -146,6 +159,7 @@ public partial class RankingsViewModel : ObservableObject
                 IsLoadingMore = true;
             ErrorMessage = null;
             await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
+            await EventScope.EnsureLoadedAsync().ConfigureAwait(true);
             DateTime? from = null;
             DateTime? toExclusive = null;
             if (FilterByDate)
@@ -168,7 +182,10 @@ public partial class RankingsViewModel : ObservableObject
                     NameFilter,
                     from,
                     toExclusive,
-                    FormatFilter.SelectedIds)
+                    FormatFilter.SelectedIds,
+                    EventScope.TournamentIds,
+                    EventScope.SeriesIds,
+                    EventScope.MatchIds)
                 .ConfigureAwait(true);
             TotalCount = page.TotalCount;
             ListPaging.Append(VisibleRows, page.Items, r => r.PlayerId);
@@ -219,6 +236,7 @@ public partial class RankingsViewModel : ObservableObject
         FromDate = new DateTime(DateTime.Today.Year, 1, 1);
         ToDate = DateTime.Today;
         FormatFilter.ClearSelection();
+        EventScope.Clear();
         OnPropertyChanged(nameof(HasActiveFilters));
         await LoadAsync().ConfigureAwait(true);
     }
@@ -326,28 +344,23 @@ public partial class RankingsViewModel : ObservableObject
         {
             case 1:
                 CategoryTitle = "Bowling Ranking";
-                CategoryHint = "Wkts, maidens, dots, economy vs 8, extras (−)";
                 break;
             case 2:
                 CategoryTitle = "All-Rounder Ranking";
-                CategoryHint = "Batting pts + bowling pts (must have batted & bowled)";
                 break;
             case 3:
                 CategoryTitle = "Fielder Ranking";
-                CategoryHint = "Catch×10, RO×12, St×15  ·  low rate after 4 matches (−)";
                 break;
             case 4:
                 CategoryTitle = "Captain Ranking";
-                CategoryHint = "Win×4 + tie×1 − loss×2";
                 break;
             case 5:
                 CategoryTitle = "Team Ranking";
-                CategoryHint = "Win×2 + tie×1 − loss×1 + NRR×10";
                 break;
             default:
                 CategoryTitle = "Batting Ranking";
-                CategoryHint = "Runs, boundaries, SR, avg  ·  dots/ducks/dismissals (−)";
                 break;
         }
+        CategoryHint = string.Empty;
     }
 }

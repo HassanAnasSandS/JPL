@@ -28,6 +28,22 @@ internal static class DeleteConstraints
                     || m.PlayerOfTheMatchPlayerId == id), ct).ConfigureAwait(false))
             return "Cannot delete this player because they are linked to a match.";
 
+        if (await db.Tournaments.AnyAsync(t =>
+                !t.IsDeleted && (
+                    t.PlayerOfTheTournamentPlayerId == id
+                    || t.BestBatsmanPlayerId == id
+                    || t.BestBowlerPlayerId == id
+                    || t.BestFielderPlayerId == id), ct).ConfigureAwait(false))
+            return "Cannot delete this player because they hold a tournament award.";
+
+        if (await db.Series.AnyAsync(s =>
+                !s.IsDeleted && (
+                    s.PlayerOfTheSeriesPlayerId == id
+                    || s.BestBatsmanPlayerId == id
+                    || s.BestBowlerPlayerId == id
+                    || s.BestFielderPlayerId == id), ct).ConfigureAwait(false))
+            return "Cannot delete this player because they hold a series award.";
+
         if (await db.Deliveries.AnyAsync(d =>
                 d.BatterId == id
                 || d.NonStrikerId == id

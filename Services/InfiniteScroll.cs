@@ -9,7 +9,7 @@ namespace JPL.Services;
 
 /// <summary>
 /// MAUI RemainingItemsThreshold often never fires when the first page is shorter
-/// than the viewport (5 of 27, empty space, no scroll). Keep fetching pages of 5
+/// than the viewport (empty space, no scroll). Keep fetching pages of ListPaging.PageSize
 /// until the list can scroll, then load the next page at the bottom.
 /// </summary>
 internal static class InfiniteScroll

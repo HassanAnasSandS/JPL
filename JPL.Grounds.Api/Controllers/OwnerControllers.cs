@@ -25,7 +25,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     public ValueTask DisposeAsync() => _db.DisposeAsync();
 
     [HttpGet]
-    public async Task<ActionResult<GroundSearchPage>> List(string? cursor, int take = 5, CancellationToken ct = default)
+    public async Task<ActionResult<GroundSearchPage>> List(string? cursor, int take = 15, CancellationToken ct = default)
     {
         if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
             return Forbid();
@@ -785,7 +785,7 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
     public ValueTask DisposeAsync() => _db.DisposeAsync();
 
     [HttpGet("mine")]
-    public async Task<ActionResult<BookingPage>> Mine(string? cursor, int take = 5, CancellationToken ct = default)
+    public async Task<ActionResult<BookingPage>> Mine(string? cursor, int take = 15, CancellationToken ct = default)
     {
         take = Paging.ClampTake(take);
         var userId = GroundsCaller.UserId(HttpContext);
@@ -827,7 +827,7 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
 
     [HttpGet("owner")]
     public async Task<ActionResult<BookingPage>> Owner(
-        Guid? groundId, string? cursor, int take = 5,
+        Guid? groundId, string? cursor, int take = 15,
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default)
     {

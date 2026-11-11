@@ -11,6 +11,8 @@ public sealed class VenueBookingRow
     public string VenueName { get; init; } = string.Empty;
     public string DateText { get; init; } = string.Empty;
     public string CostText { get; init; } = string.Empty;
+    public string PaidAmountText { get; init; } = string.Empty;
+    public string OutstandingAmountText { get; init; } = string.Empty;
     public string BookedByLine { get; init; } = string.Empty;
     public string ParticipantsLine { get; init; } = string.Empty;
     public string OwnerLine { get; init; } = string.Empty;
@@ -119,6 +121,8 @@ public partial class VenueBookingsViewModel : ObservableObject
         VenueName = b.VenueName,
         DateText = b.DateText,
         CostText = b.CostText,
+        PaidAmountText = b.PaidAmountText,
+        OutstandingAmountText = b.OutstandingAmountText,
         BookedByLine = b.BookedByLine,
         ParticipantsLine = b.ParticipantsLine,
         OwnerLine = b.OwnerLine,

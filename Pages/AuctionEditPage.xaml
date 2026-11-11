@@ -1,354 +1,1171 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.AuctionEditPage"
              x:Name="ThisPage"
              x:DataType="vm:AuctionEditViewModel"
              Title="{Binding PageTitle}"
              HideSoftInputOnTapped="True">
 
-    <Grid RowDefinitions="*,Auto" Padding="12">
-        <ScrollView>
+    <ContentPage.Resources>
+        <Style x:Key="AuctionTab" TargetType="Button">
+            <Setter Property="FontSize" Value="{OnIdiom Phone=12, Default=13}" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="MinimumHeightRequest" Value="{OnIdiom Phone=32, Default=36}" />
+            <Setter Property="BackgroundColor" Value="#E8EEF5" />
+            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+            <Setter Property="Padding">
+                <Setter.Value>
+                    <OnIdiom x:TypeArguments="Thickness" Phone="10,5" Default="14,6" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate x:Key="GroupedUnsoldBlock" x:DataType="vm:AuctionPoolGroup">
+            <Border StrokeThickness="0" Padding="10" StrokeShape="RoundRectangle 10" Margin="0,2"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                <VerticalStackLayout Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label Text="{Binding Header}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Primary}"
+                               VerticalOptions="Center" />
+                        <Label Grid.Column="1" Text="{Binding CountLine}" FontAttributes="Bold" FontSize="14"
+                               TextColor="{StaticResource Secondary}" VerticalOptions="Center"
+                               IsVisible="{Binding ShowCount}" />
+                    </Grid>
+                    <Label Text="{Binding HintLine}" FontSize="11" Style="{StaticResource MutedLabel}"
+                           IsVisible="{Binding ShowHint}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="6">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <VerticalStackLayout>
+                                        <Label Text="{Binding PlayerName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                        <Label Text="{Binding BasePriceLine}" FontSize="12" Style="{StaticResource MutedLabel}"
+                                               IsVisible="{Binding ShowStartAction}" />
+                                    </VerticalStackLayout>
+                                    <Button Grid.Column="1" Text="Pick" Padding="12,6" Style="{StaticResource GoldButton}"
+                                            IsVisible="{Binding ShowPickAction}"
+                                            IsEnabled="{Binding CanPickNow}"
+                                            Clicked="OnDraftPickClicked" CommandParameter="{Binding .}" />
+                                    <Button Grid.Column="1" Text="Start" Padding="12,6" Style="{StaticResource GoldButton}"
+                                            IsVisible="{Binding ShowStartAction}"
+                                            Clicked="OnOpenRoundClicked" CommandParameter="{Binding .}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Label Text="None left in this group" FontSize="12" Style="{StaticResource MutedLabel}"
+                           IsVisible="{Binding HasNoPlayers}" />
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="BasicSoldCaptainCard" x:DataType="vm:AuctionCaptainPurchaseGroup">
+            <Border Stroke="{StaticResource Gray200}"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
+                    StrokeShape="RoundRectangle 8"
+                    Padding="10,8"
+                    Margin="0,0,10,10"
+                    MinimumWidthRequest="220"
+                    FlexLayout.Basis="280"
+                    FlexLayout.Grow="1"
+                    HorizontalOptions="Fill">
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="{Binding CaptainName}" FontAttributes="Bold" FontSize="12"
+                           TextColor="{StaticResource Primary}" />
+                    <Label Text="{Binding HeaderLine}" FontSize="10"
+                           TextColor="{StaticResource Secondary}" />
+                    <Label Text="{Binding WalletLine}" FontSize="10" FontAttributes="Bold"
+                           TextColor="{StaticResource Primary}"
+                           IsVisible="{Binding ShowWalletLine}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="1">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                <Label Text="{Binding SquadPlayerLine}" FontSize="11" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="BasicSoldCaptainRow" x:DataType="vm:AuctionCaptainPurchaseGroup">
+            <Border Stroke="{StaticResource Gray200}"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
+                    StrokeShape="RoundRectangle 8"
+                    Padding="8,6"
+                    Margin="0,0,0,6">
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="{Binding CaptainName}" FontAttributes="Bold" FontSize="13"
+                           TextColor="{StaticResource Primary}" />
+                    <Label Text="{Binding HeaderLine}" FontSize="11"
+                           TextColor="{StaticResource Secondary}" />
+                    <Label Text="{Binding WalletLine}" FontSize="11" FontAttributes="Bold"
+                           TextColor="{StaticResource Primary}"
+                           IsVisible="{Binding ShowWalletLine}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="1">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                <Label Text="{Binding SquadPlayerLine}" FontSize="12" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="SoldByCaptainBlock" x:DataType="vm:AuctionCaptainPurchaseGroup">
+            <VerticalStackLayout Spacing="8">
+                <Label Text="{Binding CaptainName}" FontAttributes="Bold" FontSize="15" TextColor="{StaticResource Primary}" />
+                <Label Text="{Binding HeaderLine}" FontSize="12" TextColor="{StaticResource Secondary}" />
+                <Label Text="{Binding WalletLine}" FontSize="12" FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}"
+                       IsVisible="{Binding ShowWalletLine}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupedPlayers}" Spacing="8"
+                                     IsVisible="{Binding ShowGroupedPlayers}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AuctionPoolGroup">
+                            <Border StrokeThickness="0" Padding="10" StrokeShape="RoundRectangle 10"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                                <VerticalStackLayout Spacing="4">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Label Text="{Binding Header}" FontAttributes="Bold" FontSize="13"
+                                               TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                                        <Label Grid.Column="1" Text="{Binding CountLine}" FontAttributes="Bold" FontSize="14"
+                                               TextColor="{StaticResource Secondary}" VerticalOptions="Center"
+                                               IsVisible="{Binding ShowCount}" />
+                                    </Grid>
+                                    <Label Text="{Binding HintLine}" FontSize="11" Style="{StaticResource MutedLabel}"
+                                           IsVisible="{Binding ShowHint}" />
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="2">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                                <Label Text="{Binding PlayerName}" FontSize="13" />
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="2"
+                                     IsVisible="{Binding ShowFlatPlayers}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AuctionLotEditor">
+                            <Label Text="{Binding SquadPlayerLine}" FontSize="13" />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </DataTemplate>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="*,Auto" Padding="{OnIdiom Phone=12, Default=8}">
+        <ScrollView IsVisible="{Binding ShowLiveChrome}">
             <VerticalStackLayout Spacing="12" Padding="0,0,0,12">
 
-                <!-- ===== VIEW MODE ===== -->
+                <Border StrokeThickness="0" BackgroundColor="#C62828" Padding="10,6" StrokeShape="RoundRectangle 8">
+                    <Label Text="{Binding BannerText}"
+                           FontSize="12" FontAttributes="Bold"
+                           HorizontalOptions="Center" TextColor="White" />
+                </Border>
+
+                <!-- VIEW -->
                 <VerticalStackLayout Spacing="12" IsVisible="{Binding IsViewMode}">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <VerticalStackLayout Spacing="4">
-                            <Label Text="{Binding Title}"
-                                   FontSize="22"
-                                   FontAttributes="Bold"
-                                   TextColor="{StaticResource Primary}" />
-                            <Label Text="{Binding AuctionDate, StringFormat='{0:dd MMM yyyy}'}"
-                                   Style="{StaticResource MutedLabel}" />
-                            <Label Text="{Binding ViewSummaryText}"
-                                   FontSize="12"
-                                   TextColor="{StaticResource Secondary}" />
+                            <Label Text="{Binding Title}" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding ViewSummaryText}" FontSize="12" TextColor="{StaticResource Secondary}" />
                         </VerticalStackLayout>
-                        <Button Grid.Column="1"
-                                Text="Refresh"
-                                Padding="14,10"
-                                VerticalOptions="Start"
-                                Style="{StaticResource GoldButton}"
-                                Command="{Binding RefreshCommand}"
-                                IsEnabled="{Binding CanRefresh}" />
+                        <Button Grid.Column="1" Text="Refresh" Padding="14,10" Style="{StaticResource GoldButton}"
+                                Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
                     </Grid>
-
-                    <!-- Captains + wallets -->
+                    <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding HasOpenRound}">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="{Binding RoundTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding CurrentRound.PlayerName}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding CurrentRound.BasePrice, StringFormat='Base {0:N0}'}" FontSize="13" />
+                            <Label Text="{Binding RoundStatus}" Style="{StaticResource MutedLabel}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding CurrentRound.Bids}" Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:AuctionBidRow">
+                                        <Label Text="{Binding DisplayLine}" FontSize="13" />
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowDraftTurnBanner}">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding TurnBannerText}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding RoundStatus}" Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
+                    </Border>
                     <Border Style="{StaticResource CardBorder}" Padding="14">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Captains &amp; wallets" Style="{StaticResource SectionLabel}" Margin="0" />
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedCaptains}" Spacing="8">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Captains" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <FlexLayout BindableLayout.ItemsSource="{Binding SelectedCaptains}"
+                                        Wrap="Wrap"
+                                        JustifyContent="Start"
+                                        AlignItems="Start"
+                                        AlignContent="Start">
                                 <BindableLayout.ItemTemplate>
                                     <DataTemplate x:DataType="vm:AuctionCaptainEditor">
-                                        <Border StrokeThickness="0"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
-                                                Padding="12"
-                                                StrokeShape="RoundRectangle 12">
-                                            <VerticalStackLayout Spacing="4">
-                                                <Label Text="{Binding PlayerName}"
-                                                       FontAttributes="Bold"
-                                                       FontSize="16"
-                                                       TextColor="{StaticResource Primary}" />
-                                                <Label Text="{Binding WalletSummary}"
-                                                       FontSize="13"
-                                                       FontAttributes="Bold"
-                                                       TextColor="{StaticResource Secondary}" />
+                                        <Border StrokeThickness="0" Padding="12" StrokeShape="RoundRectangle 12"
+                                                Margin="0,0,10,10"
+                                                MinimumWidthRequest="220"
+                                                FlexLayout.Basis="280"
+                                                FlexLayout.Grow="1"
+                                                HorizontalOptions="Fill"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding DisplayName}" FontAttributes="Bold" FontSize="15" TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding WalletSummary}" FontSize="12" TextColor="{StaticResource Secondary}" IsVisible="{Binding ShowWallet}" />
+                                                <Label Text="{Binding SquadLine}" FontSize="12" />
+                                                <VerticalStackLayout Spacing="2" IsVisible="{Binding ShowGroupSlots}" Padding="0,6,0,0">
+                                                    <Label Text="Groups · selected / max" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupSlots}" Spacing="2">
+                                                        <BindableLayout.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:AuctionGroupSlot">
+                                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                    <Label Text="{Binding Name}" FontSize="12" VerticalOptions="Center" />
+                                                                    <Label Grid.Column="1" Text="{Binding CountLine}" FontSize="13" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource Secondary}" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </BindableLayout.ItemTemplate>
+                                                    </VerticalStackLayout>
+                                                </VerticalStackLayout>
+                                                <Label Text="{Binding MaxBidLine}" FontSize="12" FontAttributes="Bold" IsVisible="{Binding ShowWallet}" />
                                             </VerticalStackLayout>
                                         </Border>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
-                            </VerticalStackLayout>
-                            <Label Text="No captains yet."
-                                   Style="{StaticResource MutedLabel}"
-                                   IsVisible="{Binding HasNoSelectedCaptains}" />
+                            </FlexLayout>
                         </VerticalStackLayout>
                     </Border>
-
-                    <!-- Sold — grouped by captain -->
-                    <Border Style="{StaticResource CardBorder}" Padding="14">
-                        <VerticalStackLayout Spacing="10">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Text="Sold players" Style="{StaticResource SectionLabel}" Margin="0" />
-                                <Label Grid.Column="1"
-                                       Text="{Binding TotalSoldAmount, StringFormat='{0:N0}'}"
-                                       FontAttributes="Bold"
-                                       VerticalOptions="Center"
-                                       TextColor="{StaticResource Secondary}" />
-                            </Grid>
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}"
-                                                 Spacing="14"
-                                                 IsVisible="{Binding HasSoldLots}">
+                    <Grid ColumnDefinitions="{OnIdiom Phone='*', Default='*,*'}"
+                          ColumnSpacing="10"
+                          RowDefinitions="Auto,Auto"
+                          RowSpacing="10">
+                    <Border Style="{StaticResource CardBorder}" Padding="14"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="{OnIdiom Phone=1, Default=1}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding LiveAvailableTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding LivePoolGroupHint}" Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupedUnsoldLots}" Spacing="4"
+                                                 BindableLayout.ItemTemplate="{StaticResource GroupedUnsoldBlock}"
+                                                 IsVisible="{Binding ShowGroupedPool}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding UnsoldLots}" Spacing="6"
+                                                 IsVisible="{Binding ShowFlatPool}">
                                 <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AuctionCaptainPurchaseGroup">
-                                        <VerticalStackLayout Spacing="8">
-                                            <VerticalStackLayout Spacing="2">
-                                                <Label Text="{Binding CaptainName}"
-                                                       FontAttributes="Bold"
-                                                       FontSize="15"
-                                                       TextColor="{StaticResource Primary}" />
-                                                <Label Text="{Binding HeaderLine}"
-                                                       FontSize="12"
-                                                       TextColor="{StaticResource Secondary}" />
-                                            </VerticalStackLayout>
-                                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="8">
-                                                <BindableLayout.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
-                                                        <Border StrokeThickness="0"
-                                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
-                                                                Padding="12"
-                                                                StrokeShape="RoundRectangle 12">
-                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                                <VerticalStackLayout Spacing="2">
-                                                                    <Label Text="{Binding PlayerName}"
-                                                                           FontAttributes="Bold"
-                                                                           FontSize="15"
-                                                                           TextColor="{StaticResource Primary}" />
-                                                                    <Label Text="{Binding BasePriceLine}"
-                                                                           FontSize="12"
-                                                                           Style="{StaticResource MutedLabel}" />
-                                                                </VerticalStackLayout>
-                                                                <Label Grid.Column="1"
-                                                                       Text="{Binding SoldPriceLine}"
-                                                                       FontSize="14"
-                                                                       FontAttributes="Bold"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{StaticResource Secondary}" />
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </BindableLayout.ItemTemplate>
-                                            </VerticalStackLayout>
+                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                        <VerticalStackLayout>
+                                            <Label Text="{Binding PlayerName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                         </VerticalStackLayout>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
                             </VerticalStackLayout>
-                            <Label Text="No sold players yet."
+                            <Label Text="{Binding LivePoolEmptyText}" Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding HasNoUnsoldLots}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Style="{StaticResource CardBorder}" Padding="14"
+                            Grid.Column="{OnIdiom Phone=0, Default=1}"
+                            Grid.Row="{OnIdiom Phone=1, Default=0}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Sold" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="Each group: selected / max for that captain."
                                    Style="{StaticResource MutedLabel}"
-                                   IsVisible="{Binding HasNoSoldLots}" />
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}" Spacing="10"
+                                                 BindableLayout.ItemTemplate="{StaticResource SoldByCaptainBlock}" />
+                            <Label Text="No sold players yet." Style="{StaticResource MutedLabel}" IsVisible="{Binding HasNoSoldLots}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    </Grid>
+                </VerticalStackLayout>
+
+                <!-- CLAIM -->
+                <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding NeedsCaptainPick}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Enter as captain" Style="{StaticResource SectionLabel}" Margin="0" />
+                        <Label Text="{Binding OperateHint}" Style="{StaticResource MutedLabel}" />
+                        <Entry Placeholder="Captain code" Text="{Binding CaptainCode}" MaxLength="12"
+                               Keyboard="Plain" />
+                        <Button Text="Join" Style="{StaticResource GoldButton}" Command="{Binding ClaimByCodeCommand}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- CAPTAIN LIVE -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding IsCaptainOperateMode}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Title}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding ViewSummaryText}" FontSize="12" TextColor="{StaticResource Secondary}" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1" Text="Refresh" Padding="10,8" Style="{StaticResource GoldButton}"
+                                Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
+                    </Grid>
+
+                    <Label Text="{Binding OperateHint}" TextColor="{StaticResource Primary}" />
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding TurnBannerText}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding RoundStatus}" Style="{StaticResource MutedLabel}" />
+                            <Label Text="{Binding CaptainWaitText}"
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowCaptainWaitForTurn}" />
                         </VerticalStackLayout>
                     </Border>
 
-                    <!-- Unsold -->
-                    <Border Style="{StaticResource CardBorder}" Padding="14">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Unsold players" Style="{StaticResource SectionLabel}" Margin="0" />
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding UnsoldLots}"
-                                                 Spacing="8"
-                                                 IsVisible="{Binding HasUnsoldLots}">
+                    <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding HasOpenRound}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding RoundTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding CurrentRound.PlayerName}" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding CurrentRound.BasePrice, StringFormat='Base {0:N0}'}" />
+                            <Label Text="{Binding ClaimedCaptain.MaxBidLine}" FontAttributes="Bold" TextColor="{StaticResource Secondary}"
+                                   IsVisible="{Binding IsAdvance}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding CurrentRound.Bids}" Spacing="4">
                                 <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
-                                        <Border StrokeThickness="0"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
-                                                Padding="12"
-                                                StrokeShape="RoundRectangle 12">
+                                    <DataTemplate x:DataType="svc:AuctionBidRow">
+                                        <Label Text="{Binding DisplayLine}" FontSize="13" />
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Spacing="8" IsVisible="{Binding ShowBidEntry}">
+                                <Label Text="Your bid" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                <Entry Keyboard="Numeric" Text="{Binding BidAmount}" />
+                                <HorizontalStackLayout Spacing="8" IsVisible="{Binding ShowJokerUse}" jpl:ToggleOnTap.Enable="True">
+                                    <CheckBox IsChecked="{Binding UseJoker}" Color="{StaticResource Primary}" />
+                                    <Label Text="{Binding ClaimedCaptain.JokersLeft, StringFormat='Use joker (left {0})'}" VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+                                <Button Text="Submit bid" Style="{StaticResource GoldButton}" Command="{Binding PlaceBidCommand}" />
+                            </VerticalStackLayout>
+                            <Label Text="Your bid is in. Waiting for the other captains. Amounts stay hidden until every bid is in."
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding AlreadySubmittedBlindBid}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding LiveCaptainsTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedCaptains}" Spacing="8">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AuctionCaptainEditor">
+                                        <Border StrokeThickness="0" Padding="12" StrokeShape="RoundRectangle 12"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
                                             <VerticalStackLayout Spacing="2">
-                                                <Label Text="{Binding PlayerName}"
-                                                       FontAttributes="Bold"
-                                                       FontSize="15"
-                                                       TextColor="{StaticResource Primary}" />
-                                                <Label Text="{Binding BasePriceLine}"
-                                                       FontSize="12"
-                                                       Style="{StaticResource MutedLabel}" />
-                                                <Label Text="Unsold"
-                                                       FontSize="12"
-                                                       TextColor="{StaticResource Danger}" />
+                                                <Label Text="{Binding DisplayName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                                <Label Text="Your team" FontSize="12" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       IsVisible="{Binding IsClaimedOnThisDevice}" />
+                                                <Label Text="{Binding WalletSummary}" FontSize="12" TextColor="{StaticResource Secondary}" IsVisible="{Binding ShowWallet}" />
+                                                <Label Text="{Binding SquadLine}" FontSize="12" />
+                                                <VerticalStackLayout Spacing="2" IsVisible="{Binding ShowGroupSlots}" Padding="0,6,0,0">
+                                                    <Label Text="Groups · selected / max" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupSlots}" Spacing="2">
+                                                        <BindableLayout.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:AuctionGroupSlot">
+                                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                    <Label Text="{Binding Name}" FontSize="12" VerticalOptions="Center" />
+                                                                    <Label Grid.Column="1" Text="{Binding CountLine}" FontSize="13" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource Secondary}" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </BindableLayout.ItemTemplate>
+                                                    </VerticalStackLayout>
+                                                </VerticalStackLayout>
+                                                <Label Text="{Binding MaxBidLine}" FontSize="12" FontAttributes="Bold" IsVisible="{Binding ShowWallet}" />
+                                                <Label Text="On the clock" FontSize="12" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       IsVisible="{Binding IsDraftTurn}" />
                                             </VerticalStackLayout>
                                         </Border>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
                             </VerticalStackLayout>
-                            <Label Text="No unsold players."
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Grid ColumnDefinitions="{OnIdiom Phone='*', Default='*,*'}"
+                          ColumnSpacing="10"
+                          RowDefinitions="Auto,Auto"
+                          RowSpacing="10">
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding LiveAvailableTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding LivePoolGroupHint}" Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <Label Text="Your turn — pick a player. This player goes into your squad."
                                    Style="{StaticResource MutedLabel}"
-                                   IsVisible="{Binding HasNoUnsoldLots}" />
-                        </VerticalStackLayout>
-                    </Border>
-                </VerticalStackLayout>
-
-                <!-- ===== EDIT MODE ===== -->
-                <VerticalStackLayout Spacing="12" IsVisible="{Binding CanEdit}">
-                    <Border Style="{StaticResource CardBorder}" Padding="14">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Auction details" Style="{StaticResource SectionLabel}" Margin="0" />
-                            <Entry Placeholder="Auction name *"
-                                   Text="{Binding Title}"
-                                   MaxLength="160" />
-                            <DatePicker Date="{Binding AuctionDate}" />
-                            <Label Text="Need at least 2 captains and 1 player to save (live watch)."
-                                   Style="{StaticResource MutedLabel}" />
-                        </VerticalStackLayout>
-                    </Border>
-
-                    <Border Style="{StaticResource CardBorder}" Padding="14">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Captains (buyers) *" Style="{StaticResource SectionLabel}" Margin="0" />
-                            <Label Text="Select minimum 2 captains, then set each wallet."
-                                   Style="{StaticResource MutedLabel}" />
-
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding CaptainCandidates}" Spacing="6">
+                                   IsVisible="{Binding CanCaptainDraftPick}" />
+                            <Label Text="Your turn — bring a player. Bidding starts after you Start."
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding CanCaptainNominate}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupedUnsoldLots}" Spacing="4"
+                                                 BindableLayout.ItemTemplate="{StaticResource GroupedUnsoldBlock}"
+                                                 IsVisible="{Binding ShowGroupedPool}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding UnsoldLots}" Spacing="6"
+                                                 IsVisible="{Binding ShowFlatPool}">
                                 <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:SelectablePlayer">
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                            <Label Text="{Binding FullName}"
-                                                   VerticalOptions="Center"
-                                                   FontSize="14"
-                                                   LineBreakMode="TailTruncation"
-                                                   TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
-                                            <Button Grid.Column="1"
-                                                    Padding="12,6"
-                                                    FontSize="12"
-                                                    MinimumWidthRequest="76"
-                                                    Clicked="OnToggleCaptainClicked"
-                                                    CommandParameter="{Binding .}">
-                                                <Button.Triggers>
-                                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
-                                                        <Setter Property="Text" Value="Added" />
-                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                                                    </DataTrigger>
-                                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
-                                                        <Setter Property="Text" Value="Add" />
-                                                        <Setter Property="BackgroundColor" Value="#E8EEF5" />
-                                                        <Setter Property="TextColor" Value="{StaticResource Primary}" />
-                                                    </DataTrigger>
-                                                </Button.Triggers>
-                                            </Button>
+                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <VerticalStackLayout>
+                                                <Label Text="{Binding PlayerName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding BasePriceLine}" FontSize="12" Style="{StaticResource MutedLabel}"
+                                                       IsVisible="{Binding ShowStartAction}" />
+                                            </VerticalStackLayout>
+                                            <Button Grid.Column="1" Text="Pick" Padding="12,6" Style="{StaticResource GoldButton}"
+                                                    IsVisible="{Binding ShowPickAction}"
+                                                    IsEnabled="{Binding CanPickNow}"
+                                                    Clicked="OnDraftPickClicked" CommandParameter="{Binding .}" />
+                                            <Button Grid.Column="1" Text="Start" Padding="12,6" Style="{StaticResource GoldButton}"
+                                                    IsVisible="{Binding ShowStartAction}"
+                                                    Clicked="OnOpenRoundClicked" CommandParameter="{Binding .}" />
                                         </Grid>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
                             </VerticalStackLayout>
+                            <Label Text="{Binding LivePoolEmptyText}" Style="{StaticResource MutedLabel}" IsVisible="{Binding HasNoUnsoldLots}" />
+                        </VerticalStackLayout>
+                    </Border>
 
-                            <VerticalStackLayout IsVisible="{Binding HasSelectedCaptains}" Spacing="8" Margin="0,6,0,0">
-                                <Label Text="CAPTAIN WALLETS"
-                                       FontSize="11"
-                                       FontAttributes="Bold"
-                                       TextColor="{StaticResource Secondary}" />
-                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedCaptains}" Spacing="8">
+                    <Border Style="{StaticResource CardBorder}" Padding="14"
+                            Grid.Column="{OnIdiom Phone=0, Default=1}"
+                            Grid.Row="{OnIdiom Phone=1, Default=0}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding LiveTeamsTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="Each group: selected / max for that captain."
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}" Spacing="10"
+                                                 BindableLayout.ItemTemplate="{StaticResource SoldByCaptainBlock}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    </Grid>
+                </VerticalStackLayout>
+
+                <!-- CREATOR RUN (AUCTION) -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowAuctionRun}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Title}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding ViewSummaryText}" FontSize="12" TextColor="{StaticResource Secondary}" />
+                        </VerticalStackLayout>
+                        <HorizontalStackLayout Grid.Column="1" Spacing="6">
+                            <Button Text="{Binding SettingsButtonText}" Padding="10,8" BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}"
+                                    IsVisible="{Binding ShowSettingsButton}"
+                                    Command="{Binding OpenSettingsCommand}" />
+                            <Button Text="Undo" Padding="10,8" BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}"
+                                    IsVisible="{Binding ShowUndoLastPick}"
+                                    Command="{Binding UndoLastPickCommand}" />
+                            <Button Text="Refresh" Padding="10,8" Style="{StaticResource GoldButton}"
+                                    Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
+                        </HorizontalStackLayout>
+                    </Grid>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding RoundTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding RoundStatus}" Style="{StaticResource MutedLabel}" />
+                            <VerticalStackLayout IsVisible="{Binding HasOpenRound}" Spacing="8">
+                                <Label Text="{Binding CurrentRound.PlayerName}" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                <Label Text="{Binding CurrentRound.BasePrice, StringFormat='Base {0:N0}'}" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding CurrentRound.Bids}" Spacing="4">
                                     <BindableLayout.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:AuctionCaptainEditor">
+                                        <DataTemplate x:DataType="svc:AuctionBidRow">
+                                            <Label Text="{Binding DisplayLine}" FontSize="13" />
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+
+                            <VerticalStackLayout IsVisible="{Binding ShowSimpleClose}" Spacing="8">
+                                <Label Text="Sold to" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                <Picker Title="Captain" ItemsSource="{Binding SelectedCaptains}"
+                                        ItemDisplayBinding="{Binding PickerLabel}"
+                                        SelectedItem="{Binding SimpleWinner}" />
+                                <Label Text="Sold price" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                <Entry Keyboard="Numeric" Text="{Binding SimplePrice}" />
+                                <Button Text="Close round" Style="{StaticResource GoldButton}" Command="{Binding CloseSimpleRoundCommand}" />
+                            </VerticalStackLayout>
+
+                            <Button Text="Reveal blind bids" Style="{StaticResource GoldButton}"
+                                    IsVisible="{Binding ShowReveal}" Command="{Binding RevealBlindCommand}" />
+                            <Button Text="Close round (highest bid)" Style="{StaticResource GoldButton}"
+                                    IsVisible="{Binding ShowAdvanceClose}" Command="{Binding CloseAdvanceRoundCommand}" />
+                            <Button Text="Unsold / skip" BackgroundColor="#E8EEF5" TextColor="{StaticResource Primary}"
+                                    IsVisible="{Binding ShowUnsoldSkip}" Command="{Binding MarkUnsoldCommand}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Each captain — max bid this round" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedCaptains}" Spacing="8">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AuctionCaptainEditor">
+                                        <Border StrokeThickness="0" Padding="12" StrokeShape="RoundRectangle 12"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding DisplayName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding SquadLine}" FontSize="12" />
+                                                <VerticalStackLayout Spacing="2" IsVisible="{Binding ShowGroupSlots}" Padding="0,6,0,0">
+                                                    <Label Text="Groups · selected / max" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupSlots}" Spacing="2">
+                                                        <BindableLayout.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:AuctionGroupSlot">
+                                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                    <Label Text="{Binding Name}" FontSize="12" VerticalOptions="Center" />
+                                                                    <Label Grid.Column="1" Text="{Binding CountLine}" FontSize="13" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource Secondary}" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </BindableLayout.ItemTemplate>
+                                                    </VerticalStackLayout>
+                                                </VerticalStackLayout>
+                                                <Label Text="{Binding MaxBidLine}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Secondary}" />
+                                                <Label Text="Brings the next player" FontSize="12" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       IsVisible="{Binding IsDraftTurn}" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Grid ColumnDefinitions="{OnIdiom Phone='*', Default='*,*'}"
+                          ColumnSpacing="10"
+                          RowDefinitions="Auto,Auto"
+                          RowSpacing="10">
+                    <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowAuctionPool}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding LiveAuctionPoolTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding TurnBannerText}" FontSize="14" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding BlindLeftText}" FontSize="12" IsVisible="{Binding IsAdvance}" />
+                            <HorizontalStackLayout Spacing="8" IsVisible="{Binding CanDeclareBlind}" jpl:ToggleOnTap.Enable="True">
+                                <CheckBox IsChecked="{Binding OpenAsBlind}" Color="{StaticResource Primary}" />
+                                <Label Text="Open as Blind Bid round" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding UnsoldLots}" Spacing="6">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <VerticalStackLayout>
+                                                <Label Text="{Binding PlayerName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding BasePriceLine}" FontSize="12" Style="{StaticResource MutedLabel}" />
+                                            </VerticalStackLayout>
+                                            <Button Grid.Column="1" Text="Start" Padding="12,6" Style="{StaticResource GoldButton}"
+                                                    IsVisible="{Binding ShowStartAction}"
+                                                    Clicked="OnOpenRoundClicked" CommandParameter="{Binding .}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                            <Label Text="{Binding LivePoolEmptyText}" Style="{StaticResource MutedLabel}" IsVisible="{Binding HasNoUnsoldLots}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14"
+                            Grid.Column="{OnIdiom Phone=0, Default=1}"
+                            Grid.Row="{OnIdiom Phone=1, Default=0}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Sold" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="Each group: selected / max for that captain."
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}" Spacing="10"
+                                                 BindableLayout.ItemTemplate="{StaticResource SoldByCaptainBlock}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    </Grid>
+                </VerticalStackLayout>
+
+                <!-- CREATOR RUN (DRAFT) -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowDraftRun}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Title}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding ViewSummaryText}" FontSize="12" TextColor="{StaticResource Secondary}" />
+                        </VerticalStackLayout>
+                        <HorizontalStackLayout Grid.Column="1" Spacing="6">
+                            <Button Text="{Binding SettingsButtonText}" Padding="10,8" BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}"
+                                    IsVisible="{Binding ShowSettingsButton}"
+                                    Command="{Binding OpenSettingsCommand}" />
+                            <Button Text="Undo" Padding="10,8" BackgroundColor="#E8EEF5"
+                                    TextColor="{StaticResource Primary}"
+                                    IsVisible="{Binding ShowUndoLastPick}"
+                                    Command="{Binding UndoLastPickCommand}" />
+                            <Button Text="Refresh" Padding="10,8" Style="{StaticResource GoldButton}"
+                                    Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
+                        </HorizontalStackLayout>
+                    </Grid>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="{Binding TurnBannerText}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding RoundStatus}" Style="{StaticResource MutedLabel}" />
+                            <Label Text="{Binding CreatorRunHint}"
+                                   Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Pick order" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedCaptains}" Spacing="8">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AuctionCaptainEditor">
+                                        <Border StrokeThickness="0" Padding="12" StrokeShape="RoundRectangle 12"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding DisplayName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding SquadLine}" FontSize="12" />
+                                                <VerticalStackLayout Spacing="2" IsVisible="{Binding ShowGroupSlots}" Padding="0,6,0,0">
+                                                    <Label Text="Groups · selected / max" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupSlots}" Spacing="2">
+                                                        <BindableLayout.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:AuctionGroupSlot">
+                                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                    <Label Text="{Binding Name}" FontSize="12" VerticalOptions="Center" />
+                                                                    <Label Grid.Column="1" Text="{Binding CountLine}" FontSize="13" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource Secondary}" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </BindableLayout.ItemTemplate>
+                                                    </VerticalStackLayout>
+                                                </VerticalStackLayout>
+                                                <Label Text="On the clock" FontSize="12" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       IsVisible="{Binding IsDraftTurn}" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Grid ColumnDefinitions="{OnIdiom Phone='*', Default='*,*'}"
+                          ColumnSpacing="10"
+                          RowDefinitions="Auto,Auto"
+                          RowSpacing="10">
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="{Binding LiveAvailableTitle}" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="{Binding LivePoolGroupHint}" Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupedUnsoldLots}" Spacing="4"
+                                                 BindableLayout.ItemTemplate="{StaticResource GroupedUnsoldBlock}"
+                                                 IsVisible="{Binding ShowGroupedPool}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding UnsoldLots}" Spacing="6"
+                                                 IsVisible="{Binding ShowFlatPool}">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <VerticalStackLayout>
+                                                <Label Text="{Binding PlayerName}" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                            </VerticalStackLayout>
+                                            <Button Grid.Column="1" Text="Pick" Padding="12,6" Style="{StaticResource GoldButton}"
+                                                    IsVisible="{Binding ShowPickAction}"
+                                                    IsEnabled="{Binding CanPickNow}"
+                                                    Clicked="OnDraftPickClicked" CommandParameter="{Binding .}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                            <Label Text="{Binding LivePoolEmptyText}" Style="{StaticResource MutedLabel}" IsVisible="{Binding HasNoUnsoldLots}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14"
+                            Grid.Column="{OnIdiom Phone=0, Default=1}"
+                            Grid.Row="{OnIdiom Phone=1, Default=0}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Picked" Style="{StaticResource SectionLabel}" Margin="0" />
+                            <Label Text="Each group: selected / max for that captain."
+                                   Style="{StaticResource MutedLabel}"
+                                   IsVisible="{Binding ShowGroupQuotaHint}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}" Spacing="10"
+                                                 BindableLayout.ItemTemplate="{StaticResource SoldByCaptainBlock}" />
+                            <Label Text="No picks yet." Style="{StaticResource MutedLabel}" IsVisible="{Binding HasNoSoldLots}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    </Grid>
+                </VerticalStackLayout>
+
+                <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Grid IsVisible="{Binding IsSetupEdit}" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+            <Border StrokeThickness="0" BackgroundColor="#C62828" Padding="10,6" StrokeShape="RoundRectangle 8">
+                <Label Text="{Binding BannerText}"
+                       FontSize="12" FontAttributes="Bold"
+                       HorizontalOptions="Center" TextColor="White" />
+            </Border>
+
+            <VerticalStackLayout Grid.Row="1" Spacing="8">
+                <Button Text="Back to live run" IsVisible="{Binding CanBackToLive}"
+                        BackgroundColor="#E8EEF5" TextColor="{StaticResource Primary}"
+                        Command="{Binding BackToRunCommand}" />
+                <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                    <HorizontalStackLayout Spacing="6">
+                        <ctrl:TabChipButton Text="General"
+                                            Style="{StaticResource AuctionTab}"
+                                            Command="{Binding SelectGeneralTabCommand}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsGeneralTab}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </ctrl:TabChipButton>
+                        <ctrl:TabChipButton Text="Captains"
+                                            Style="{StaticResource AuctionTab}"
+                                            Command="{Binding SelectCaptainsTabCommand}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding CanOpenCaptainsTab}" Value="False">
+                                    <Setter Property="Opacity" Value="0.4" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsCaptainsTab}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </ctrl:TabChipButton>
+                        <ctrl:TabChipButton Text="Players"
+                                            Style="{StaticResource AuctionTab}"
+                                            Command="{Binding SelectPlayersTabCommand}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding CanOpenPlayersTab}" Value="False">
+                                    <Setter Property="Opacity" Value="0.4" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsPlayersTab}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </ctrl:TabChipButton>
+                    </HorizontalStackLayout>
+                </ScrollView>
+            </VerticalStackLayout>
+
+            <ScrollView Grid.Row="2">
+                <VerticalStackLayout Spacing="12" Padding="0,0,0,12">
+
+                    <VerticalStackLayout Spacing="12" IsVisible="{Binding IsGeneralTab}">
+                        <Border Style="{StaticResource CardBorder}" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="General" Style="{StaticResource SectionLabel}" Margin="0" />
+                                <Entry Placeholder="Name *" Text="{Binding Title}" MaxLength="160" />
+                                <Label Text="{Binding TitleError}"
+                                       TextColor="{StaticResource Danger}"
+                                       FontSize="12"
+                                       LineBreakMode="WordWrap"
+                                       IsVisible="{Binding HasTitleError}" />
+                                <DatePicker Date="{Binding AuctionDate}" />
+                                <Label Text="Type *" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                <Picker Title="Type *" ItemsSource="{Binding KindOptions}" SelectedItem="{Binding SelectedKindLabel}" />
+                                <Label Text="{Binding KindError}"
+                                       TextColor="{StaticResource Danger}"
+                                       FontSize="12"
+                                       LineBreakMode="WordWrap"
+                                       IsVisible="{Binding HasKindError}" />
+                                <Label Text="{Binding KindHelpText}" Style="{StaticResource MutedLabel}" />
+                                <Label Text="{Binding PlayersEachLabel}" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                <Entry Keyboard="Numeric" Text="{Binding PlayersPerCaptain}" />
+                                <Label Text="{Binding PlayersPerCaptainError}"
+                                       TextColor="{StaticResource Danger}"
+                                       FontSize="12"
+                                       LineBreakMode="WordWrap"
+                                       IsVisible="{Binding HasPlayersPerCaptainError}" />
+                                <VerticalStackLayout IsVisible="{Binding ShowAdvanceSettings}" Spacing="8">
+                                    <Label Text="Joker cards per captain (same for all)" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                    <Entry Keyboard="Numeric" Text="{Binding JokersPerCaptain}" />
+                                    <Label Text="After a joker, the next bid must be at least double." Style="{StaticResource MutedLabel}" />
+                                    <Label Text="Blind bid rounds" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                    <Label Text="Add each Blind round number. Those rounds open as Blind automatically. Leave the list empty for none."
+                                           Style="{StaticResource MutedLabel}" />
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding BlindRoundRows}" Spacing="8">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:AuctionBlindRoundEditor">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                    <Entry Keyboard="Numeric" Placeholder="Round no." Text="{Binding RoundNumber}" />
+                                                    <Button Grid.Column="1" Text="✕" Padding="10,6" BackgroundColor="#E8EEF5"
+                                                            TextColor="{StaticResource Primary}"
+                                                            Clicked="OnRemoveBlindRoundClicked" CommandParameter="{Binding .}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </VerticalStackLayout>
+                                    <Label Text="No blind rounds yet." FontSize="12" Style="{StaticResource MutedLabel}"
+                                           IsVisible="{Binding HasNoBlindRoundRows}" />
+                                    <Button Text="+ Add round" BackgroundColor="#E8EEF5" TextColor="{StaticResource Primary}"
+                                            Command="{Binding AddBlindRoundCommand}" />
+                                    <Label Text="Creator picks the player. Every captain sees the name, bids secretly, and the highest bid wins when all are in. Joker cannot be used. All bids are shown after the award."
+                                           Style="{StaticResource MutedLabel}" />
+                                    <VerticalStackLayout Spacing="8" IsVisible="{Binding ShowLegacyBlindCount}">
+                                        <Label Text="This auction still uses a blind-round count. Add round numbers above to switch, or keep the count and tick Open as Blind Bid when you start a round."
+                                               Style="{StaticResource MutedLabel}" />
+                                        <Label Text="Blind bid rounds allowed" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                        <Entry Keyboard="Numeric" Text="{Binding BlindBidRoundsAllowed}" />
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout IsVisible="{Binding ShowDraftGroupsSetup}" Spacing="8">
+                                    <Label Text="Player groups (max per captain)" FontSize="11" Style="{StaticResource MutedLabel}" />
+                                    <Label Text="Each captain can take at most this many from each group." Style="{StaticResource MutedLabel}" />
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding DraftGroups}" Spacing="8">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:AuctionDraftGroupEditor">
+                                                <Grid ColumnDefinitions="*,80,Auto" ColumnSpacing="6">
+                                                    <Entry Placeholder="Group name" Text="{Binding Name}" MaxLength="20"
+                                                           Completed="OnDraftGroupNameCompleted"
+                                                           Unfocused="OnDraftGroupNameCompleted" />
+                                                    <Entry Grid.Column="1" Keyboard="Numeric" Placeholder="Max" Text="{Binding MaxPerCaptain}" />
+                                                    <Button Grid.Column="2" Text="✕" Padding="10,6" BackgroundColor="#E8EEF5"
+                                                            TextColor="{StaticResource Primary}"
+                                                            Clicked="OnRemoveDraftGroupClicked" CommandParameter="{Binding .}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </VerticalStackLayout>
+                                    <Button Text="+ Add group" BackgroundColor="#E8EEF5" TextColor="{StaticResource Primary}"
+                                            Command="{Binding AddDraftGroupCommand}" />
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="12" IsVisible="{Binding IsCaptainsTab}">
+                        <Border Style="{StaticResource CardBorder}" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="Captains &amp; team names *" Style="{StaticResource SectionLabel}" Margin="0" />
+                                <Label Text="Minimum 2 captains, no max. Each once. Unique team name. Up/Down sets pick / bring order for the whole event. Advance Auction and both Drafting types: set a secret code per captain so they can enter."
+                                       Style="{StaticResource MutedLabel}" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Entry Placeholder="Filter by name" Text="{Binding CaptainNameFilter}" />
+                                    <Button Grid.Column="1" Text="Add all" Padding="12,6" FontSize="12" MinimumWidthRequest="76"
+                                            BackgroundColor="#E8EEF5" TextColor="{StaticResource Primary}"
+                                            Command="{Binding AddAllCaptainsCommand}" />
+                                </Grid>
+                                <FlexLayout BindableLayout.ItemsSource="{Binding VisibleCaptainCandidates}"
+                                            Wrap="Wrap"
+                                            JustifyContent="Start"
+                                            AlignItems="Start"
+                                            AlignContent="Start">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AuctionCaptainCandidate">
                                             <Border StrokeThickness="0"
+                                                    Padding="8,6"
+                                                    Margin="0,0,10,8"
+                                                    MinimumWidthRequest="240"
+                                                    FlexLayout.Basis="280"
+                                                    FlexLayout.Grow="1"
+                                                    HorizontalOptions="Fill"
                                                     BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
-                                                    Padding="12"
-                                                    StrokeShape="RoundRectangle 12">
+                                                    StrokeShape="RoundRectangle 8">
                                                 <VerticalStackLayout Spacing="6">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <Label Text="{Binding FullName}" VerticalOptions="Center" LineBreakMode="TailTruncation"
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                        <Button Grid.Column="1" Padding="12,6" FontSize="12" MinimumWidthRequest="76"
+                                                                Clicked="OnToggleCaptainClicked" CommandParameter="{Binding .}">
+                                                            <Button.Triggers>
+                                                                <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Text" Value="Added" />
+                                                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
+                                                                    <Setter Property="Text" Value="Add" />
+                                                                    <Setter Property="BackgroundColor" Value="#E8EEF5" />
+                                                                    <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                                                </DataTrigger>
+                                                            </Button.Triggers>
+                                                        </Button>
+                                                    </Grid>
+                                                    <VerticalStackLayout Spacing="6" IsVisible="{Binding ShowEditor}">
+                                                        <Entry Placeholder="Team name *" Text="{Binding Editor.TeamName}" MaxLength="40" />
+                                                        <Entry Keyboard="Numeric" Placeholder="Wallet *" Text="{Binding Editor.WalletAmount}"
+                                                               IsVisible="{Binding Editor.ShowWallet}" />
+                                                        <Entry Placeholder="Captain code * (4–12 chars)"
+                                                               Text="{Binding Editor.OperatorUsername}"
+                                                               IsVisible="{Binding Editor.ShowOperator}"
+                                                               MaxLength="12" />
+                                                        <HorizontalStackLayout Spacing="8"
+                                                                               IsVisible="{Binding Editor.ShowPickOrderButtons}">
+                                                            <Button Text="Up" Padding="12,6" BackgroundColor="#E8EEF5"
+                                                                    TextColor="{StaticResource Primary}"
+                                                                    Clicked="OnMoveCaptainUpClicked" CommandParameter="{Binding Editor}" />
+                                                            <Button Text="Down" Padding="12,6" BackgroundColor="#E8EEF5"
+                                                                    TextColor="{StaticResource Primary}"
+                                                                    Clicked="OnMoveCaptainDownClicked" CommandParameter="{Binding Editor}" />
+                                                        </HorizontalStackLayout>
+                                                    </VerticalStackLayout>
+                                                </VerticalStackLayout>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </FlexLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="12" IsVisible="{Binding IsPlayersTab}">
+                        <Border Style="{StaticResource CardBorder}" Padding="14">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="Players in the pool *" Style="{StaticResource SectionLabel}" Margin="0" />
+                                <Label Text="{Binding SetupHint}" Style="{StaticResource MutedLabel}" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Entry Placeholder="Filter by name" Text="{Binding PlayerNameFilter}" />
+                                    <Button Grid.Column="1" Text="Add all" Padding="12,6" FontSize="12" MinimumWidthRequest="76"
+                                            BackgroundColor="#E8EEF5" TextColor="{StaticResource Primary}"
+                                            Command="{Binding AddAllPlayersCommand}" />
+                                </Grid>
+                                <FlexLayout BindableLayout.ItemsSource="{Binding VisiblePlayerCandidates}"
+                                            Wrap="Wrap"
+                                            JustifyContent="Start"
+                                            AlignItems="Start"
+                                            AlignContent="Start">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SelectablePlayer">
+                                            <Border StrokeThickness="0"
+                                                    Padding="8,6"
+                                                    Margin="0,0,10,6"
+                                                    MinimumWidthRequest="220"
+                                                    FlexLayout.Basis="260"
+                                                    FlexLayout.Grow="1"
+                                                    HorizontalOptions="Fill"
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
+                                                    StrokeShape="RoundRectangle 8">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <Label Text="{Binding FullName}" VerticalOptions="Center" LineBreakMode="TailTruncation"
+                                                           TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                    <Button Grid.Column="1" Padding="12,6" FontSize="12" MinimumWidthRequest="76"
+                                                            Clicked="OnTogglePlayerClicked" CommandParameter="{Binding .}">
+                                                        <Button.Triggers>
+                                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
+                                                                <Setter Property="Text" Value="Added" />
+                                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
+                                                                <Setter Property="Text" Value="Add" />
+                                                                <Setter Property="BackgroundColor" Value="#E8EEF5" />
+                                                                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                                            </DataTrigger>
+                                                        </Button.Triggers>
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </FlexLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowBasePrices}">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="Base prices" Style="{StaticResource SectionLabel}" Margin="0" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Lots}" Spacing="8">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                            <Grid ColumnDefinitions="*,120">
+                                                <Label Text="{Binding PlayerName}" VerticalOptions="Center" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" />
+                                                <Entry Grid.Column="1" Keyboard="Numeric" Placeholder="Base" Text="{Binding BasePrice}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Padding="{OnIdiom Phone=12, Default=10}" IsVisible="{Binding ShowManualSaleLots}">
+                            <VerticalStackLayout Spacing="{OnIdiom Phone=8, Default=6}">
+                                <VerticalStackLayout Spacing="4" IsVisible="{Binding ShowBasicSoldByCaptain}">
+                                    <Label Text="{Binding BasicSoldSummaryTitle}" Style="{StaticResource SectionLabel}" Margin="0"
+                                           FontSize="{OnIdiom Phone=14, Default=13}" />
+                                    <FlexLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}"
+                                                BindableLayout.ItemTemplate="{StaticResource BasicSoldCaptainCard}"
+                                                Wrap="Wrap"
+                                                JustifyContent="Start"
+                                                AlignItems="Stretch"
+                                                AlignContent="Start"
+                                                IsVisible="{OnIdiom Phone=False, Default=True}" />
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding SoldByCaptain}"
+                                                         BindableLayout.ItemTemplate="{StaticResource BasicSoldCaptainRow}"
+                                                         Spacing="0"
+                                                         IsVisible="{OnIdiom Phone=True, Default=False}" />
+                                </VerticalStackLayout>
+
+                                <Label Text="Players — mark sold" Style="{StaticResource SectionLabel}" Margin="0"
+                                       FontSize="{OnIdiom Phone=14, Default=13}" />
+                                <Label Text="Sold / price / captain stay on screen until Save."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="{OnIdiom Phone=11, Default=10}" />
+
+                                <!-- Desktop: compact single-row editors -->
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Lots}" Spacing="4"
+                                                     IsVisible="{OnIdiom Phone=False, Default=True}">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                            <Border Stroke="{StaticResource Gray200}"
+                                                    StrokeThickness="1"
+                                                    BackgroundColor="{StaticResource SurfaceMuted}"
+                                                    StrokeShape="RoundRectangle 6"
+                                                    Padding="8,4">
+                                                <Grid ColumnDefinitions="*,72,52,72,160" ColumnSpacing="6">
                                                     <Label Text="{Binding PlayerName}"
                                                            FontAttributes="Bold"
-                                                           FontSize="15"
-                                                           TextColor="{StaticResource Primary}" />
-                                                    <Label Text="Wallet amount"
-                                                           FontSize="11"
-                                                           Style="{StaticResource MutedLabel}" />
-                                                    <Entry Keyboard="Numeric"
-                                                           Text="{Binding WalletAmount}"
-                                                           Placeholder="e.g. 50000" />
-                                                    <Label Text="{Binding BudgetLine}"
                                                            FontSize="12"
+                                                           TextColor="{StaticResource Primary}"
+                                                           VerticalOptions="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                    <Entry Grid.Column="1"
+                                                           Keyboard="Numeric"
+                                                           Placeholder="Base"
+                                                           Text="{Binding BasePrice}"
+                                                           FontSize="12"
+                                                           HeightRequest="30"
+                                                           MinimumHeightRequest="30" />
+                                                    <HorizontalStackLayout Grid.Column="2" Spacing="2" VerticalOptions="Center">
+                                                        <CheckBox IsChecked="{Binding IsSold}" Color="{StaticResource Primary}"
+                                                                  HeightRequest="28" WidthRequest="28" />
+                                                        <Label Text="Sold" VerticalOptions="Center" FontSize="11" />
+                                                    </HorizontalStackLayout>
+                                                    <Entry Grid.Column="3"
+                                                           Keyboard="Numeric"
+                                                           Placeholder="Price"
+                                                           Text="{Binding SoldPrice}"
+                                                           IsVisible="{Binding ShowSoldFields}"
+                                                           FontSize="12"
+                                                           HeightRequest="30"
+                                                           MinimumHeightRequest="30" />
+                                                    <Picker Grid.Column="4"
+                                                            Title="Captain"
+                                                            ItemsSource="{Binding CaptainChoices}"
+                                                            ItemDisplayBinding="{Binding PickerLabel}"
+                                                            SelectedItem="{Binding SoldToCaptain}"
+                                                            IsVisible="{Binding ShowSoldFields}"
+                                                            FontSize="12"
+                                                            HeightRequest="30"
+                                                            MinimumHeightRequest="30" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <!-- Phone: stacked compact cards -->
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Lots}" Spacing="6"
+                                                     IsVisible="{OnIdiom Phone=True, Default=False}">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                            <Border Stroke="{StaticResource Gray200}"
+                                                    StrokeThickness="1"
+                                                    BackgroundColor="{StaticResource SurfaceMuted}"
+                                                    StrokeShape="RoundRectangle 8"
+                                                    Padding="8,6">
+                                                <VerticalStackLayout Spacing="4">
+                                                    <Label Text="{Binding PlayerName}"
                                                            FontAttributes="Bold"
+                                                           FontSize="13"
                                                            TextColor="{StaticResource Primary}" />
-                                                    <Label Text="Over budget — reduce purchases or raise wallet"
-                                                           FontSize="11"
-                                                           TextColor="{StaticResource Danger}"
-                                                           IsVisible="{Binding IsOverBudget}" />
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                        <Entry Keyboard="Numeric" Placeholder="Base" Text="{Binding BasePrice}"
+                                                               FontSize="12" HeightRequest="34" MinimumHeightRequest="34" />
+                                                        <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                                                            <CheckBox IsChecked="{Binding IsSold}" Color="{StaticResource Primary}" />
+                                                            <Label Text="Sold" VerticalOptions="Center" FontSize="12" />
+                                                        </HorizontalStackLayout>
+                                                    </Grid>
+                                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8"
+                                                          IsVisible="{Binding ShowSoldFields}">
+                                                        <Entry Keyboard="Numeric" Placeholder="Sold price" Text="{Binding SoldPrice}"
+                                                               FontSize="12" HeightRequest="34" MinimumHeightRequest="34" />
+                                                        <Picker Grid.Column="1" Title="Captain"
+                                                                ItemsSource="{Binding CaptainChoices}"
+                                                                ItemDisplayBinding="{Binding PickerLabel}"
+                                                                SelectedItem="{Binding SoldToCaptain}"
+                                                                FontSize="12"
+                                                                HeightRequest="34"
+                                                                MinimumHeightRequest="34" />
+                                                    </Grid>
                                                 </VerticalStackLayout>
                                             </Border>
                                         </DataTemplate>
                                     </BindableLayout.ItemTemplate>
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
-                        </VerticalStackLayout>
-                    </Border>
+                        </Border>
 
-                    <Border Style="{StaticResource CardBorder}" Padding="14">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Auction players *" Style="{StaticResource SectionLabel}" Margin="0" />
-                            <Label Text="Select at least 1 player."
-                                   Style="{StaticResource MutedLabel}" />
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerCandidates}" Spacing="6">
-                                <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:SelectablePlayer">
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                            <Label Text="{Binding FullName}"
-                                                   VerticalOptions="Center"
-                                                   FontSize="14"
-                                                   LineBreakMode="TailTruncation"
-                                                   TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
-                                            <Button Grid.Column="1"
-                                                    Padding="12,6"
-                                                    FontSize="12"
-                                                    MinimumWidthRequest="76"
-                                                    Clicked="OnTogglePlayerClicked"
-                                                    CommandParameter="{Binding .}">
-                                                <Button.Triggers>
-                                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True">
-                                                        <Setter Property="Text" Value="Added" />
-                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                                        <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                                                    </DataTrigger>
-                                                    <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False">
-                                                        <Setter Property="Text" Value="Add" />
-                                                        <Setter Property="BackgroundColor" Value="#E8EEF5" />
-                                                        <Setter Property="TextColor" Value="{StaticResource Primary}" />
-                                                    </DataTrigger>
-                                                </Button.Triggers>
-                                            </Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </BindableLayout.ItemTemplate>
-                            </VerticalStackLayout>
-                        </VerticalStackLayout>
-                    </Border>
-
-                    <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding HasLots}">
-                        <VerticalStackLayout Spacing="10">
-                            <Label Text="Prices &amp; sales" Style="{StaticResource SectionLabel}" Margin="0" />
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Lots}" Spacing="10">
-                                <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AuctionLotEditor">
-                                        <Border StrokeThickness="0"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}"
-                                                Padding="12"
-                                                StrokeShape="RoundRectangle 12">
-                                            <VerticalStackLayout Spacing="8">
-                                                <Label Text="{Binding PlayerName}"
-                                                       FontAttributes="Bold"
-                                                       FontSize="15"
-                                                       TextColor="{StaticResource Primary}" />
-                                                <Label Text="Base price" FontSize="11" Style="{StaticResource MutedLabel}" />
-                                                <Entry Keyboard="Numeric" Text="{Binding BasePrice}" />
-                                                <HorizontalStackLayout Spacing="10">
-                                                    <CheckBox IsChecked="{Binding IsSold}" Color="{StaticResource Primary}" />
-                                                    <Label Text="Sold" VerticalOptions="Center" FontSize="14" />
-                                                </HorizontalStackLayout>
-                                                <VerticalStackLayout Spacing="6" IsVisible="{Binding ShowSoldFields}">
-                                                    <Label Text="Sold price" FontSize="11" Style="{StaticResource MutedLabel}" />
-                                                    <Entry Keyboard="Numeric" Text="{Binding SoldPrice}" />
-                                                    <Label Text="Sold to captain" FontSize="11" Style="{StaticResource MutedLabel}" />
-                                                    <Picker Title="Select captain"
-                                                            ItemsSource="{Binding CaptainChoices}"
-                                                            ItemDisplayBinding="{Binding PickerLabel}"
-                                                            SelectedItem="{Binding SoldToCaptain}" />
+                        <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowLotGroups}">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="Player groups" Style="{StaticResource SectionLabel}" Margin="0" />
+                                <Label Text="Assign every pool player to a group. Max is how many each captain may take from that group."
+                                       Style="{StaticResource MutedLabel}" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding GroupedSetupLots}" Spacing="12">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AuctionPoolGroup">
+                                            <VerticalStackLayout Spacing="6">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <Label Text="{Binding Header}" FontAttributes="Bold" FontSize="14"
+                                                           TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                                                    <Label Grid.Column="1" Text="{Binding CountLine}" FontAttributes="Bold" FontSize="13"
+                                                           TextColor="{StaticResource Secondary}" VerticalOptions="Center"
+                                                           IsVisible="{Binding ShowCount}" />
+                                                </Grid>
+                                                <Label Text="{Binding HintLine}" FontSize="11" Style="{StaticResource MutedLabel}"
+                                                       IsVisible="{Binding ShowHint}" />
+                                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Players}" Spacing="8">
+                                                    <BindableLayout.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:AuctionLotEditor">
+                                                            <Grid ColumnDefinitions="*,160">
+                                                                <Label Text="{Binding PlayerName}" VerticalOptions="Center" FontAttributes="Bold"
+                                                                       TextColor="{StaticResource Primary}" />
+                                                                <Picker Grid.Column="1" Title="Group"
+                                                                        ItemsSource="{Binding GroupChoices}"
+                                                                        SelectedIndex="{Binding GroupChoiceIndex}" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </BindableLayout.ItemTemplate>
                                                 </VerticalStackLayout>
                                             </VerticalStackLayout>
-                                        </Border>
-                                    </DataTemplate>
-                                </BindableLayout.ItemTemplate>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
                             </VerticalStackLayout>
-                        </VerticalStackLayout>
-                    </Border>
+                        </Border>
+                    </VerticalStackLayout>
                 </VerticalStackLayout>
+            </ScrollView>
 
-                <Label Text="{Binding ErrorMessage}"
-                       TextColor="{StaticResource Danger}"
-                       FontSize="12" />
+            <VerticalStackLayout Grid.Row="3" Spacing="6">
+                <Label Text="{Binding TabLockHint}"
+                       FontSize="12"
+                       TextColor="{StaticResource TextSecondary}"
+                       IsVisible="{Binding HasTabLockHint}" />
+                <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
             </VerticalStackLayout>
-        </ScrollView>
+        </Grid>
 
-        <Button Grid.Row="1"
-                Text="Save auction"
-                Style="{StaticResource GoldButton}"
-                Margin="0,8,0,0"
-                IsVisible="{Binding CanEdit}"
+        <Button Grid.Row="1" Text="{Binding SaveButtonText}" Style="{StaticResource GoldButton}"
+                Margin="0,8,0,0" IsVisible="{Binding IsSetupEdit}" IsEnabled="{Binding CanSave}"
                 Command="{Binding SaveCommand}" />
     </Grid>
 </ContentPage>

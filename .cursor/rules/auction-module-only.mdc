@@ -7,6 +7,8 @@ alwaysApply: true
 
 Until the user explicitly lifts this, work **only** on the Auction module.
 
+**Basic Auction** = local device-only (manual Sold + price + captain; persist on Save only — no per-click cloud). Other kinds are **cloud-backed live**. **Simple Auction** = creator-only live rounds. **Advance Auction** = creator + captains enter with a per-captain code (Joker + Blind Bid). No extra auction admins. **Simple Drafting** = creator picks round-by-round (no wallet). **Advance Drafting** = same picking + player groups with a max per captain per group. Creator sets captain pick order once; that sequence is used for the whole draft.
+
 ## Allowed files (edit these only)
 
 - `Pages/AuctionsPage.xaml` + `.xaml.cs`
@@ -18,6 +20,16 @@ Until the user explicitly lifts this, work **only** on the Auction module.
 - `Services/AuctionService.cs`
 - `Services/AuctionsModuleGate.cs`
 - `Domain/AuctionEntities.cs`
+- `Pages/TournamentSchedulerDetailPage.xaml` + `.xaml.cs`
+- `ViewModels/TournamentSchedulerDetailViewModel.cs`
+- `Services/SchedulerEngine.cs`
+- `Pages/TournamentSchedulerPage.xaml` + `.xaml.cs`
+- `ViewModels/TournamentSchedulerViewModel.cs`
+- `Services/TournamentSchedulerService.cs`
+- `JPL.Api/Controllers/SchedulerController.cs`
+- `Pages/TournamentSchedulerEditPage.xaml` + `.xaml.cs`
+- `ViewModels/TournamentSchedulerEditViewModel.cs`
+- `Domain/SchedulerEntities.cs`
 
 ## Do not touch
 

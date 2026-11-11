@@ -3,66 +3,435 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>{{LEAGUE_NAME}} players · Cric360</title>
+  <title>{{LEAGUE_NAME}} · Cric360</title>
+  <meta property="og:title" content="{{LEAGUE_NAME}} · Cric360 rankings &amp; players" />
+  <meta property="og:description" content="League rankings, career cards and full player profiles on Cric360." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg:#0b1220; --card:#0d1b2a; --line:#243447; --gold:#d4af37; --text:#f4f7fb; --muted:#8fa3b8; }
+    :root {
+      --bg: #081018;
+      --bg2: #0d1724;
+      --card: #121e2e;
+      --card-soft: rgba(18, 30, 46, 0.92);
+      --line: rgba(212, 175, 55, 0.16);
+      --line-strong: rgba(212, 175, 55, 0.32);
+      --gold: #e3c56b;
+      --gold-deep: #c9a227;
+      --text: #f2f5fa;
+      --muted: #8b9cb0;
+      --track: #1a2738;
+      --radius: 16px;
+      --shadow: 0 16px 40px rgba(0,0,0,.32);
+    }
     * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font-family: Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    a { color:inherit; text-decoration:none; }
-    .top { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:flex-start; }
-    .brand { font-weight:800; letter-spacing:.06em; color:var(--gold); font-size:12px; }
-    .social { margin-left:auto; display:flex; flex-wrap:wrap; gap:12px; font-size:12px; font-weight:700; color:var(--gold); }
-    .social a { color:var(--gold); }
-    h1 { font-size:20px; margin:6px 0 0; }
-    .wrap { max-width:980px; margin:0 auto; padding:16px; }
-    input { width:100%; background:#102033; border:1px solid var(--line); color:var(--text); border-radius:12px; padding:10px 12px; font-size:14px; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:14px; }
-    .card { display:grid; grid-template-columns:56px 1fr; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; }
-    .card:hover { border-color:var(--gold); }
-    img { width:56px; height:56px; border-radius:12px; object-fit:cover; background:#182a3e; }
-    .name { font-weight:800; }
-    .meta { color:var(--muted); font-size:12px; margin-top:2px; }
-    .count { color:var(--muted); font-size:12px; margin:8px 0; }
-    .count a { color:var(--gold); font-weight:700; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text);
+      font-family: Outfit, system-ui, sans-serif;
+      background:
+        radial-gradient(900px 420px at 0% 0%, rgba(227,197,107,.10), transparent 55%),
+        radial-gradient(700px 360px at 100% 0%, rgba(45,110,190,.10), transparent 50%),
+        linear-gradient(180deg, var(--bg2), var(--bg));
+    }
+    a { color: var(--gold); text-decoration: none; }
+    .top {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(14px);
+      background: rgba(8,16,24,.86);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 18px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .brand { font-weight: 800; letter-spacing: .14em; color: var(--gold); font-size: 12px; }
+    .social { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; font-weight: 700; }
+    .social a { color: var(--gold); white-space: nowrap; opacity: .92; }
+    .social a:hover { opacity: 1; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 18px 16px 48px; }
+
+    .hero {
+      background: linear-gradient(145deg, #162436, #101c2c);
+      border: 1px solid var(--line-strong);
+      border-radius: 22px; padding: 22px 20px;
+      box-shadow: var(--shadow);
+    }
+    .eyebrow { color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 8px; }
+    h1 { margin: 0; font-size: clamp(28px, 5vw, 40px); font-weight: 800; letter-spacing: -.02em; }
+    .sub { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 64ch; }
+    .kpi {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px;
+    }
+    .kpi .cell {
+      background: rgba(0,0,0,.22); border: 1px solid var(--line);
+      border-radius: 14px; padding: 12px 10px; text-align: center;
+    }
+    .kpi b {
+      display: block; font-family: "JetBrains Mono", monospace;
+      font-size: 22px; color: var(--gold); font-weight: 700;
+    }
+    .kpi span { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+
+    .sec-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+      margin: 24px 0 10px;
+    }
+    .sec-head h2 {
+      margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--gold); font-weight: 800;
+    }
+    .sec-head .hint { color: var(--muted); font-size: 12px; }
+
+    .tabs {
+      display: flex; gap: 6px; overflow-x: auto; padding: 6px;
+      background: rgba(8,16,24,.7); border: 1px solid var(--line);
+      border-radius: 14px; scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex: 0 0 auto; border: 0; background: transparent; color: var(--muted);
+      padding: 8px 12px; border-radius: 10px; font: inherit; font-weight: 700;
+      font-size: 12px; letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+    }
+    .tab.active {
+      background: linear-gradient(180deg, rgba(227,197,107,.22), rgba(227,197,107,.08));
+      color: var(--gold); border: 1px solid var(--line-strong);
+    }
+
+    .board {
+      display: none; margin-top: 10px;
+      background: var(--card-soft); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+    .board.active { display: block; }
+    .board a.row {
+      display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px;
+      align-items: center; padding: 12px 2px;
+      border-bottom: 1px solid rgba(36,52,71,.65); color: inherit;
+    }
+    .board a.row:last-child { border-bottom: 0; }
+    .board a.row:hover .pn { color: var(--gold); }
+    .rk {
+      width: 34px; height: 34px; border-radius: 10px;
+      display: grid; place-items: center;
+      font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 12px;
+      background: rgba(255,255,255,.04); border: 1px solid var(--line); color: var(--muted);
+    }
+    .rk.top { background: linear-gradient(180deg, #efd78a, #c9a227); color: #1a1405; border-color: transparent; }
+    .pn { font-weight: 700; line-height: 1.25; font-size: 14px; }
+    .pd { color: var(--muted); font-size: 11px; margin-top: 3px; line-height: 1.35; }
+    .bar-track {
+      margin-top: 7px; height: 12px; border-radius: 999px; overflow: hidden;
+      background: var(--track); border: 1px solid rgba(255,255,255,.04);
+    }
+    .bar-track > i {
+      display: block; height: 100%; width: 0; border-radius: inherit;
+      transition: width .65s cubic-bezier(.2,.8,.2,1);
+    }
+    .pv {
+      font-family: "JetBrains Mono", monospace; font-weight: 700;
+      color: var(--gold); font-size: 14px; text-align: right; white-space: nowrap;
+    }
+    .ps { color: var(--muted); font-size: 11px; text-align: right; margin-top: 2px; white-space: nowrap; }
+
+    .toolbar {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 8px;
+    }
+    input, select {
+      width: 100%; background: #102033; border: 1px solid var(--line);
+      color: var(--text); border-radius: 12px; padding: 11px 12px;
+      font: inherit; font-size: 14px; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--line-strong); }
+    select { min-width: 150px; cursor: pointer; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px; margin-top: 10px;
+    }
+    .card {
+      display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 12px;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 18px; padding: 14px; color: inherit;
+      box-shadow: 0 10px 28px rgba(0,0,0,.18);
+      transition: border-color .2s, transform .15s, box-shadow .2s;
+    }
+    .card:hover {
+      border-color: var(--gold);
+      transform: translateY(-2px);
+      box-shadow: 0 16px 36px rgba(0,0,0,.28);
+    }
+    .photo, .ph {
+      width: 68px; height: 68px; border-radius: 16px; object-fit: cover;
+      background: linear-gradient(160deg, #243b58, #152338);
+      border: 1px solid rgba(227,197,107,.28);
+    }
+    .ph {
+      display: grid; place-items: center;
+      font-weight: 800; color: var(--gold); font-size: 20px;
+    }
+    .name { font-weight: 800; font-size: 16px; line-height: 1.2; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .chip {
+      background: rgba(255,255,255,.04); border: 1px solid var(--line);
+      border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 700;
+    }
+    .chip.gold {
+      background: linear-gradient(180deg, #efd78a, #c9a227);
+      color: #1a1405; border-color: transparent;
+    }
+    .stats {
+      grid-column: 1 / -1;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+      margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--line);
+    }
+    .stat b {
+      display: block; font-family: "JetBrains Mono", monospace;
+      font-size: 13px; color: var(--gold); font-weight: 700;
+    }
+    .stat span {
+      font-size: 10px; color: var(--muted); font-weight: 600;
+      letter-spacing: .03em; text-transform: uppercase;
+    }
+    .empty { color: var(--muted); padding: 18px 4px; }
+    .footer {
+      margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line);
+      color: var(--muted); font-size: 12px; line-height: 1.6;
+    }
+    @media (max-width: 720px) {
+      .kpi { grid-template-columns: repeat(2, 1fr); }
+      .toolbar { grid-template-columns: 1fr; }
+      .social { margin-left: 0; width: 100%; gap: 8px; font-size: 11px; }
+      .stats { grid-template-columns: repeat(4, 1fr); }
+    }
   </style>
 </head>
 <body>
   <div class="top">
-    <div>
-      <div class="brand">CRIC360 PUBLIC IDENTITY</div>
-      <h1>{{LEAGUE_NAME}}</h1>
-    </div>
+    <a class="brand" href="/p/{{LEAGUE_ID}}">CRIC360</a>
     <span class="social">
+      <a href="https://www.facebook.com/profile.php?id=61593997581019" target="_blank" rel="noopener">Facebook</a>
+      <a href="https://wa.me/923222857730" target="_blank" rel="noopener">WhatsApp</a>
       <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a>
       <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a>
       <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a>
     </span>
   </div>
+
   <div class="wrap">
-    <input id="q" type="search" placeholder="Search players…" />
-    <div class="count" id="count"></div>
+    <div class="hero">
+      <p class="eyebrow">League directory</p>
+      <h1>{{LEAGUE_NAME}}</h1>
+      <p class="sub">Rankings with points bars, full career cards, and open player profiles — batting, bowling, fielding and captaincy.</p>
+      <div class="kpi" id="kpi">
+        <div class="cell"><b>—</b><span>Players</span></div>
+        <div class="cell"><b>—</b><span>Matches</span></div>
+        <div class="cell"><b>—</b><span>Runs</span></div>
+        <div class="cell"><b>—</b><span>Wickets</span></div>
+      </div>
+    </div>
+
+    <div class="sec-head"><h2>League rankings</h2><span class="hint">points bar · tap profile</span></div>
+    <div class="tabs" id="rankTabs"></div>
+    <div id="boards"></div>
+
+    <div class="sec-head"><h2>All players</h2><span class="hint" id="count"></span></div>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search player, nickname, team…" />
+      <select id="sort">
+        <option value="runs">Sort: Runs</option>
+        <option value="wickets">Sort: Wickets</option>
+        <option value="matches">Sort: Matches</option>
+        <option value="fieldTotal">Sort: Fielding</option>
+        <option value="potm">Sort: POTM</option>
+        <option value="sr">Sort: Strike rate</option>
+        <option value="avg">Sort: Batting avg</option>
+        <option value="econ">Sort: Economy</option>
+        <option value="hatTricks">Sort: Hat-tricks</option>
+        <option value="name">Sort: Name</option>
+      </select>
+      <select id="filter">
+        <option value="all">All players</option>
+        <option value="bat">Batters ranked</option>
+        <option value="bowl">Bowlers ranked</option>
+        <option value="ar">All-rounders</option>
+        <option value="field">Fielders ranked</option>
+        <option value="cap">Captains ranked</option>
+      </select>
+    </div>
     <div class="grid" id="grid"></div>
-    <p class="count">Follow @official.cric360 on <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> · <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> · <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a></p>
+
+    <p class="footer">Follow Cric360 ·
+      <a href="https://www.facebook.com/profile.php?id=61593997581019" target="_blank" rel="noopener">Facebook</a> ·
+      <a href="https://wa.me/923222857730" target="_blank" rel="noopener">WhatsApp</a> ·
+      <a href="https://www.instagram.com/official.cric360/" target="_blank" rel="noopener">Instagram</a> ·
+      <a href="https://www.tiktok.com/@official.cric360" target="_blank" rel="noopener">TikTok</a> ·
+      <a href="https://www.youtube.com/channel/UCMNxf-lp9EwY4LW95D1HFiA" target="_blank" rel="noopener">YouTube</a>
+    </p>
   </div>
+
   <script>
     const leagueId = "{{LEAGUE_ID}}";
+    let data = null;
     let all = [];
-    function esc(s) {
-      return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+    }[c]));
+    const num = v => Number(v) || 0;
+    const dash = v => (v == null || v === "" || v === "-" ? "—" : v);
+    function initials(name) {
+      return String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join("").toUpperCase();
     }
-    fetch("/api/public/leagues/" + leagueId + "/players", { cache: "no-store" })
-      .then(r => r.json())
-      .then(d => { all = d.players || []; render(""); document.getElementById("count").textContent = (d.playerCount || 0) + " public profiles · full stats, no PRO lock"; });
-    document.getElementById("q").oninput = e => render(e.target.value);
-    function render(q) {
-      const s = (q || "").trim().toLowerCase();
-      const rows = all.filter(p => !s || (p.fullName + " " + (p.nickName||"") + " " + (p.teamName||"")).toLowerCase().includes(s));
-      document.getElementById("grid").innerHTML = rows.map(p => {
-        const img = p.hasPhoto ? "<img src='" + esc(p.photoUrl) + "' alt=''/>" : "<img alt=''/>";
-        const nick = p.nickName ? "<div class='meta'>“" + esc(p.nickName) + "”</div>" : "";
-        return "<a class='card' href='" + esc(p.profileUrl) + "'>" + img + "<div><div class='name'>" + esc(p.fullName) + "</div>" + nick + "<div class='meta'>" + esc(p.playingRole || p.teamName || "Player") + "</div><div class='meta'>" + esc(p.headline) + "</div></div></a>";
+
+    function rankChips(p) {
+      const chips = [];
+      if (p.batRank) chips.push(`<span class="chip gold">#${p.batRank} Bat</span>`);
+      if (p.bowlRank) chips.push(`<span class="chip gold">#${p.bowlRank} Bowl</span>`);
+      if (p.allRounderRank) chips.push(`<span class="chip gold">#${p.allRounderRank} AR</span>`);
+      if (p.fieldRank) chips.push(`<span class="chip">#${p.fieldRank} Field</span>`);
+      if (p.captainRank) chips.push(`<span class="chip">#${p.captainRank} Cap</span>`);
+      if (p.potm > 0) chips.push(`<span class="chip gold">${p.potm}× POTM</span>`);
+      if (p.hatTricks > 0) chips.push(`<span class="chip gold">${p.hatTricks} Hat</span>`);
+      return chips.join("");
+    }
+
+    function boardHtml(rows) {
+      if (!rows || !rows.length) return `<p class="empty">No rankings yet.</p>`;
+      return rows.map(r => {
+        const pct = Math.round(Math.max(0, Math.min(1, num(r.barRatio))) * 100);
+        const color = r.barColor || "#F5B400";
+        return `
+        <a class="row" href="${esc(r.profileUrl)}">
+          <div class="rk${r.rank <= 3 ? " top" : ""}">${esc(r.rank)}</div>
+          <div>
+            <div class="pn">${esc(r.playerName)}</div>
+            <div class="bar-track"><i data-w="${pct}" style="background:linear-gradient(90deg, ${esc(color)}, ${esc(color)}cc)"></i></div>
+            <div class="pd">${esc(r.detail || r.secondary || "")}</div>
+          </div>
+          <div>
+            <div class="pv">${esc(r.pts || r.primary || "—")}</div>
+            <div class="ps">${esc(r.secondary || "Pts")}</div>
+          </div>
+        </a>`;
       }).join("");
     }
+
+    function animateBars() {
+      document.querySelectorAll(".bar-track > i").forEach(el => {
+        el.style.width = Math.max(0, Math.min(100, num(el.getAttribute("data-w")))) + "%";
+      });
+    }
+
+    function setupBoards(d) {
+      const tabs = [
+        ["bat", "Batting", d.topBatting],
+        ["bowl", "Bowling", d.topBowling],
+        ["ar", "All-rounder", d.topAllRounder],
+        ["field", "Fielding", d.topFielding],
+        ["cap", "Captain", d.topCaptain]
+      ];
+      document.getElementById("rankTabs").innerHTML = tabs.map((t, i) =>
+        `<button class="tab${i === 0 ? " active" : ""}" data-b="${t[0]}">${t[1]}</button>`
+      ).join("");
+      document.getElementById("boards").innerHTML = tabs.map((t, i) =>
+        `<div class="board${i === 0 ? " active" : ""}" id="board-${t[0]}">${boardHtml(t[2])}</div>`
+      ).join("");
+      document.querySelectorAll("#rankTabs .tab").forEach(btn => {
+        btn.onclick = () => {
+          document.querySelectorAll("#rankTabs .tab").forEach(x => x.classList.remove("active"));
+          document.querySelectorAll(".board").forEach(x => x.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById("board-" + btn.dataset.b).classList.add("active");
+          requestAnimationFrame(animateBars);
+        };
+      });
+      requestAnimationFrame(animateBars);
+    }
+
+    function sortValue(p, key) {
+      if (key === "name") return p.fullName.toLowerCase();
+      if (key === "sr") return p.ballsFaced > 0 ? (p.runs * 100 / p.ballsFaced) : -1;
+      if (key === "avg") return p.dismissals > 0 ? p.runs / p.dismissals : (p.runs || -1);
+      if (key === "econ") {
+        if (!p.oversBowledBalls) return 9999;
+        return p.runsConceded * 6 / p.oversBowledBalls;
+      }
+      return num(p[key]);
+    }
+
+    function render() {
+      const q = (document.getElementById("q").value || "").trim().toLowerCase();
+      const sort = document.getElementById("sort").value;
+      const filter = document.getElementById("filter").value;
+      let rows = all.filter(p => {
+        if (filter === "bat" && !p.batRank) return false;
+        if (filter === "bowl" && !p.bowlRank) return false;
+        if (filter === "ar" && !p.allRounderRank) return false;
+        if (filter === "field" && !p.fieldRank) return false;
+        if (filter === "cap" && !p.captainRank) return false;
+        if (!q) return true;
+        return (p.fullName + " " + (p.nickName || "") + " " + (p.teamName || "")).toLowerCase().includes(q);
+      });
+      rows.sort((a, b) => {
+        if (sort === "name") return String(a.fullName).localeCompare(String(b.fullName));
+        if (sort === "econ") return sortValue(a, sort) - sortValue(b, sort);
+        return sortValue(b, sort) - sortValue(a, sort);
+      });
+      document.getElementById("count").textContent = `${rows.length} shown`;
+      document.getElementById("grid").innerHTML = rows.map(p => {
+        const img = p.hasPhoto
+          ? `<img class="photo" src="${esc(p.photoUrl)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=ph>${esc(initials(p.fullName))}</div>'"/>`
+          : `<div class="ph">${esc(initials(p.fullName))}</div>`;
+        const nick = p.nickName ? `<div class="meta">“${esc(p.nickName)}”</div>` : "";
+        const record = `${p.won || 0}-${p.loss || 0}-${p.tied || 0}`;
+        return `<a class="card" href="${esc(p.profileUrl)}">
+          ${img}
+          <div>
+            <div class="name">${esc(p.fullName)}</div>
+            ${nick}
+            <div class="meta">${esc(p.teamName || p.playingRole || "Player")} · ${esc(p.matches || 0)} matches · ${esc(record)}</div>
+            <div class="badges">${rankChips(p)}</div>
+          </div>
+          <div class="stats">
+            <div class="stat"><b>${esc(p.runs ?? 0)}</b><span>Runs</span></div>
+            <div class="stat"><b>${esc(dash(p.highestScoreText))}</b><span>HS</span></div>
+            <div class="stat"><b>${esc(dash(p.avgText))}</b><span>Avg</span></div>
+            <div class="stat"><b>${esc(dash(p.srText))}</b><span>SR</span></div>
+            <div class="stat"><b>${esc(p.wickets ?? 0)}</b><span>Wkts</span></div>
+            <div class="stat"><b>${esc(dash(p.bestBowlingText))}</b><span>Best</span></div>
+            <div class="stat"><b>${esc(dash(p.econText))}</b><span>Econ</span></div>
+            <div class="stat"><b>${esc(dash(p.bowlAvgText))}</b><span>B.Avg</span></div>
+            <div class="stat"><b>${esc((p.fours || 0) + "/" + (p.sixes || 0))}</b><span>4s/6s</span></div>
+            <div class="stat"><b>${esc(p.fieldTotal ?? 0)}</b><span>Field</span></div>
+            <div class="stat"><b>${esc((p.fifties || 0) + "/" + (p.hundreds || 0))}</b><span>50/100</span></div>
+            <div class="stat"><b>${esc(p.maidens ?? 0)}</b><span>Mdn</span></div>
+          </div>
+        </a>`;
+      }).join("") || `<p class="empty">No players match this search.</p>`;
+    }
+
+    fetch("/api/public/leagues/" + leagueId + "/players", { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => {
+        data = d;
+        all = d.players || [];
+        document.getElementById("kpi").innerHTML = `
+          <div class="cell"><b>${esc(d.playerCount || all.length)}</b><span>Players</span></div>
+          <div class="cell"><b>${esc(d.completedMatches ?? "—")}</b><span>Matches</span></div>
+          <div class="cell"><b>${esc(d.totalRuns ?? "—")}</b><span>Runs</span></div>
+          <div class="cell"><b>${esc(d.totalWickets ?? "—")}</b><span>Wickets</span></div>`;
+        setupBoards(d);
+        render();
+      })
+      .catch(() => {
+        document.getElementById("grid").innerHTML = `<p class="empty">Directory unavailable.</p>`;
+      });
+
+    document.getElementById("q").oninput = render;
+    document.getElementById("sort").onchange = render;
+    document.getElementById("filter").onchange = render;
   </script>
 </body>
 </html>

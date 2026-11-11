@@ -53,6 +53,7 @@
                             <Label Text="LIVE"
                                    FontSize="9"
                                    FontAttributes="Bold"
+                                   CharacterSpacing="1"
                                    TextColor="White" />
                         </Border>
                     </Grid>
@@ -141,56 +142,69 @@
                         </VerticalStackLayout>
                     </Grid>
 
-                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
-                        <VerticalStackLayout Spacing="0">
-                            <Label Text="BATTER"
-                                   FontSize="8"
-                                   FontAttributes="Bold"
-                                   TextColor="#8A9BB0" />
-                            <Label Text="{Binding CurrentBatter}"
-                                   FontSize="11"
-                                   FontAttributes="Bold"
-                                   TextColor="White"
-                                   LineBreakMode="TailTruncation"
-                                   MaxLines="1" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="1" Spacing="0">
-                            <Label Text="BOWLER"
-                                   FontSize="8"
-                                   FontAttributes="Bold"
-                                   TextColor="#8A9BB0" />
-                            <Label Text="{Binding CurrentBowler}"
-                                   FontSize="11"
-                                   FontAttributes="Bold"
-                                   TextColor="White"
-                                   LineBreakMode="TailTruncation"
-                                   MaxLines="1" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="2" Spacing="0">
-                            <Label Text="OVER"
-                                   FontSize="8"
-                                   FontAttributes="Bold"
-                                   TextColor="#8A9BB0" />
-                            <Label Text="{Binding CurrentOver}"
-                                   FontSize="13"
-                                   FontAttributes="Bold"
-                                   LineBreakMode="NoWrap"
-                                   FontAutoScalingEnabled="False"
-                                   TextColor="{StaticResource Secondary}" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="3" Spacing="0">
-                            <Label Text="TOTAL"
-                                   FontSize="8"
-                                   FontAttributes="Bold"
-                                   TextColor="#8A9BB0" />
-                            <Label Text="{Binding TotalOvers}"
-                                   FontSize="13"
-                                   FontAttributes="Bold"
-                                   LineBreakMode="NoWrap"
-                                   FontAutoScalingEnabled="False"
-                                   TextColor="{StaticResource Secondary}" />
-                        </VerticalStackLayout>
-                    </Grid>
+                    <Border StrokeThickness="0"
+                            BackgroundColor="#1B2B40"
+                            Padding="10,8"
+                            StrokeShape="RoundRectangle 10">
+                        <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="10">
+                            <VerticalStackLayout Spacing="1">
+                                <Label Text="BATTER"
+                                       FontSize="8"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1"
+                                       TextColor="#8A9BB0" />
+                                <Label Text="{Binding CurrentBatter}"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       LineBreakMode="TailTruncation"
+                                       MaxLines="1" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="1">
+                                <Label Text="BOWLER"
+                                       FontSize="8"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1"
+                                       TextColor="#8A9BB0" />
+                                <Label Text="{Binding CurrentBowler}"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       LineBreakMode="TailTruncation"
+                                       MaxLines="1" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="2" Spacing="1">
+                                <Label Text="OVER"
+                                       FontSize="8"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1"
+                                       HorizontalTextAlignment="End"
+                                       TextColor="#8A9BB0" />
+                                <Label Text="{Binding CurrentOver}"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       LineBreakMode="NoWrap"
+                                       HorizontalTextAlignment="End"
+                                       FontAutoScalingEnabled="False"
+                                       TextColor="{StaticResource Secondary}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="3" Spacing="1">
+                                <Label Text="OF"
+                                       FontSize="8"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1"
+                                       HorizontalTextAlignment="End"
+                                       TextColor="#8A9BB0" />
+                                <Label Text="{Binding TotalOvers}"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       LineBreakMode="NoWrap"
+                                       HorizontalTextAlignment="End"
+                                       FontAutoScalingEnabled="False"
+                                       TextColor="{StaticResource Secondary}" />
+                            </VerticalStackLayout>
+                        </Grid>
+                    </Border>
 
                     <Border StrokeThickness="0"
                             BackgroundColor="#243447"
@@ -253,7 +267,7 @@
                                 HeightRequest="22"
                                 StrokeShape="RoundRectangle 11"
                                 VerticalOptions="Center">
-                            <Label Text="â˜…"
+                            <Label Text="★"
                                    FontSize="11"
                                    HorizontalOptions="Center"
                                    VerticalOptions="Center"
@@ -268,29 +282,49 @@
                                LineBreakMode="TailTruncation" />
                     </Grid>
 
-                    <Label Text="{Binding ScorecardTapHint}"
-                           FontSize="9"
-                           HorizontalTextAlignment="Center"
-                           TextColor="{StaticResource Secondary}" />
+                    <Border StrokeThickness="0"
+                            BackgroundColor="#243447"
+                            Padding="10,3"
+                            StrokeShape="RoundRectangle 9"
+                            HorizontalOptions="Center">
+                        <Label Text="{Binding ScorecardTapHint}"
+                               FontSize="9"
+                               FontAttributes="Bold"
+                               CharacterSpacing="0.5"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{StaticResource Secondary}" />
+                    </Border>
                 </VerticalStackLayout>
             </Border>
 
-            <Button Text="Analytics"
-                    Style="{StaticResource GoldButton}"
-                    Padding="8,10"
-                    FontSize="16"
-                    FontAttributes="Bold"
-                    HorizontalOptions="Fill"
-                    Command="{Binding OpenAnalyticsCommand}"
-                    IsVisible="{Binding ShowAnalyticsButton}" />
-            <Button Text="Live"
-                    Style="{StaticResource GoldButton}"
-                    Padding="8,10"
-                    FontSize="16"
-                    FontAttributes="Bold"
-                    HorizontalOptions="Fill"
-                    Command="{Binding OpenLiveStreamCommand}"
-                    IsVisible="{Binding ShowLiveButton}" />
+            <!-- Scorecard sits next to Analytics so the full card is always one tap away -->
+            <Grid ColumnDefinitions="*,*,Auto"
+                  ColumnSpacing="8"
+                  IsVisible="{Binding ShowAnalyticsButton}">
+                <Button Text="Scorecard"
+                        Style="{StaticResource GoldButton}"
+                        Padding="8,10"
+                        FontSize="15"
+                        FontAttributes="Bold"
+                        HorizontalOptions="Fill"
+                        Command="{Binding OpenDetailScorecardCommand}" />
+                <Button Grid.Column="1"
+                        Text="Analytics"
+                        Style="{StaticResource OutlineButton}"
+                        Padding="8,10"
+                        FontSize="15"
+                        FontAttributes="Bold"
+                        HorizontalOptions="Fill"
+                        Command="{Binding OpenAnalyticsCommand}" />
+                <Button Grid.Column="2"
+                        Text="Live"
+                        Style="{StaticResource DangerButton}"
+                        Padding="14,10"
+                        FontSize="15"
+                        FontAttributes="Bold"
+                        Command="{Binding OpenLiveStreamCommand}"
+                        IsVisible="{Binding ShowLiveButton}" />
+            </Grid>
         </VerticalStackLayout>
 
         <RefreshView Grid.Row="1" VerticalOptions="Fill"
@@ -307,7 +341,7 @@
                             IsVisible="{Binding ShowPlaceholder}"
                             Padding="20">
                         <VerticalStackLayout Spacing="6" HorizontalOptions="Center">
-                            <Label Text="Loading scorecardâ€¦"
+                            <Label Text="Loading scorecard…"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource MutedLabel}"
                                    IsVisible="{Binding IsBusy}" />
@@ -320,8 +354,8 @@
 
                     <VerticalStackLayout Spacing="12" IsVisible="{Binding HasScorecard}">
 
-                        <Button Text="â† Back to scorecard"
-                                Style="{StaticResource GoldButton}"
+                        <Button Text="← Back to summary"
+                                Style="{StaticResource OutlineButton}"
                                 Padding="12,10"
                                 FontSize="14"
                                 HorizontalOptions="Fill"
@@ -422,9 +456,10 @@
                             </VerticalStackLayout>
                         </Border>
 
-                        <!-- Full batting / bowling card â€” tap the main scorecard to open -->
+                        <!-- Full batting / bowling card — opened from the Scorecard button or by tapping the summary -->
                         <ctrl:MatchScorecardInningsView IsVisible="{Binding ShowFullScorecard}"
-                                                        Innings="{Binding Innings}" />
+                                                        Innings="{Binding Innings}"
+                                                        PlayerTappedCommand="{Binding OpenPlayerReportCommand}" />
                     </VerticalStackLayout>
                 </VerticalStackLayout>
             </ScrollView>
@@ -475,7 +510,7 @@
                                 StrokeShape="RoundRectangle 12"
                                 MinimumWidthRequest="120">
                             <HorizontalStackLayout Spacing="6">
-                                <Label Text="â–¶"
+                                <Label Text="▶"
                                        FontSize="12"
                                        TextColor="#7CFF6B"
                                        VerticalOptions="Center" />
@@ -675,7 +710,124 @@
                                            TextColor="{StaticResource Secondary}" />
                                 </VerticalStackLayout>
                             </Grid>
-                            <ctrl:MatchScorecardInningsView Innings="{Binding Innings}" />
+                            <ctrl:MatchScorecardInningsView Innings="{Binding Innings}"
+                                                            PlayerTappedCommand="{Binding OpenPlayerReportCommand}" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid IsVisible="{Binding IsPlayerReportOpen}"
+              InputTransparent="False"
+              ZIndex="70"
+              VerticalOptions="Fill"
+              HorizontalOptions="Fill">
+            <BoxView Color="#CC000000"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ClosePlayerReportCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}"
+                    StrokeShape="RoundRectangle 16"
+                    Margin="10,28,10,12"
+                    Padding="0"
+                    VerticalOptions="Fill">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto" Padding="12,10" BackgroundColor="{StaticResource Primary}">
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="{Binding PlayerReport.PlayerName}"
+                                   FontSize="16"
+                                   FontAttributes="Bold"
+                                   TextColor="White" />
+                            <Label Text="{Binding PlayerReport.TeamName}"
+                                   FontSize="11"
+                                   TextColor="#B8C4D4"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="Close"
+                                Style="{StaticResource GoldButton}"
+                                Padding="14,8"
+                                FontSize="13"
+                                VerticalOptions="Center"
+                                Command="{Binding ClosePlayerReportCommand}" />
+                    </Grid>
+                    <ScrollView Grid.Row="1" Padding="12,10,12,16">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Loading…"
+                                   IsVisible="{Binding IsPlayerReportBusy}"
+                                   Style="{StaticResource MutedLabel}" />
+                            <VerticalStackLayout Spacing="12"
+                                                 IsVisible="{Binding HasPlayerReport}">
+                                <Label Text="{Binding PlayerReport.MatchTitle}"
+                                       FontSize="12"
+                                       Style="{StaticResource MutedLabel}"
+                                       LineBreakMode="WordWrap" />
+
+                                <Label Text="BATTING" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Secondary}" />
+                                <Label Text="{Binding PlayerReport.BattingSummary}" FontSize="13" FontAttributes="Bold" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerReport.BattingBalls}"
+                                                     IsVisible="{Binding PlayerReport.HasBatting}"
+                                                     Spacing="4">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:PlayerMatchBallLine">
+                                            <Grid ColumnDefinitions="48,36,*" ColumnSpacing="8" Padding="0,2">
+                                                <Label Text="{Binding OverText}" FontSize="11" Style="{StaticResource MutedLabel}" VerticalOptions="Center" />
+                                                <Label Grid.Column="1" Text="{Binding Mark}" FontSize="14" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                                                <VerticalStackLayout Grid.Column="2" Spacing="0">
+                                                    <Label Text="{Binding Detail}" FontSize="12" LineBreakMode="TailTruncation" />
+                                                    <Label Text="{Binding InningsLabel}" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <Label Text="BOWLING" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Secondary}" Margin="0,6,0,0" />
+                                <Label Text="{Binding PlayerReport.BowlingSummary}" FontSize="13" FontAttributes="Bold" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerReport.BowlingBalls}"
+                                                     IsVisible="{Binding PlayerReport.HasBowling}"
+                                                     Spacing="4">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:PlayerMatchBallLine">
+                                            <Grid ColumnDefinitions="48,36,*" ColumnSpacing="8" Padding="0,2">
+                                                <Label Text="{Binding OverText}" FontSize="11" Style="{StaticResource MutedLabel}" VerticalOptions="Center" />
+                                                <Label Grid.Column="1" Text="{Binding Mark}" FontSize="14" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                                                <VerticalStackLayout Grid.Column="2" Spacing="0">
+                                                    <Label Text="{Binding Detail}" FontSize="12" LineBreakMode="TailTruncation" />
+                                                    <Label Text="{Binding InningsLabel}" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <Label Text="FIELDING" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Secondary}" Margin="0,6,0,0" />
+                                <Label Text="{Binding PlayerReport.FieldingSummary}" FontSize="13" FontAttributes="Bold" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerReport.FieldingBalls}"
+                                                     IsVisible="{Binding PlayerReport.HasFielding}"
+                                                     Spacing="4">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:PlayerMatchBallLine">
+                                            <Grid ColumnDefinitions="48,36,*" ColumnSpacing="8" Padding="0,2">
+                                                <Label Text="{Binding OverText}" FontSize="11" Style="{StaticResource MutedLabel}" VerticalOptions="Center" />
+                                                <Label Grid.Column="1" Text="{Binding Mark}" FontSize="14" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                                                <VerticalStackLayout Grid.Column="2" Spacing="0">
+                                                    <Label Text="{Binding Detail}" FontSize="12" LineBreakMode="TailTruncation" />
+                                                    <Label Text="{Binding InningsLabel}" FontSize="10" Style="{StaticResource MutedLabel}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
                         </VerticalStackLayout>
                     </ScrollView>
                 </Grid>

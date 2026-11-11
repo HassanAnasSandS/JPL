@@ -644,7 +644,8 @@ public sealed class AuthService : IAuthService
             if (!Preferences.Default.ContainsKey(AppWorkspaceStore.Key))
                 return null;
             var raw = Preferences.Default.Get(AppWorkspaceStore.Key, -1);
-            return Enum.IsDefined(typeof(AppWorkspace), raw) ? raw : null;
+            var parsed = AppWorkspaceStore.FromStored(raw);
+            return (int)parsed == raw ? raw : null;
         }
         catch
         {
@@ -682,7 +683,7 @@ public sealed class AuthService : IAuthService
         else
             _league.Restore();
         ApplyModuleGates();
-        if (disk.Workspace is int workspace && Enum.IsDefined(typeof(AppWorkspace), workspace))
+        if (disk.Workspace is int workspace && (int)AppWorkspaceStore.FromStored(workspace) == workspace)
         {
             Preferences.Default.Set(AppWorkspaceStore.Key, workspace);
             SessionDisk.FlushPlatformPrefs();

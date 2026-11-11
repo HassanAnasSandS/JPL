@@ -49,6 +49,8 @@ public sealed class NetDelivery
     public WicketType WicketType { get; set; } = WicketType.None;
     public Guid? DismissedPlayerId { get; set; }
     public Guid? FielderId { get; set; }
+    /// <summary>Fielder dropped a catch on this ball (not a wicket; requires <see cref="FielderId"/>).</summary>
+    public bool IsDroppedCatch { get; set; }
 
     public bool IsLegalDelivery { get; set; } = true;
 

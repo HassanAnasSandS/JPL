@@ -104,7 +104,7 @@ public static class RankingsBuilder
                 PrimaryValue = FieldPts(p).ToString("0"),
                 SecondaryLabel = "Ct",
                 SecondaryValue = p.Catches.ToString(),
-                Detail = $"Ct {p.Catches} · RO {p.RunOutsEffected} · St {p.Stumpings} · Total {FieldActions(p)}",
+                Detail = $"Ct {p.Catches} · RO {p.RunOutsEffected} · St {p.Stumpings} · Drop {p.DroppedCatches} · Total {FieldActions(p)}",
                 Breakdown = RankingExplain.Fielding(p)
             })
             .ToList();

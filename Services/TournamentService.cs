@@ -22,6 +22,11 @@ public sealed class TournamentDetail
     public string Name { get; init; } = string.Empty;
     public int GroupCount { get; init; }
     public int QualifyPerGroup { get; init; }
+    public TournamentKnockoutFormat KnockoutFormat { get; init; }
+    public TournamentRoundRobinType RoundRobinType { get; init; }
+    public int MatchesPerTeam { get; init; }
+    public string? CustomPairsJson { get; init; }
+    public bool CustomFixturesReady { get; init; } = true;
     public Guid VenueId { get; init; }
     public string VenueName { get; init; } = string.Empty;
     public Guid? FormatId { get; init; }
@@ -35,6 +40,14 @@ public sealed class TournamentDetail
     public string StatusText { get; set; } = string.Empty;
     public Guid? WinnerTeamId { get; set; }
     public string? WinnerTeamName { get; set; }
+    public Guid? PlayerOfTheTournamentPlayerId { get; set; }
+    public string? PlayerOfTheTournamentName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
     public IReadOnlyList<TournamentTeamItem> Teams { get; init; } = Array.Empty<TournamentTeamItem>();
     public IReadOnlyList<TournamentFixtureItem> Fixtures { get; init; } = Array.Empty<TournamentFixtureItem>();
     public IReadOnlyList<TournamentStandingItem> Standings { get; set; } = Array.Empty<TournamentStandingItem>();
@@ -53,6 +66,7 @@ public sealed class TournamentFixtureItem
     public string Label { get; init; } = string.Empty;
     public string StageText { get; init; } = string.Empty;
     public int? GroupNumber { get; init; }
+    public int Sequence { get; init; }
     public Guid? TeamAId { get; set; }
     public Guid? TeamBId { get; set; }
     public string TeamAName { get; set; } = string.Empty;
@@ -85,6 +99,10 @@ public sealed class TournamentStandingItem
     public double NetRunRate { get; init; }
     public string NrrText => NetRunRate.ToString("+0.000;-0.000;0.000");
     public string RecordLine => $"P{Played} W{Won} L{Lost} T{Tied}";
+    /// <summary>"Q" qualified, "E" eliminated, empty = still undecided.</summary>
+    public string QualMark { get; set; } = string.Empty;
+    public bool IsQualified => QualMark == "Q";
+    public bool IsEliminated => QualMark == "E";
 }
 
 public sealed record TournamentDraft(
@@ -98,7 +116,11 @@ public sealed record TournamentDraft(
     int BowlerMaxOvers,
     OversMode OversMode,
     IReadOnlyList<(Guid TeamId, int GroupNumber)> Teams,
-    Guid? FormatId = null);
+    Guid? FormatId = null,
+    TournamentRoundRobinType RoundRobinType = TournamentRoundRobinType.Single,
+    int MatchesPerTeam = 0,
+    string? CustomPairsJson = null,
+    TournamentKnockoutFormat KnockoutFormat = TournamentKnockoutFormat.SemiFinals);
 
 public interface ITournamentService
 {
@@ -211,7 +233,9 @@ public sealed class TournamentService : ITournamentService
     {
         _auth.EnsureCanWrite();
         var remote = await _api.GenerateTournamentAsync(id, ct).ConfigureAwait(false);
-        return ToDetail(remote);
+        var detail = ToDetail(remote);
+        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
+        return detail;
     }
 
     public Task LinkMatchAsync(Guid tournamentId, Guid fixtureId, Guid matchId, CancellationToken ct = default)
@@ -289,10 +313,21 @@ public sealed class TournamentService : ITournamentService
     {
         if (string.IsNullOrWhiteSpace(draft.Name))
             throw new ArgumentException("Tournament name is required.");
-        if (draft.GroupCount is < 1 or > 2)
-            throw new ArgumentException("Groups must be 1 or 2.");
-        if (draft.QualifyPerGroup is < 1 or > 2)
-            throw new ArgumentException("Qualify per group must be 1 or 2.");
+        var groupCount = draft.RoundRobinType == TournamentRoundRobinType.Custom ? 1 : draft.GroupCount;
+        if (draft.RoundRobinType == TournamentRoundRobinType.Custom)
+        {
+            if (groupCount != 1)
+                throw new ArgumentException("Custom type allows only 1 group.");
+        }
+        else if (groupCount is not (1 or 2 or 4))
+            throw new ArgumentException("Groups must be 1, 2, or 4.");
+
+        var ko = (SchedulerKnockoutFormat)(byte)draft.KnockoutFormat;
+        var qualifyOpts = SchedulerEngine.QualifyOptions(groupCount, ko);
+        if (qualifyOpts.Count == 0 || !qualifyOpts.Contains(draft.QualifyPerGroup))
+            throw new ArgumentException(
+                $"{SchedulerEngine.KnockoutLabel(ko)} does not fit {groupCount} group{(groupCount == 1 ? "" : "s")}.");
+
         if (draft.VenueId == Guid.Empty)
             throw new ArgumentException("Venue is required.");
         if (draft.Format is not (0 or 1))
@@ -300,87 +335,127 @@ public sealed class TournamentService : ITournamentService
         OversRules.Validate(draft.OversMode, draft.OversLimit, draft.BowlerMaxOvers);
         if (draft.Teams.Count == 0)
             throw new ArgumentException("Add at least one team.");
-        for (var g = 1; g <= draft.GroupCount; g++)
+        for (var g = 1; g <= groupCount; g++)
         {
             var n = draft.Teams.Count(t => t.GroupNumber == g);
-            if (n < draft.QualifyPerGroup)
-                throw new ArgumentException($"Group {g} needs at least {draft.QualifyPerGroup} team(s).");
+            var min = draft.KnockoutFormat == TournamentKnockoutFormat.None ? 2 : Math.Max(2, draft.QualifyPerGroup);
+            if (n < min)
+                throw new ArgumentException($"Group {g} needs at least {min} team(s).");
+        }
+
+        if (draft.KnockoutFormat != TournamentKnockoutFormat.None)
+        {
+            var need = SchedulerEngine.KnockoutTeamCount(ko);
+            if (draft.Teams.Count < need)
+                throw new ArgumentException($"{SchedulerEngine.KnockoutLabel(ko)} needs {need} teams.");
         }
     }
 
-    private static object ToBody(TournamentDraft draft) => new
+    private static object ToBody(TournamentDraft draft)
     {
-        name = draft.Name.Trim(),
-        groupCount = draft.GroupCount,
-        qualifyPerGroup = draft.QualifyPerGroup,
-        venueId = draft.VenueId,
-        formatId = draft.FormatId,
-        format = draft.Format,
-        oversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
-        oversMode = (byte)draft.OversMode,
-        lastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket,
-        bowlerMaxOvers = draft.BowlerMaxOvers,
-        teams = draft.Teams.Select(t => new { teamId = t.TeamId, groupNumber = t.GroupNumber }).ToList()
-    };
+        var isCustom = draft.RoundRobinType == TournamentRoundRobinType.Custom;
+        var groupCount = isCustom ? 1 : draft.GroupCount;
+        return new
+        {
+            name = draft.Name.Trim(),
+            groupCount,
+            qualifyPerGroup = draft.QualifyPerGroup,
+            knockoutFormat = (byte)draft.KnockoutFormat,
+            roundRobinType = (byte)draft.RoundRobinType,
+            matchesPerTeam = isCustom ? draft.MatchesPerTeam : 0,
+            customPairsJson = isCustom ? draft.CustomPairsJson : null,
+            venueId = draft.VenueId,
+            formatId = draft.FormatId,
+            format = draft.Format,
+            oversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
+            oversMode = (byte)draft.OversMode,
+            lastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket,
+            bowlerMaxOvers = draft.BowlerMaxOvers,
+            teams = draft.Teams.Select(t => new
+            {
+                teamId = t.TeamId,
+                groupNumber = isCustom ? 1 : t.GroupNumber
+            }).ToList()
+        };
+    }
 
-    private static TournamentDetail ToDetail(ApiTournamentDetailDto dto) => new()
+    private static TournamentDetail ToDetail(ApiTournamentDetailDto dto)
     {
-        Id = dto.Id,
-        Name = dto.Name,
-        GroupCount = dto.GroupCount,
-        QualifyPerGroup = dto.QualifyPerGroup,
-        VenueId = dto.VenueId,
-        VenueName = dto.VenueName,
-        FormatId = dto.FormatId,
-        Format = dto.Format,
-        FormatText = string.IsNullOrWhiteSpace(dto.FormatText)
-            ? (dto.Format == 1 ? "Double innings" : "Single inning")
-            : dto.FormatText,
-        OversLimit = dto.OversLimit,
-        OversMode = (OversMode)dto.OversMode,
-        LastBatsmanCanBatAsSingleWicket = dto.LastBatsmanCanBatAsSingleWicket,
-        BowlerMaxOvers = dto.BowlerMaxOvers,
-        Status = dto.Status,
-        StatusText = dto.StatusText,
-        WinnerTeamId = dto.WinnerTeamId,
-        WinnerTeamName = dto.WinnerTeamName,
-        Teams = dto.Teams.Select(t => new TournamentTeamItem
+        var detail = new TournamentDetail
         {
-            TeamId = t.TeamId,
-            TeamName = t.TeamName,
-            GroupNumber = t.GroupNumber
-        }).ToList(),
-        Fixtures = dto.Fixtures.Select(f => new TournamentFixtureItem
-        {
-            Id = f.Id,
-            Label = f.Label,
-            StageText = f.StageText,
-            GroupNumber = f.GroupNumber,
-            TeamAId = f.TeamAId,
-            TeamBId = f.TeamBId,
-            TeamAName = f.TeamAName,
-            TeamBName = f.TeamBName,
-            MatchId = f.MatchId,
-            MatchStatusText = f.MatchStatusText,
-            ResultText = f.ResultText ?? string.Empty,
-            CanStart = f.CanStart,
-            CanResume = false,
-            CanOpenScorecard = f.MatchId is Guid
-        }).ToList(),
-        Standings = dto.Standings.Select(s => new TournamentStandingItem
-        {
-            GroupNumber = s.GroupNumber,
-            TeamId = s.TeamId,
-            TeamName = s.TeamName,
-            Rank = s.Rank,
-            Played = s.Played,
-            Won = s.Won,
-            Lost = s.Lost,
-            Tied = s.Tied,
-            Points = s.Points,
-            NetRunRate = s.NetRunRate
-        }).ToList()
-    };
+            Id = dto.Id,
+            Name = dto.Name,
+            GroupCount = dto.GroupCount,
+            QualifyPerGroup = dto.QualifyPerGroup,
+            KnockoutFormat = (TournamentKnockoutFormat)dto.KnockoutFormat,
+            RoundRobinType = (TournamentRoundRobinType)dto.RoundRobinType,
+            MatchesPerTeam = dto.MatchesPerTeam,
+            CustomPairsJson = dto.CustomPairsJson,
+            CustomFixturesReady = dto.RoundRobinType != (byte)TournamentRoundRobinType.Custom || dto.CustomFixturesReady,
+            VenueId = dto.VenueId,
+            VenueName = dto.VenueName,
+            FormatId = dto.FormatId,
+            Format = dto.Format,
+            FormatText = string.IsNullOrWhiteSpace(dto.FormatText)
+                ? (dto.Format == 1 ? "Double innings" : "Single inning")
+                : dto.FormatText,
+            OversLimit = dto.OversLimit,
+            OversMode = (OversMode)dto.OversMode,
+            LastBatsmanCanBatAsSingleWicket = dto.LastBatsmanCanBatAsSingleWicket,
+            BowlerMaxOvers = dto.BowlerMaxOvers,
+            Status = dto.Status,
+            StatusText = dto.StatusText,
+            WinnerTeamId = dto.WinnerTeamId,
+            WinnerTeamName = dto.WinnerTeamName,
+            PlayerOfTheTournamentPlayerId = dto.PlayerOfTheTournamentPlayerId,
+            PlayerOfTheTournamentName = dto.PlayerOfTheTournamentName,
+            BestBatsmanPlayerId = dto.BestBatsmanPlayerId,
+            BestBatsmanName = dto.BestBatsmanName,
+            BestBowlerPlayerId = dto.BestBowlerPlayerId,
+            BestBowlerName = dto.BestBowlerName,
+            BestFielderPlayerId = dto.BestFielderPlayerId,
+            BestFielderName = dto.BestFielderName,
+            Teams = dto.Teams.Select(t => new TournamentTeamItem
+            {
+                TeamId = t.TeamId,
+                TeamName = t.TeamName,
+                GroupNumber = t.GroupNumber
+            }).ToList(),
+            Fixtures = dto.Fixtures.Select(f => new TournamentFixtureItem
+            {
+                Id = f.Id,
+                Label = f.Label,
+                StageText = f.StageText,
+                GroupNumber = f.GroupNumber,
+                Sequence = f.Sequence,
+                TeamAId = f.TeamAId,
+                TeamBId = f.TeamBId,
+                TeamAName = f.TeamAName,
+                TeamBName = f.TeamBName,
+                MatchId = f.MatchId,
+                MatchStatusText = f.MatchStatusText,
+                ResultText = f.ResultText ?? string.Empty,
+                CanStart = f.CanStart,
+                CanResume = false,
+                CanOpenScorecard = f.MatchId is Guid
+            }).ToList(),
+            Standings = dto.Standings.Select(s => new TournamentStandingItem
+            {
+                GroupNumber = s.GroupNumber,
+                TeamId = s.TeamId,
+                TeamName = s.TeamName,
+                Rank = s.Rank,
+                Played = s.Played,
+                Won = s.Won,
+                Lost = s.Lost,
+                Tied = s.Tied,
+                Points = s.Points,
+                NetRunRate = s.NetRunRate
+            }).ToList()
+        };
+        ApplyQualificationMarks(detail);
+        return detail;
+    }
 
     /// <summary>
     /// Tournament matches stay on-device until tournament Sync — overlay local status so
@@ -507,9 +582,9 @@ public sealed class TournamentService : ITournamentService
                 local = byFix;
 
             var teamsReady = f.TeamAId is Guid && f.TeamBId is Guid;
+            // Start stays visible even if another match is active; StartFixtureAsync gates that.
             f.CanStart = teamsReady && f.MatchId is null && !draftOrLocked
-                         && detail.Status is not 0 and not 3
-                         && leagueActiveId is null;
+                         && detail.Status is not 0 and not 3;
             f.CanResume = local is not null
                           && (local.Status is MatchStatus.Setup or MatchStatus.InProgress)
                           && !draftOrLocked
@@ -519,7 +594,51 @@ public sealed class TournamentService : ITournamentService
             if (f.CanResume || f.CanOpenScorecard)
                 f.CanStart = false;
         }
+
+        ApplyQualificationMarks(detail);
     }
+
+    /// <summary>
+    /// Knockout fixtures (QF / Playoff / SF / Final) must never feed the points table.
+    /// Detect by StageText and Label — Custom RR uses Label "Custom" with StageText "Group".
+    /// </summary>
+    private static bool IsKnockoutFixture(TournamentFixtureItem f)
+    {
+        var stage = f.StageText ?? string.Empty;
+        var label = f.Label ?? string.Empty;
+        return stage.Contains("Semi", StringComparison.OrdinalIgnoreCase)
+               || stage.Contains("Quarter", StringComparison.OrdinalIgnoreCase)
+               || stage.Contains("Playoff", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(stage, "Final", StringComparison.OrdinalIgnoreCase)
+               || label.Contains("Semi", StringComparison.OrdinalIgnoreCase)
+               || label.Contains("Quarter", StringComparison.OrdinalIgnoreCase)
+               || label.Contains("Playoff", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(label, "Final", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Group / Custom round-robin fixtures only (points table + qualification).</summary>
+    private static bool IsGroupStageFixture(TournamentFixtureItem f)
+    {
+        if (IsKnockoutFixture(f))
+            return false;
+
+        var stage = f.StageText ?? string.Empty;
+        var label = f.Label ?? string.Empty;
+        if (string.Equals(stage, "Group", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(label, "Custom", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (label.Contains("Round robin", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (label.StartsWith("Group ", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Last resort: numbered group slot that is not a knockout.
+        return f.GroupNumber is > 0;
+    }
+
+    private static List<TournamentFixtureItem> GroupStageFixtures(TournamentDetail detail)
+        => detail.Fixtures.Where(IsGroupStageFixture).ToList();
 
     private static void ApplyLocalStandings(
         TournamentDetail detail,
@@ -527,19 +646,24 @@ public sealed class TournamentService : ITournamentService
         Dictionary<Guid, List<Innings>> innsByMatch,
         Dictionary<Guid, List<(int RunsOffBat, int ExtraRuns, bool IsWicket, bool IsLegalDelivery)>> delsByInn)
     {
-        var groupFixtures = detail.Fixtures
-            .Where(f => string.Equals(f.StageText, "Group", StringComparison.OrdinalIgnoreCase)
-                        || f.GroupNumber is int)
-            .Where(f => !f.StageText.Contains("Semi", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(f.StageText, "Final", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(f.Label, "Final", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var groupFixtures = GroupStageFixtures(detail);
 
         // Always rebuild from local group results (API standings stay 0 until tournament Sync).
         if (groupFixtures.Count == 0 && detail.Teams.Count == 0)
             return;
 
         var local = BuildLocalStandings(detail, groupFixtures, matchesById, innsByMatch, delsByInn);
+        var localPlayed = local.Sum(s => s.Played);
+
+        // If this device has no group ball data yet, keep API standings (do not wipe Pts to 0).
+        // Previously any local match rows (even knockout-only / empty innings) zeroed the table.
+        if (localPlayed == 0
+            && detail.Standings.Any(s => s.Played > 0 || s.Points > 0 || Math.Abs(s.NetRunRate) > 0.0005))
+        {
+            ApplyQualificationMarks(detail);
+            return;
+        }
+
         var names = detail.Teams.ToDictionary(t => t.TeamId, t => t.TeamName);
         var rows = new List<TournamentStandingItem>();
         foreach (var g in local.GroupBy(s => s.GroupNumber).OrderBy(x => x.Key))
@@ -564,6 +688,88 @@ public sealed class TournamentService : ITournamentService
         }
 
         detail.Standings = rows;
+        ApplyQualificationMarks(detail);
+    }
+
+    /// <summary>
+    /// Q/E on the points table. After all group matches: Rank ≤ qualify → Q else E.
+    /// During group stage: conservative points envelope only (never guesses on NRR).
+    /// </summary>
+    private static void ApplyQualificationMarks(TournamentDetail detail)
+    {
+        if (detail.Standings.Count == 0 || detail.QualifyPerGroup <= 0)
+            return;
+
+        var groupFixtures = GroupStageFixtures(detail);
+
+        static bool IsFinished(TournamentFixtureItem f)
+            => string.Equals(f.MatchStatusText, "Completed", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(f.MatchStatusText, "Abandoned", StringComparison.OrdinalIgnoreCase);
+
+        foreach (var group in detail.Standings.GroupBy(s => s.GroupNumber))
+        {
+            var rows = group.ToList();
+            var k = Math.Min(detail.QualifyPerGroup, rows.Count);
+            if (k <= 0)
+                continue;
+
+            if (k >= rows.Count)
+            {
+                foreach (var r in rows)
+                    r.QualMark = "Q";
+                continue;
+            }
+
+            var fixturesInGroup = detail.GroupCount <= 1
+                ? groupFixtures
+                : groupFixtures.Where(f => (f.GroupNumber ?? 0) == group.Key).ToList();
+
+            // Don't mark Q/E from a zero table while group matches aren't actually scored into standings.
+            var groupDone = fixturesInGroup.Count > 0
+                            && fixturesInGroup.All(IsFinished)
+                            && rows.Any(r => r.Played > 0);
+            if (groupDone)
+            {
+                // Rank already includes Pts → NRR → RunsFor.
+                foreach (var r in rows)
+                    r.QualMark = r.Rank <= k ? "Q" : "E";
+                continue;
+            }
+
+            if (fixturesInGroup.Count == 0
+                || (!fixturesInGroup.Any(IsFinished) && rows.All(r => r.Played == 0)))
+            {
+                foreach (var r in rows)
+                    r.QualMark = string.Empty;
+                continue;
+            }
+
+            // Mid-group: points envelope only — NRR mid-season is not safe without simulating balls.
+            var temp = rows.Select(r => new SchedulerStandingRow
+            {
+                TeamId = r.TeamId,
+                TeamName = r.TeamName,
+                GroupNumber = r.GroupNumber,
+                Rank = r.Rank,
+                Played = r.Played,
+                Won = r.Won,
+                Lost = r.Lost,
+                Tied = r.Tied,
+                Points = r.Points
+            }).ToList();
+
+            SchedulerEngine.ApplyEnvelopeQualificationMarks(
+                temp,
+                id => fixturesInGroup.Count(f =>
+                    (f.TeamAId == id || f.TeamBId == id) && !IsFinished(f)),
+                k);
+
+            foreach (var r in rows)
+            {
+                var mark = temp.FirstOrDefault(t => t.TeamId == r.TeamId)?.QualMark;
+                r.QualMark = mark ?? string.Empty;
+            }
+        }
     }
 
     private static void ApplyKnockoutTiebreakResultText(TournamentDetail detail)
@@ -628,13 +834,7 @@ public sealed class TournamentService : ITournamentService
         Dictionary<Guid, List<Innings>> innsByMatch,
         Dictionary<Guid, List<(int RunsOffBat, int ExtraRuns, bool IsWicket, bool IsLegalDelivery)>> delsByInn)
     {
-        var groupFixtures = detail.Fixtures
-            .Where(f => string.Equals(f.StageText, "Group", StringComparison.OrdinalIgnoreCase)
-                        || f.GroupNumber is int)
-            .Where(f => !f.StageText.Contains("Semi", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(f.StageText, "Final", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(f.Label, "Final", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var groupFixtures = GroupStageFixtures(detail);
 
         var groupComplete = groupFixtures.Count > 0 && groupFixtures.All(f =>
             f.MatchId is Guid mid
@@ -645,7 +845,21 @@ public sealed class TournamentService : ITournamentService
             return;
 
         var standings = BuildLocalStandings(detail, groupFixtures, matchesById, innsByMatch, delsByInn);
+        if (standings.Sum(s => s.Played) == 0)
+            return; // no local group balls — leave API-assigned KO teams alone
+
         var names = detail.Teams.ToDictionary(t => t.TeamId, t => t.TeamName);
+        // Overall seeds for 1-group Custom / single-pool brackets (SF/QF).
+        var seeds = standings
+            .OrderBy(s => s.GroupNumber)
+            .ThenByDescending(s => s.Points)
+            .ThenByDescending(s => s.Nrr)
+            .ThenByDescending(s => s.RunsFor)
+            .Select(s => s.TeamId)
+            .ToList();
+
+        Guid? Seed(int oneBased)
+            => oneBased >= 1 && oneBased <= seeds.Count ? seeds[oneBased - 1] : null;
 
         Guid? Pick(int group, int rank)
             => standings.Where(s => s.GroupNumber == group).Skip(rank - 1).FirstOrDefault()?.TeamId;
@@ -679,16 +893,52 @@ public sealed class TournamentService : ITournamentService
             return BetterOnLocalTable(match.TeamAId, match.TeamBId, standings);
         }
 
-        foreach (var f in detail.Fixtures)
+        foreach (var f in detail.Fixtures.Where(IsKnockoutFixture))
         {
             var isFinal = string.Equals(f.StageText, "Final", StringComparison.OrdinalIgnoreCase)
                           || string.Equals(f.Label, "Final", StringComparison.OrdinalIgnoreCase);
             var isSemi = f.StageText.Contains("Semi", StringComparison.OrdinalIgnoreCase)
                          || f.Label.Contains("Semi", StringComparison.OrdinalIgnoreCase);
+            var isQuarter = f.StageText.Contains("Quarter", StringComparison.OrdinalIgnoreCase)
+                            || f.Label.Contains("Quarter", StringComparison.OrdinalIgnoreCase);
+            var isPlayoff = f.StageText.Contains("Playoff", StringComparison.OrdinalIgnoreCase)
+                            || f.Label.Contains("Playoff", StringComparison.OrdinalIgnoreCase);
 
-            if (isFinal && detail.GroupCount == 1 && detail.QualifyPerGroup == 2)
-                SetTeams(f, Pick(1, 1), Pick(1, 2));
-            else if (isFinal && detail.GroupCount == 2 && detail.QualifyPerGroup == 1)
+            // 1-group Custom / pool: seed bracket (same as API Seed 1..N).
+            if (detail.GroupCount == 1)
+            {
+                if (isSemi && f.Label.Contains('1'))
+                    SetTeams(f, Seed(1), Seed(4));
+                else if (isSemi)
+                    SetTeams(f, Seed(2), Seed(3));
+                else if (isFinal && detail.QualifyPerGroup == 2)
+                    SetTeams(f, Seed(1), Seed(2));
+                else if (isFinal)
+                {
+                    var semis = detail.Fixtures
+                        .Where(x => x.StageText.Contains("Semi", StringComparison.OrdinalIgnoreCase)
+                                    || x.Label.Contains("Semi", StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(x => x.Label, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    if (semis.Count >= 2)
+                        SetTeams(f, WinnerOf(semis[0]), WinnerOf(semis[1]));
+                }
+                else if (isQuarter && f.Label.Contains('1'))
+                    SetTeams(f, Seed(1), Seed(8));
+                else if (isQuarter && f.Label.Contains('2'))
+                    SetTeams(f, Seed(4), Seed(5));
+                else if (isQuarter && f.Label.Contains('3'))
+                    SetTeams(f, Seed(2), Seed(7));
+                else if (isQuarter)
+                    SetTeams(f, Seed(3), Seed(6));
+                else if (isPlayoff && f.Label.Contains('1'))
+                    SetTeams(f, Seed(1), Seed(2));
+                else if (isPlayoff)
+                    SetTeams(f, Seed(3), Seed(4));
+                continue;
+            }
+
+            if (isFinal && detail.GroupCount == 2 && detail.QualifyPerGroup == 1)
                 SetTeams(f, Pick(1, 1), Pick(2, 1));
             else if (isSemi && f.Label.Contains('1'))
                 SetTeams(f, Pick(1, 1), Pick(2, 2));
@@ -699,7 +949,7 @@ public sealed class TournamentService : ITournamentService
                 var semis = detail.Fixtures
                     .Where(x => x.StageText.Contains("Semi", StringComparison.OrdinalIgnoreCase)
                                 || x.Label.Contains("Semi", StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(x => x.Label)
+                    .OrderBy(x => x.Label, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (semis.Count >= 2)
                     SetTeams(f, WinnerOf(semis[0]), WinnerOf(semis[1]));
@@ -729,24 +979,15 @@ public sealed class TournamentService : ITournamentService
             if (aRuns != bRuns)
                 return aRuns > bRuns ? match.TeamAId : match.TeamBId;
 
-            var groupFixtures = detail.Fixtures
-                .Where(f => string.Equals(f.StageText, "Group", StringComparison.OrdinalIgnoreCase)
-                            || f.GroupNumber is int)
-                .Where(f => !f.StageText.Contains("Semi", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(f.StageText, "Final", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(f.Label, "Final", StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            var groupFixtures = GroupStageFixtures(detail);
             var standings = BuildLocalStandings(detail, groupFixtures, matchesById, innsByMatch, delsByInn);
             return BetterOnLocalTable(match.TeamAId, match.TeamBId, standings);
         }
 
-        // RR-only: 1 group / 1 qualify
-        if (detail.GroupCount == 1 && detail.QualifyPerGroup == 1)
+        // RR-only: Knockout = No
+        if (detail.KnockoutFormat == TournamentKnockoutFormat.None)
         {
-            var groupFixtures = detail.Fixtures
-                .Where(f => string.Equals(f.StageText, "Group", StringComparison.OrdinalIgnoreCase)
-                            || f.GroupNumber is not null)
-                .ToList();
+            var groupFixtures = GroupStageFixtures(detail);
             if (groupFixtures.Count == 0 || !groupFixtures.All(f =>
                     f.MatchId is Guid id
                     && matchesById.TryGetValue(id, out var m)

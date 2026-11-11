@@ -89,6 +89,77 @@ public sealed record ApiMatchSummaryDto(
     Guid? SeriesId = null,
     string? LiveStreamUrl = null);
 
+/// <summary>Raw Match + Innings + Delivery rows used to rebuild scoring after a reinstall.</summary>
+public sealed record ApiMatchExportDto(
+    ApiMatchRowDto Match,
+    IReadOnlyList<ApiInningsRowDto> Innings,
+    IReadOnlyList<ApiDeliveryRowDto> Deliveries);
+
+public sealed record ApiMatchRowDto(
+    Guid Id,
+    string Title,
+    Guid TeamAId,
+    Guid TeamBId,
+    Guid? TeamACaptainId,
+    Guid? TeamBCaptainId,
+    int OversLimit,
+    byte OversMode,
+    byte Format,
+    Guid? FormatId,
+    DateTime MatchDateUtc,
+    string? Venue,
+    byte Status,
+    Guid? TossWinnerTeamId,
+    bool TossWinnerBatsFirst,
+    bool LastBatsmanCanBatAsSingleWicket,
+    int BowlerMaxOvers,
+    Guid? PlayerOfTheMatchPlayerId,
+    Guid? TournamentId,
+    Guid? TournamentFixtureId,
+    Guid? SeriesId,
+    Guid? SeriesFixtureId,
+    long Version,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc,
+    bool IsDeleted,
+    string? SquadRosterJson,
+    bool IsLiveTelecast,
+    string? LiveStreamUrl,
+    Guid? StartedByUserId,
+    Guid? StartedOnDeviceId);
+
+public sealed record ApiInningsRowDto(
+    Guid Id,
+    Guid MatchId,
+    int InningsNumber,
+    Guid BattingTeamId,
+    Guid BowlingTeamId,
+    bool IsCompleted,
+    bool IsFollowOn,
+    DateTime StartedAtUtc);
+
+public sealed record ApiDeliveryRowDto(
+    Guid Id,
+    Guid MatchId,
+    Guid InningsId,
+    int Sequence,
+    int OverNumber,
+    int BallInOver,
+    Guid BatterId,
+    Guid NonStrikerId,
+    Guid BowlerId,
+    int RunsOffBat,
+    int ExtraRuns,
+    byte ExtraType,
+    bool IsWicket,
+    byte WicketType,
+    Guid? DismissedPlayerId,
+    Guid? FielderId,
+    bool IsDroppedCatch,
+    bool IsLegalDelivery,
+    DateTime CreatedAtUtc,
+    long Version);
+
 public sealed record ApiNetSessionSummaryDto(
     Guid Id,
     string Name,
@@ -106,6 +177,24 @@ public sealed class HallOfFameBundle
     public List<TrophyRow> CaptainTrophies { get; set; } = new();
     public List<TrophyRow> TournamentChampionTrophies { get; set; } = new();
     public List<TrophyRow> SeriesChampionTrophies { get; set; } = new();
+    public List<TrophyRow> PlayerOfTheTournament { get; set; } = new();
+    public List<TrophyRow> PlayerOfTheSeries { get; set; } = new();
+    public List<TrophyRow> BestBatsman { get; set; } = new();
+    public List<TrophyRow> BestBowler { get; set; } = new();
+    public List<TrophyRow> BestFielder { get; set; } = new();
+}
+
+public sealed class StatsFilterOptionDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public sealed class StatsFilterOptionsDto
+{
+    public List<StatsFilterOptionDto> Tournaments { get; set; } = new();
+    public List<StatsFilterOptionDto> Series { get; set; } = new();
+    public List<StatsFilterOptionDto> Matches { get; set; } = new();
 }
 
 public sealed class TrophyRow
@@ -197,6 +286,7 @@ public sealed class ApiVenueBookingParticipantDto
     public Guid PlayerId { get; set; }
     public string PlayerName { get; set; } = string.Empty;
     public string Status { get; set; } = "Pending";
+    public decimal Amount { get; set; }
 }
 
 public sealed class ApiTournamentListDto
@@ -220,6 +310,11 @@ public sealed class ApiTournamentDetailDto
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; }
     public int QualifyPerGroup { get; set; }
+    public byte KnockoutFormat { get; set; }
+    public byte RoundRobinType { get; set; }
+    public int MatchesPerTeam { get; set; }
+    public string? CustomPairsJson { get; set; }
+    public bool CustomFixturesReady { get; set; }
     public Guid VenueId { get; set; }
     public string VenueName { get; set; } = string.Empty;
     public Guid? FormatId { get; set; }
@@ -233,6 +328,14 @@ public sealed class ApiTournamentDetailDto
     public string StatusText { get; set; } = string.Empty;
     public Guid? WinnerTeamId { get; set; }
     public string? WinnerTeamName { get; set; }
+    public Guid? PlayerOfTheTournamentPlayerId { get; set; }
+    public string? PlayerOfTheTournamentName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
     public long Version { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
@@ -327,6 +430,14 @@ public sealed class ApiSeriesDetailDto
     public string StatusText { get; set; } = string.Empty;
     public Guid? WinnerTeamId { get; set; }
     public string? WinnerTeamName { get; set; }
+    public Guid? PlayerOfTheSeriesPlayerId { get; set; }
+    public string? PlayerOfTheSeriesName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
     public bool IsTied { get; set; }
     public long Version { get; set; }
     public DateTime CreatedAtUtc { get; set; }
@@ -478,6 +589,9 @@ public interface IApiClient
         int skip, string? q = null, string? captain = null, string? date = null, CancellationToken ct = default);
     Task<IReadOnlyList<ApiMatchSummaryDto>> GetLiveMatchesAsync(CancellationToken ct = default);
     Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default);
+    /// <summary>Raw scoring rows so a device without the local match can rebuild and resume it.</summary>
+    Task<ApiMatchExportDto?> GetMatchExportAsync(Guid matchId, CancellationToken ct = default);
+    Task<PlayerMatchReport?> GetPlayerMatchReportAsync(Guid matchId, Guid playerId, CancellationToken ct = default);
     Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default);
 
     /// <summary>Completed nets sessions from server (live scoring stays local until complete + outbox sync).</summary>
@@ -487,12 +601,17 @@ public interface IApiClient
     Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetLiveNetSessionsAsync(CancellationToken ct = default);
     Task<NetSessionScorecard?> GetNetSessionScorecardAsync(Guid sessionId, CancellationToken ct = default);
 
+    Task<StatsFilterOptionsDto> GetStatsFilterOptionsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PlayerCareerSummary>> GetStatsLeaderboardAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         string source = "matches",
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        bool attendanceFromDebut = false,
         CancellationToken ct = default);
     Task<ApiPagedResult<PlayerCareerSummary>> GetStatsLeaderboardPageAsync(
         int skip,
@@ -504,10 +623,15 @@ public interface IApiClient
         Guid? venueId = null,
         string source = "matches",
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        bool attendanceFromDebut = false,
         CancellationToken ct = default);
     Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
+    Task<IReadOnlyList<FieldingVsStat>> GetFieldingVsAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default);
     Task<ApiPagedResult<RankingRow>> GetRankingsPageAsync(
@@ -517,17 +641,26 @@ public interface IApiClient
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
     Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
     Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
     Task<ApiPagedResult<TeamCareerSummary>> GetTeamLeaderboardPageAsync(
         int skip,
@@ -538,6 +671,9 @@ public interface IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
     Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
         Guid teamId,
@@ -545,13 +681,24 @@ public interface IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
-    Task<HallOfFameBundle> GetHallOfFameAsync(IReadOnlyList<Guid>? formatIds = null, CancellationToken ct = default);
+    Task<HallOfFameBundle> GetHallOfFameAsync(
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
     Task<ApiPagedResult<TrophyRow>> GetHallOfFamePageAsync(
         int skip,
         string category,
         string? q = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiFormatDto>> GetFormatsAsync(CancellationToken ct = default);
@@ -950,6 +1097,26 @@ public sealed class ApiClient : IApiClient
             return await response.Content.ReadFromJsonAsync<MatchFullScorecard>(JsonOptions, ct).ConfigureAwait(false);
         }, ct);
 
+    public Task<ApiMatchExportDto?> GetMatchExportAsync(Guid matchId, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/matches/{matchId:D}/export", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiMatchExportDto>(JsonOptions, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<PlayerMatchReport?> GetPlayerMatchReportAsync(Guid matchId, Guid playerId, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/matches/{matchId:D}/players/{playerId:D}/report", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<PlayerMatchReport>(JsonOptions, ct).ConfigureAwait(false);
+        }, ct);
+
     public Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -995,12 +1162,26 @@ public sealed class ApiClient : IApiClient
             return await response.Content.ReadFromJsonAsync<NetSessionScorecard>(JsonOptions, ct).ConfigureAwait(false);
         }, ct);
 
+    public Task<StatsFilterOptionsDto> GetStatsFilterOptionsAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/stats/filter-options", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var dto = await response.Content.ReadFromJsonAsync<StatsFilterOptionsDto>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return dto ?? new StatsFilterOptionsDto();
+        }, ct);
+
     public Task<IReadOnlyList<PlayerCareerSummary>> GetStatsLeaderboardAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         string source = "matches",
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        bool attendanceFromDebut = false,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1014,7 +1195,12 @@ public sealed class ApiClient : IApiClient
             if (!string.IsNullOrWhiteSpace(source)
                 && !string.Equals(source, "matches", StringComparison.OrdinalIgnoreCase))
                 query.Add($"source={Uri.EscapeDataString(source)}");
+            if (attendanceFromDebut)
+                query.Add("attendanceFromDebut=true");
             AppendFormatIds(query, formatIds);
+            AppendGuidIds(query, "tournamentIds", tournamentIds);
+            AppendGuidIds(query, "seriesIds", seriesIds);
+            AppendGuidIds(query, "matchIds", matchIds);
             var url = "api/stats/leaderboard" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
@@ -1033,9 +1219,16 @@ public sealed class ApiClient : IApiClient
         Guid? venueId = null,
         string source = "matches",
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        bool attendanceFromDebut = false,
         CancellationToken ct = default)
         => GetPagedAsync<PlayerCareerSummary>(
-            "api/stats/leaderboard/page" + StatsPageQuery(skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source, formatIds),
+            "api/stats/leaderboard/page" + StatsPageQuery(
+                skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source, formatIds,
+                tournamentIds: tournamentIds, seriesIds: seriesIds, matchIds: matchIds,
+                attendanceFromDebut: attendanceFromDebut),
             ct);
 
     public Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default)
@@ -1080,6 +1273,22 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<ConfrontationStat>)(list ?? new List<ConfrontationStat>());
         }, ct);
 
+    public Task<IReadOnlyList<FieldingVsStat>> GetFieldingVsAsync(Guid playerId, string source = "matches", CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            var url = $"api/stats/confrontations/{playerId:D}/vs-fielding";
+            if (!string.IsNullOrWhiteSpace(source)
+                && !string.Equals(source, "matches", StringComparison.OrdinalIgnoreCase))
+                url += $"?source={Uri.EscapeDataString(source)}";
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (IReadOnlyList<FieldingVsStat>)Array.Empty<FieldingVsStat>();
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<FieldingVsStat>>(JsonOptions, ct)
+                .ConfigureAwait(false);
+            return (IReadOnlyList<FieldingVsStat>)(list ?? new List<FieldingVsStat>());
+        }, ct);
+
     public Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1115,15 +1324,23 @@ public sealed class ApiClient : IApiClient
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
         => GetPagedAsync<RankingRow>(
-            "api/stats/rankings/page" + StatsPageQuery(skip, q, sort: null, ascending: false, fromUtc, toExclusiveUtc, venueId: null, source: null, formatIds, category),
+            "api/stats/rankings/page" + StatsPageQuery(
+                skip, q, sort: null, ascending: false, fromUtc, toExclusiveUtc, venueId: null, source: null, formatIds, category,
+                tournamentIds, seriesIds, matchIds),
             ct);
 
     public Task<IReadOnlyList<RankingRow>> GetTeamRankingsAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1133,6 +1350,9 @@ public sealed class ApiClient : IApiClient
             if (toExclusiveUtc is DateTime to)
                 query.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
             AppendFormatIds(query, formatIds);
+            AppendGuidIds(query, "tournamentIds", tournamentIds);
+            AppendGuidIds(query, "seriesIds", seriesIds);
+            AppendGuidIds(query, "matchIds", matchIds);
             var url = "api/stats/team-rankings" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -1148,6 +1368,9 @@ public sealed class ApiClient : IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1159,6 +1382,9 @@ public sealed class ApiClient : IApiClient
             if (venueId is Guid vid && vid != Guid.Empty)
                 query.Add($"venueId={vid:D}");
             AppendFormatIds(query, formatIds);
+            AppendGuidIds(query, "tournamentIds", tournamentIds);
+            AppendGuidIds(query, "seriesIds", seriesIds);
+            AppendGuidIds(query, "matchIds", matchIds);
             var url = "api/stats/teams" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -1178,9 +1404,14 @@ public sealed class ApiClient : IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
         => GetPagedAsync<TeamCareerSummary>(
-            "api/stats/teams/page" + StatsPageQuery(skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source: null, formatIds),
+            "api/stats/teams/page" + StatsPageQuery(
+                skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source: null, formatIds,
+                tournamentIds: tournamentIds, seriesIds: seriesIds, matchIds: matchIds),
             ct);
 
     public Task<IReadOnlyList<TeamVsStat>> GetTeamVsAsync(
@@ -1189,6 +1420,9 @@ public sealed class ApiClient : IApiClient
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1200,6 +1434,9 @@ public sealed class ApiClient : IApiClient
             if (venueId is Guid vid && vid != Guid.Empty)
                 query.Add($"venueId={vid:D}");
             AppendFormatIds(query, formatIds);
+            AppendGuidIds(query, "tournamentIds", tournamentIds);
+            AppendGuidIds(query, "seriesIds", seriesIds);
+            AppendGuidIds(query, "matchIds", matchIds);
             var url = $"api/stats/teams/{teamId:D}/vs" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -1210,11 +1447,19 @@ public sealed class ApiClient : IApiClient
             return (IReadOnlyList<TeamVsStat>)(list ?? new List<TeamVsStat>());
         }, ct);
 
-    public Task<HallOfFameBundle> GetHallOfFameAsync(IReadOnlyList<Guid>? formatIds = null, CancellationToken ct = default)
+    public Task<HallOfFameBundle> GetHallOfFameAsync(
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
         => RunAsync(async http =>
         {
             var query = new List<string>();
             AppendFormatIds(query, formatIds);
+            AppendGuidIds(query, "tournamentIds", tournamentIds);
+            AppendGuidIds(query, "seriesIds", seriesIds);
+            AppendGuidIds(query, "matchIds", matchIds);
             var url = "api/hall-of-fame" + (query.Count == 0 ? string.Empty : "?" + string.Join("&", query));
             using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
@@ -1227,9 +1472,14 @@ public sealed class ApiClient : IApiClient
         string category,
         string? q = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
         => GetPagedAsync<TrophyRow>(
-            "api/hall-of-fame/page" + StatsPageQuery(skip, q, sort: null, ascending: false, fromUtc: null, toExclusiveUtc: null, venueId: null, source: null, formatIds, category),
+            "api/hall-of-fame/page" + StatsPageQuery(
+                skip, q, sort: null, ascending: false, fromUtc: null, toExclusiveUtc: null, venueId: null, source: null, formatIds, category,
+                tournamentIds, seriesIds, matchIds),
             ct);
 
     public Task<IReadOnlyList<ApiFormatDto>> GetFormatsAsync(CancellationToken ct = default)
@@ -1577,7 +1827,11 @@ public sealed class ApiClient : IApiClient
         Guid? venueId,
         string? source,
         IReadOnlyList<Guid>? formatIds,
-        string? category = null)
+        string? category = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        bool attendanceFromDebut = false)
     {
         var extra = new List<(string Key, string? Value)>
         {
@@ -1591,27 +1845,40 @@ public sealed class ApiClient : IApiClient
                 : source),
             ("fromUtc", fromUtc?.ToString("O")),
             ("toExclusiveUtc", toExclusiveUtc?.ToString("O")),
-            ("venueId", venueId is Guid vid && vid != Guid.Empty ? vid.ToString("D") : null)
+            ("venueId", venueId is Guid vid && vid != Guid.Empty ? vid.ToString("D") : null),
+            ("attendanceFromDebut", attendanceFromDebut ? "true" : null)
         };
         var qs = ListPaging.Query(skip, extra.ToArray());
-        if (formatIds is null)
+        qs = AppendGuidIdsToQuery(qs, "formatIds", formatIds);
+        qs = AppendGuidIdsToQuery(qs, "tournamentIds", tournamentIds);
+        qs = AppendGuidIdsToQuery(qs, "seriesIds", seriesIds);
+        qs = AppendGuidIdsToQuery(qs, "matchIds", matchIds);
+        return qs;
+    }
+
+    private static string AppendGuidIdsToQuery(string qs, string key, IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null)
             return qs;
-        foreach (var id in formatIds)
+        foreach (var id in ids)
         {
             if (id != Guid.Empty)
-                qs += $"&formatIds={id:D}";
+                qs += $"&{key}={id:D}";
         }
         return qs;
     }
 
     private static void AppendFormatIds(List<string> query, IReadOnlyList<Guid>? formatIds)
+        => AppendGuidIds(query, "formatIds", formatIds);
+
+    private static void AppendGuidIds(List<string> query, string key, IReadOnlyList<Guid>? ids)
     {
-        if (formatIds is null)
+        if (ids is null)
             return;
-        foreach (var id in formatIds)
+        foreach (var id in ids)
         {
             if (id != Guid.Empty)
-                query.Add($"formatIds={id:D}");
+                query.Add($"{key}={id:D}");
         }
     }
 

@@ -22,7 +22,20 @@ public partial class AppShell : Shell
     private View? _flyoutFooterView;
     private int _flyoutNavBusy;
     private int _applyingFlyout;
+    private readonly Dictionary<string, bool> _groupExpanded = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Label> _groupChevrons = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, View> _groupChildren = new(StringComparer.OrdinalIgnoreCase);
     private const double SidebarWidth = 280;
+    private static readonly Color SidebarAccent = Color.FromArgb("#B6FF3B");
+    private static readonly Color SidebarSelectedBg = Color.FromArgb("#33D4AF37");
+
+    private static readonly (string Key, string Title, string Icon, string[] Routes)[] SidebarGroups =
+    {
+        ("players", "Players & Team", "people", ["players", "teams"]),
+        ("events", "Matches, Tournaments & Series", "matches", ["matches", "tournaments", "series"]),
+        ("venues", "Venues & Bookings", "calendar", ["venues", "venuebookings"]),
+        ("stats", "Statistics & Rankings", "stats", ["rankings", "stats"]),
+    };
 #if WINDOWS
     private Microsoft.UI.Xaml.Controls.NavigationView? _winNav;
 #endif
@@ -107,12 +120,12 @@ public partial class AppShell : Shell
             Items.Add(CreateFlyout("Nets Practice", "nets", "netshome", () => services.GetRequiredService<NetSessionsPage>()));
             Items.Add(CreateFlyout("Tournaments", "tournaments", "tournamentshome", () => services.GetRequiredService<TournamentsPage>()));
             Items.Add(CreateFlyout("Series", "series", "serieshome", () => services.GetRequiredService<SeriesPage>()));
-            Items.Add(CreateFlyout("Auctions", "auctions", "auctionshome", () => services.GetRequiredService<AuctionsPage>()));
+            Items.Add(CreateFlyout("Auction/Drafting", "auctions", "auctionshome", () => services.GetRequiredService<AuctionsPage>()));
             if (showLeagueCatalog)
             {
                 Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
-                Items.Add(CreateFlyout("Formats", "formats", "formatshome", () => services.GetRequiredService<FormatsPage>()));
                 Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
+                Items.Add(CreateFlyout("Formats", "formats", "formatshome", () => services.GetRequiredService<FormatsPage>()));
             }
             Items.Add(CreateFlyout("Statistics", "stats", "statshome", () => services.GetRequiredService<StatsPage>()));
             Items.Add(CreateFlyout("Rankings", "rankings", "rankingshome", () => services.GetRequiredService<RankingsPage>()));
@@ -499,42 +512,41 @@ public partial class AppShell : Shell
             HorizontalOptions = LayoutOptions.Fill
         };
 
-        foreach (var item in Items.OfType<FlyoutItem>())
+        _groupChevrons.Clear();
+        _groupChildren.Clear();
+        var flyouts = Items.OfType<FlyoutItem>().ToList();
+        var byRoute = flyouts
+            .Where(f => !string.IsNullOrWhiteSpace(f.Route))
+            .ToDictionary(f => f.Route, StringComparer.OrdinalIgnoreCase);
+        var groupedRoutes = new HashSet<string>(
+            SidebarGroups.SelectMany(g => g.Routes),
+            StringComparer.OrdinalIgnoreCase);
+        var emittedGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in flyouts)
         {
-            var route = item.Route;
-            var title = item.Title;
-            var label = new Label
+            var route = item.Route ?? string.Empty;
+            var group = SidebarGroups.FirstOrDefault(g =>
+                g.Routes.Any(r => string.Equals(r, route, StringComparison.OrdinalIgnoreCase)));
+            if (group.Key is not null)
             {
-                Text = title,
-                TextColor = Colors.White,
-                FontAttributes = FontAttributes.Bold,
-                FontSize = 14,
-                VerticalOptions = LayoutOptions.Center,
-                VerticalTextAlignment = TextAlignment.Center,
-                LineBreakMode = LineBreakMode.TailTruncation,
-                MaxLines = 1
-            };
-            var border = new Border
-            {
-                StrokeThickness = 0,
-                Padding = new Thickness(12, 0),
-                HeightRequest = 44,
-                MinimumHeightRequest = 44,
-                StrokeShape = new RoundRectangle { CornerRadius = 8 },
-                BackgroundColor = Colors.Transparent,
-                HorizontalOptions = LayoutOptions.Fill,
-                Content = label
-            };
-            var tap = new TapGestureRecognizer();
-            tap.Tapped += async (_, _) =>
-                await AppBusy.RunAsync(() => GoToFlyoutRootAsync(route, title)).ConfigureAwait(true);
-            border.GestureRecognizers.Add(tap);
-            if (!string.IsNullOrWhiteSpace(route))
-            {
-                _sidebarButtons[route] = border;
-                _sidebarLabels[route] = label;
+                if (!emittedGroups.Add(group.Key))
+                    continue;
+                var children = group.Routes
+                    .Select(r => byRoute.TryGetValue(r, out var flyout) ? flyout : null)
+                    .Where(f => f is not null)
+                    .Cast<FlyoutItem>()
+                    .ToList();
+                if (children.Count == 0)
+                    continue;
+                menu.Children.Add(CreateFlyoutGroup(group.Key, group.Title, group.Icon, children));
+                continue;
             }
-            menu.Children.Add(border);
+
+            if (groupedRoutes.Contains(route))
+                continue;
+
+            menu.Children.Add(CreateSidebarButton(item.Route, item.Title, iconKey: IconKeyForRoute(item.Route)));
         }
 
         var scroll = new ScrollView
@@ -583,6 +595,385 @@ public partial class AppShell : Shell
         UpdateSidebarSelection();
     }
 
+    private View CreateFlyoutGroup(string key, string title, string iconKey, IReadOnlyList<FlyoutItem> items)
+    {
+        var expanded = _groupExpanded.GetValueOrDefault(key, true);
+        _groupExpanded[key] = expanded;
+
+        var chevron = new Label
+        {
+            Text = expanded ? "▾" : "▸",
+            TextColor = Colors.White,
+            FontSize = 16,
+            VerticalOptions = LayoutOptions.Center,
+            HorizontalOptions = LayoutOptions.End
+        };
+        _groupChevrons[key] = chevron;
+
+        var parentLabel = new Label
+        {
+            Text = title,
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 14,
+            VerticalOptions = LayoutOptions.Center,
+            LineBreakMode = LineBreakMode.TailTruncation,
+            MaxLines = 1,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+
+        var parentRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto)
+            },
+            ColumnSpacing = 8,
+            VerticalOptions = LayoutOptions.Center
+        };
+        parentRow.Add(CreateSidebarIcon(iconKey), 0, 0);
+        parentRow.Add(parentLabel, 1, 0);
+        parentRow.Add(chevron, 2, 0);
+
+        var parentBorder = new Border
+        {
+            StrokeThickness = 0,
+            Padding = new Thickness(12, 0),
+            HeightRequest = 44,
+            MinimumHeightRequest = 44,
+            StrokeShape = new RoundRectangle { CornerRadius = 8 },
+            BackgroundColor = Colors.Transparent,
+            HorizontalOptions = LayoutOptions.Fill,
+            Content = parentRow
+        };
+        var parentTap = new TapGestureRecognizer();
+        parentTap.Tapped += (_, _) => ToggleFlyoutGroup(key);
+        parentBorder.GestureRecognizers.Add(parentTap);
+
+        var children = new VerticalStackLayout
+        {
+            Spacing = 2,
+            Padding = new Thickness(8, 0, 0, 4),
+            IsVisible = expanded
+        };
+        foreach (var child in items)
+            children.Add(CreateSidebarButton(child.Route, child.Title, isSubItem: true));
+        _groupChildren[key] = children;
+
+        return new VerticalStackLayout
+        {
+            Spacing = 2,
+            Children = { parentBorder, children }
+        };
+    }
+
+    private void ToggleFlyoutGroup(string key)
+    {
+        var expanded = !_groupExpanded.GetValueOrDefault(key, true);
+        _groupExpanded[key] = expanded;
+        if (_groupChildren.TryGetValue(key, out var children))
+            children.IsVisible = expanded;
+        if (_groupChevrons.TryGetValue(key, out var chevron))
+            chevron.Text = expanded ? "▾" : "▸";
+    }
+
+    private static string IconKeyForRoute(string? route) => route?.ToLowerInvariant() switch
+    {
+        "nets" => "nets",
+        "auctions" => "auction",
+        "formats" => "formats",
+        "halloffame" => "fame",
+        "strengthmeter" => "strength",
+        "ownergrounds" => "grounds",
+        "ownerbookings" => "bookings",
+        "owneravailability" => "availability",
+        "grounddiscover" => "discover",
+        "customerbookings" => "bookings",
+        "users" => "users",
+        "groundamenities" => "formats",
+        "groundservices" => "formats",
+        "groundshop" => "shop",
+        "tournamentscheduler" => "scheduler",
+        _ => "dot"
+    };
+
+    private static View CreateSidebarIcon(string key) => key switch
+    {
+        "people" or "users" => CreatePeopleIcon(),
+        "calendar" or "bookings" or "scheduler" => CreateCalendarIcon(),
+        "matches" or "grounds" => CreateBallIcon(),
+        "stats" => CreateBarsIcon(),
+        "nets" => CreateGridIcon(),
+        "auction" => CreateDiamondIcon(),
+        "formats" or "availability" => CreateLinesIcon(),
+        "fame" => CreateStarIcon(),
+        "strength" => CreateGaugeIcon(),
+        "discover" => CreateSearchIcon(),
+        "shop" => CreateBoxIcon(),
+        _ => CreateDotIcon()
+    };
+
+    private static View CreateCalendarIcon()
+    {
+        return new Border
+        {
+            WidthRequest = 16,
+            HeightRequest = 16,
+            Stroke = SidebarAccent,
+            StrokeThickness = 1.5,
+            StrokeShape = new RoundRectangle { CornerRadius = 2 },
+            BackgroundColor = Colors.Transparent,
+            VerticalOptions = LayoutOptions.Center,
+            Padding = new Thickness(0, 3, 0, 0),
+            Content = new BoxView
+            {
+                Color = SidebarAccent,
+                HeightRequest = 3,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Start
+            }
+        };
+    }
+
+    private static View CreatePeopleIcon()
+    {
+        var grid = new Grid
+        {
+            WidthRequest = 16,
+            HeightRequest = 16,
+            VerticalOptions = LayoutOptions.Center
+        };
+        grid.Add(new Ellipse
+        {
+            Fill = SidebarAccent,
+            WidthRequest = 8,
+            HeightRequest = 8,
+            HorizontalOptions = LayoutOptions.Start,
+            VerticalOptions = LayoutOptions.Center
+        });
+        grid.Add(new Ellipse
+        {
+            Fill = SidebarAccent,
+            WidthRequest = 8,
+            HeightRequest = 8,
+            HorizontalOptions = LayoutOptions.End,
+            VerticalOptions = LayoutOptions.Center
+        });
+        return grid;
+    }
+
+    private static View CreateBallIcon()
+        => new Ellipse
+        {
+            Stroke = SidebarAccent,
+            StrokeThickness = 1.8,
+            Fill = Colors.Transparent,
+            WidthRequest = 16,
+            HeightRequest = 16,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+    private static View CreateBarsIcon()
+        => new HorizontalStackLayout
+        {
+            Spacing = 2,
+            HeightRequest = 16,
+            WidthRequest = 16,
+            VerticalOptions = LayoutOptions.Center,
+            Children =
+            {
+                new BoxView { Color = SidebarAccent, WidthRequest = 4, HeightRequest = 7, VerticalOptions = LayoutOptions.End },
+                new BoxView { Color = SidebarAccent, WidthRequest = 4, HeightRequest = 11, VerticalOptions = LayoutOptions.End },
+                new BoxView { Color = SidebarAccent, WidthRequest = 4, HeightRequest = 16, VerticalOptions = LayoutOptions.End }
+            }
+        };
+
+    private static View CreateGridIcon()
+    {
+        var grid = new Grid
+        {
+            WidthRequest = 16,
+            HeightRequest = 16,
+            RowDefinitions = { new RowDefinition(), new RowDefinition() },
+            ColumnDefinitions = { new ColumnDefinition(), new ColumnDefinition() },
+            RowSpacing = 2,
+            ColumnSpacing = 2,
+            VerticalOptions = LayoutOptions.Center
+        };
+        for (var r = 0; r < 2; r++)
+        for (var c = 0; c < 2; c++)
+        {
+            var cell = new BoxView { Color = SidebarAccent };
+            grid.Add(cell, c, r);
+        }
+        return grid;
+    }
+
+    private static View CreateDiamondIcon()
+        => new Label
+        {
+            Text = "◆",
+            TextColor = SidebarAccent,
+            FontSize = 13,
+            VerticalOptions = LayoutOptions.Center,
+            HorizontalTextAlignment = TextAlignment.Center,
+            WidthRequest = 16
+        };
+
+    private static View CreateLinesIcon()
+        => new VerticalStackLayout
+        {
+            Spacing = 3,
+            WidthRequest = 16,
+            HeightRequest = 16,
+            VerticalOptions = LayoutOptions.Center,
+            Children =
+            {
+                new BoxView { Color = SidebarAccent, HeightRequest = 2 },
+                new BoxView { Color = SidebarAccent, HeightRequest = 2 },
+                new BoxView { Color = SidebarAccent, HeightRequest = 2 }
+            }
+        };
+
+    private static View CreateStarIcon()
+        => new Label
+        {
+            Text = "★",
+            TextColor = SidebarAccent,
+            FontSize = 15,
+            VerticalOptions = LayoutOptions.Center,
+            WidthRequest = 16,
+            HorizontalTextAlignment = TextAlignment.Center
+        };
+
+    private static View CreateGaugeIcon()
+        => new Ellipse
+        {
+            Stroke = SidebarAccent,
+            StrokeThickness = 2,
+            Fill = SidebarAccent,
+            WidthRequest = 12,
+            HeightRequest = 12,
+            VerticalOptions = LayoutOptions.Center,
+            HorizontalOptions = LayoutOptions.Center
+        };
+
+    private static View CreateSearchIcon()
+        => new Ellipse
+        {
+            Stroke = SidebarAccent,
+            StrokeThickness = 2,
+            Fill = Colors.Transparent,
+            WidthRequest = 14,
+            HeightRequest = 14,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+    private static View CreateBoxIcon()
+        => new Border
+        {
+            WidthRequest = 16,
+            HeightRequest = 16,
+            Stroke = SidebarAccent,
+            StrokeThickness = 1.5,
+            StrokeShape = new RoundRectangle { CornerRadius = 2 },
+            BackgroundColor = Colors.Transparent,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+    private static View CreateDotIcon()
+        => new BoxView
+        {
+            Color = SidebarAccent,
+            WidthRequest = 8,
+            HeightRequest = 8,
+            CornerRadius = 4,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+    private Border CreateSidebarButton(string? route, string title, bool isSubItem = false, string? iconKey = null)
+    {
+        var label = new Label
+        {
+            Text = title,
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = isSubItem ? 13 : 14,
+            VerticalOptions = LayoutOptions.Center,
+            VerticalTextAlignment = TextAlignment.Center,
+            LineBreakMode = LineBreakMode.TailTruncation,
+            MaxLines = 1,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+
+        View content;
+        if (isSubItem)
+        {
+            content = new HorizontalStackLayout
+            {
+                Spacing = 10,
+                VerticalOptions = LayoutOptions.Center,
+                Children =
+                {
+                    new BoxView
+                    {
+                        Color = SidebarAccent,
+                        WidthRequest = 6,
+                        HeightRequest = 6,
+                        CornerRadius = 3,
+                        VerticalOptions = LayoutOptions.Center
+                    },
+                    label
+                }
+            };
+        }
+        else if (!string.IsNullOrWhiteSpace(iconKey))
+        {
+            var row = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition(GridLength.Auto),
+                    new ColumnDefinition(GridLength.Star)
+                },
+                ColumnSpacing = 8,
+                VerticalOptions = LayoutOptions.Center
+            };
+            row.Add(CreateSidebarIcon(iconKey), 0, 0);
+            row.Add(label, 1, 0);
+            content = row;
+        }
+        else
+        {
+            content = label;
+        }
+
+        var border = new Border
+        {
+            StrokeThickness = 0,
+            Padding = new Thickness(isSubItem ? 20 : 12, 0),
+            HeightRequest = isSubItem ? 40 : 44,
+            MinimumHeightRequest = isSubItem ? 40 : 44,
+            StrokeShape = new RoundRectangle { CornerRadius = 8 },
+            BackgroundColor = Colors.Transparent,
+            HorizontalOptions = LayoutOptions.Fill,
+            Content = content
+        };
+        var tap = new TapGestureRecognizer();
+        tap.Tapped += async (_, _) =>
+            await AppBusy.RunAsync(() => GoToFlyoutRootAsync(route, title)).ConfigureAwait(true);
+        border.GestureRecognizers.Add(tap);
+        if (!string.IsNullOrWhiteSpace(route))
+        {
+            _sidebarButtons[route] = border;
+            _sidebarLabels[route] = label;
+        }
+
+        return border;
+    }
+
     private static void OnFlyoutScrollHandlerChanged(object? sender, EventArgs e)
     {
 #if WINDOWS
@@ -601,13 +992,26 @@ public partial class AppShell : Shell
     private void UpdateSidebarSelection()
     {
         var current = CurrentItem?.Route;
+        foreach (var group in SidebarGroups)
+        {
+            var inGroup = group.Routes.Any(r =>
+                string.Equals(r, current, StringComparison.OrdinalIgnoreCase));
+            if (!inGroup)
+                continue;
+            _groupExpanded[group.Key] = true;
+            if (_groupChildren.TryGetValue(group.Key, out var children))
+                children.IsVisible = true;
+            if (_groupChevrons.TryGetValue(group.Key, out var chevron))
+                chevron.Text = "▾";
+        }
+
         foreach (var (route, border) in _sidebarButtons)
         {
             var selected = !string.IsNullOrWhiteSpace(current) &&
                            string.Equals(route, current, StringComparison.OrdinalIgnoreCase);
-            border.BackgroundColor = selected ? Color.FromArgb("#33D4AF37") : Colors.Transparent;
+            border.BackgroundColor = selected ? SidebarSelectedBg : Colors.Transparent;
             if (_sidebarLabels.TryGetValue(route, out var label))
-                label.TextColor = selected ? Color.FromArgb("#B6FF3B") : Colors.White;
+                label.TextColor = selected ? SidebarAccent : Colors.White;
         }
     }
 

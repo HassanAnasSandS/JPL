@@ -7,19 +7,30 @@
              x:Class="JPL.Pages.AuctionReportPage"
              x:Name="ThisPage"
              x:DataType="vm:AuctionReportViewModel"
-             Title="Auction Report"
+             Title="Auction/Drafting Report"
              HideSoftInputOnTapped="True">
 
-    <!-- Frozen Player (130) + scrollable: Lot 3 | Prices 4 | Captain 4 = 11 cols -->
+    <ContentPage.Resources>
+        <Style x:Key="ReportTab" TargetType="Button">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="MinimumHeightRequest" Value="34" />
+            <Setter Property="BackgroundColor" Value="#E8EEF5" />
+            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+            <Setter Property="Padding" Value="12,6" />
+        </Style>
+    </ContentPage.Resources>
+
+    <!-- Frozen Player (130) + scrollable stats -->
     <Grid Padding="10" RowDefinitions="*,Auto" VerticalOptions="Fill">
 
         <!-- ===== TABLE ===== -->
         <Grid IsVisible="{Binding ShowTable}"
-              RowDefinitions="Auto,Auto,Auto,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,*"
               RowSpacing="8"
               VerticalOptions="Fill">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <Label Text="All-time Auction Report"
+                <Label Text="{Binding ReportTitle}"
                        FontSize="20"
                        FontAttributes="Bold"
                        VerticalOptions="Center"
@@ -32,7 +43,69 @@
                         IsEnabled="{Binding CanLoad}" />
             </Grid>
 
-            <ctrl:FilterDrawer Grid.Row="1"
+            <ScrollView Grid.Row="1"
+                        Orientation="Horizontal"
+                        HorizontalScrollBarVisibility="Never">
+                <HorizontalStackLayout Spacing="6" Padding="0,2">
+                    <Button Text="Simple Auction"
+                            Style="{StaticResource ReportTab}"
+                            Command="{Binding SelectTabCommand}"
+                            CommandParameter="0">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsSimpleAuctionTab}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Text="Advance Auction"
+                            Style="{StaticResource ReportTab}"
+                            Command="{Binding SelectTabCommand}"
+                            CommandParameter="1">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsAdvanceAuctionTab}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Text="Simple Draft"
+                            Style="{StaticResource ReportTab}"
+                            Command="{Binding SelectTabCommand}"
+                            CommandParameter="2">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsSimpleDraftTab}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Text="Advance Draft"
+                            Style="{StaticResource ReportTab}"
+                            Command="{Binding SelectTabCommand}"
+                            CommandParameter="3">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsAdvanceDraftTab}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Text="Basic Auction"
+                            Style="{StaticResource ReportTab}"
+                            Command="{Binding SelectTabCommand}"
+                            CommandParameter="4">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsBasicAuctionTab}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </HorizontalStackLayout>
+            </ScrollView>
+
+            <ctrl:FilterDrawer Grid.Row="2"
                                HasActiveFilters="{Binding HasActiveFilters}"
                                ClearCommand="{Binding ClearFiltersCommand}">
                 <SearchBar Placeholder="Search by player name"
@@ -40,11 +113,11 @@
                            CancelButtonColor="{StaticResource Primary}" />
             </ctrl:FilterDrawer>
 
-            <Label Grid.Row="2"
+            <Label Grid.Row="3"
                    Text="{Binding SummaryText}"
                    Style="{StaticResource MutedLabel}" />
 
-            <VerticalStackLayout Grid.Row="3"
+            <VerticalStackLayout Grid.Row="4"
                                  Spacing="6"
                                  VerticalOptions="Fill">
                 <Label Text="{Binding SortedByText}"
@@ -57,7 +130,7 @@
                             VerticalOptions="Fill"
                             VerticalScrollBarVisibility="Always"
                             HorizontalScrollBarVisibility="Never">
-                    <Grid ColumnDefinitions="130,*" ColumnSpacing="0" VerticalOptions="Start">
+                    <Grid ColumnDefinitions="{OnIdiom Phone='120,*', Default='180,*'}" ColumnSpacing="0" VerticalOptions="Start">
 
                         <Border StrokeThickness="0"
                                 BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
@@ -67,7 +140,7 @@
                                 <BoxView HeightRequest="64" Color="Transparent" />
                                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0">
                                     <BindableLayout.EmptyView>
-                                        <Label Text="No auction participation yet."
+                                        <Label Text="{Binding EmptyRowsText}"
                                                Margin="8,16"
                                                FontSize="12"
                                                Style="{StaticResource MutedLabel}" />
@@ -125,19 +198,17 @@
                             </Grid>
                         </Border>
 
-                        <ScrollView Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    HorizontalScrollBarVisibility="Always"
-                                    VerticalScrollBarVisibility="Never">
-                            <Grid>
-                            <VerticalStackLayout Spacing="0">
+                        <!-- Metrics fill remaining width (no empty centre gap on desktop) -->
+                        <Grid Grid.Column="1" HorizontalOptions="Fill">
+                            <VerticalStackLayout Spacing="0" IsVisible="{Binding ShowAuctionStats}" HorizontalOptions="Fill">
                                 <BoxView HeightRequest="64" Color="Transparent" />
-                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0">
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0" HorizontalOptions="Fill">
                                     <BindableLayout.ItemTemplate>
                                         <DataTemplate x:DataType="svc:AuctionReportRow">
-                                            <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
+                                            <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*,*"
                                                   HeightRequest="36"
-                                                  Padding="2,0">
+                                                  Padding="2,0"
+                                                  HorizontalOptions="Fill">
                                                 <Label Text="{Binding AuctionsParticipated}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
                                                 <Label Grid.Column="1" Text="{Binding TimesSold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
                                                 <Label Grid.Column="2" Text="{Binding TimesUnsold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
@@ -154,14 +225,36 @@
                                     </BindableLayout.ItemTemplate>
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
+                            <VerticalStackLayout Spacing="0" IsVisible="{Binding ShowDraftStats}" HorizontalOptions="Fill">
+                                <BoxView HeightRequest="64" Color="Transparent" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}" Spacing="0" HorizontalOptions="Fill">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:AuctionReportRow">
+                                            <Grid ColumnDefinitions="*,*,*,*,*"
+                                                  HeightRequest="36"
+                                                  Padding="2,0"
+                                                  HorizontalOptions="Fill">
+                                                <Label Text="{Binding AuctionsParticipated}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="1" Text="{Binding TimesSold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="2" Text="{Binding TimesUnsold}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="3" Text="{Binding TimesAsCaptain}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                                <Label Grid.Column="4" Text="{Binding PlayersBoughtAsCaptain}" FontSize="11" HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
                             <VerticalStackLayout x:Name="AuctionStatsHeaderHost"
                                                  VerticalOptions="Start"
                                                  ZIndex="20"
-                                                 Spacing="0">
-                                <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
+                                                 Spacing="0"
+                                                 HorizontalOptions="Fill"
+                                                 IsVisible="{Binding ShowAuctionStats}">
+                                <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*,*"
                                       HeightRequest="28"
                                       Padding="4,6"
-                                      BackgroundColor="{StaticResource Primary}">
+                                      BackgroundColor="{StaticResource Primary}"
+                                      HorizontalOptions="Fill">
                                     <Label Grid.Column="0" Grid.ColumnSpan="3"
                                            Text="Lot"
                                            FontAttributes="Bold"
@@ -181,11 +274,12 @@
                                            HorizontalTextAlignment="Center"
                                            TextColor="{StaticResource Secondary}" />
                                 </Grid>
-                                <Grid ColumnDefinitions="40,40,48,56,56,52,56,40,64,56,56"
+                                <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*,*"
                                       HeightRequest="36"
                                       Padding="2,4"
-                                      BackgroundColor="{AppThemeBinding Light=#F5F5F5, Dark=#212121}">
-                                    <Button Text="Auc" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="AuctionsParticipated" />
+                                      BackgroundColor="{AppThemeBinding Light=#F5F5F5, Dark=#212121}"
+                                      HorizontalOptions="Fill">
+                                    <Button Text="A/D" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="AuctionsParticipated" />
                                     <Button Grid.Column="1" Text="Sold" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TimesSold" />
                                     <Button Grid.Column="2" Text="Unsold" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TimesUnsold" />
                                     <Button Grid.Column="3" Text="B.Tot" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TotalBasePrice" />
@@ -198,8 +292,43 @@
                                     <Button Grid.Column="10" Text="Left" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="WalletRemaining" />
                                 </Grid>
                             </VerticalStackLayout>
-                            </Grid>
-                        </ScrollView>
+                            <VerticalStackLayout x:Name="DraftStatsHeaderHost"
+                                                 VerticalOptions="Start"
+                                                 ZIndex="20"
+                                                 Spacing="0"
+                                                 HorizontalOptions="Fill"
+                                                 IsVisible="{Binding ShowDraftStats}">
+                                <Grid ColumnDefinitions="*,*,*,*,*"
+                                      HeightRequest="28"
+                                      Padding="4,6"
+                                      BackgroundColor="{StaticResource Primary}"
+                                      HorizontalOptions="Fill">
+                                    <Label Grid.Column="0" Grid.ColumnSpan="3"
+                                           Text="Pool"
+                                           FontAttributes="Bold"
+                                           FontSize="10"
+                                           HorizontalTextAlignment="Center"
+                                           TextColor="{StaticResource Secondary}" />
+                                    <Label Grid.Column="3" Grid.ColumnSpan="2"
+                                           Text="Captain"
+                                           FontAttributes="Bold"
+                                           FontSize="10"
+                                           HorizontalTextAlignment="Center"
+                                           TextColor="{StaticResource Secondary}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*,*,*,*"
+                                      HeightRequest="36"
+                                      Padding="2,4"
+                                      BackgroundColor="{AppThemeBinding Light=#F5F5F5, Dark=#212121}"
+                                      HorizontalOptions="Fill">
+                                    <Button Text="#" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="AuctionsParticipated" />
+                                    <Button Grid.Column="1" Text="Pick" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TimesSold" />
+                                    <Button Grid.Column="2" Text="Left" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TimesUnsold" />
+                                    <Button Grid.Column="3" Text="×Cap" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="TimesAsCaptain" />
+                                    <Button Grid.Column="4" Text="Squad" FontSize="9" FontAttributes="Bold" TextColor="{StaticResource Primary}" BackgroundColor="Transparent" BorderWidth="0" Padding="0" Margin="0" HeightRequest="28" HorizontalOptions="Fill" Command="{Binding SortCommand}" CommandParameter="PlayersBoughtAsCaptain" />
+                                </Grid>
+                            </VerticalStackLayout>
+                        </Grid>
                     </Grid>
                 </ScrollView>
             </VerticalStackLayout>
@@ -223,7 +352,7 @@
                         Padding="18"
                         StrokeShape="RoundRectangle 16">
                     <VerticalStackLayout Spacing="6">
-                        <Label Text="PLAYER AUCTION DETAILS"
+                        <Label Text="PLAYER DETAILS"
                                FontSize="11"
                                FontAttributes="Bold"
                                TextColor="{StaticResource Secondary}" />
@@ -231,7 +360,10 @@
                                FontSize="24"
                                FontAttributes="Bold"
                                TextColor="White" />
-                        <Label Text="{Binding Selected.AuctionsParticipated, StringFormat='All-time across {0} auctions'}"
+                        <Label Text="{Binding ReportTitle}"
+                               FontSize="12"
+                               TextColor="#B8C4D4" />
+                        <Label Text="{Binding DetailSubtitle}"
                                FontSize="13"
                                TextColor="#B8C4D4" />
                     </VerticalStackLayout>
@@ -240,39 +372,44 @@
                 <!-- Lot career -->
                 <Border Style="{StaticResource CardBorder}" Padding="14">
                     <VerticalStackLayout Spacing="10">
-                        <Label Text="As auction lot" Style="{StaticResource SectionLabel}" Margin="0" />
+                        <Label Text="{Binding DetailKindLine}" Style="{StaticResource SectionLabel}" Margin="0" />
                         <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Auctions" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="Events" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding Selected.AuctionsParticipated}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                             <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Sold" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="Sold" FontSize="10" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding ShowLotPrices}" />
+                                    <Label Text="Picked" FontSize="10" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding IsDraftingTab}" />
                                     <Label Text="{Binding Selected.TimesSold}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Success}" />
                                 </VerticalStackLayout>
                             </Border>
                             <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Unsold" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="Unsold" FontSize="10" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding ShowLotPrices}" />
+                                    <Label Text="Left" FontSize="10" TextColor="{StaticResource TextSecondary}" IsVisible="{Binding IsDraftingTab}" />
                                     <Label Text="{Binding Selected.TimesUnsold}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
                                 </VerticalStackLayout>
                             </Border>
-                            <Border Grid.Row="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                            <Border Grid.Row="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10"
+                                    IsVisible="{Binding ShowLotPrices}">
                                 <VerticalStackLayout Spacing="2">
                                     <Label Text="Base total" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding Selected.TotalBasePrice, StringFormat='{0:N0}'}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
-                            <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                            <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10"
+                                    IsVisible="{Binding ShowLotPrices}">
                                 <VerticalStackLayout Spacing="2">
                                     <Label Text="Sold total" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding Selected.TotalSoldAmount, StringFormat='{0:N0}'}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
-                            <Border Grid.Row="1" Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                            <Border Grid.Row="1" Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10"
+                                    IsVisible="{Binding ShowLotPrices}">
                                 <VerticalStackLayout Spacing="2">
                                     <Label Text="Avg / High" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                     <Label FontSize="16" FontAttributes="Bold" TextColor="{StaticResource SecondaryDarkText}">
@@ -291,9 +428,9 @@
 
                 <!-- Captain career -->
                 <Border Style="{StaticResource CardBorder}" Padding="14"
-                        IsVisible="{Binding Selected.HasCaptainWallet}">
+                        IsVisible="{Binding ShowCaptainWallet}">
                     <VerticalStackLayout Spacing="10">
-                        <Label Text="As captain" Style="{StaticResource SectionLabel}" Margin="0" />
+                        <Label Text="{Binding DetailCaptainHeading}" Style="{StaticResource SectionLabel}" Margin="0" />
                         <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
@@ -323,10 +460,31 @@
                     </VerticalStackLayout>
                 </Border>
 
-                <!-- Per-auction lot history -->
+                <Border Style="{StaticResource CardBorder}" Padding="14"
+                        IsVisible="{Binding ShowCaptainDraft}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="{Binding DetailCaptainHeading}" Style="{StaticResource SectionLabel}" Margin="0" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="× Cap" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding Selected.TimesAsCaptain}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Players picked" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding Selected.PlayersBoughtAsCaptain}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Per-type lot history -->
                 <Border Style="{StaticResource CardBorder}" Padding="14">
                     <VerticalStackLayout Spacing="10">
-                        <Label Text="Auction history (as lot)" Style="{StaticResource SectionLabel}" Margin="0" />
+                        <Label Text="{Binding DetailLotHeading}" Style="{StaticResource SectionLabel}" Margin="0" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding DetailLots}"
                                              Spacing="8"
                                              IsVisible="{Binding HasDetailLots}">
@@ -365,7 +523,7 @@
                 <!-- Per-auction captain history -->
                 <Border Style="{StaticResource CardBorder}" Padding="14">
                     <VerticalStackLayout Spacing="10">
-                        <Label Text="Auction history (as captain)" Style="{StaticResource SectionLabel}" Margin="0" />
+                        <Label Text="{Binding DetailCaptainHistoryHeading}" Style="{StaticResource SectionLabel}" Margin="0" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding DetailCaptainEvents}"
                                              Spacing="8"
                                              IsVisible="{Binding HasDetailCaptainEvents}">
@@ -392,7 +550,7 @@
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
                         </VerticalStackLayout>
-                        <Label Text="Never a captain in an auction."
+                        <Label Text="{Binding EmptyCaptainText}"
                                Style="{StaticResource MutedLabel}"
                                IsVisible="{Binding HasNoDetailCaptainEvents}" />
                     </VerticalStackLayout>

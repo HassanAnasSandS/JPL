@@ -155,6 +155,7 @@ public sealed class ApiDbContext : DbContext
             e.HasOne(x => x.VenueBooking).WithMany(b => b.Participants)
                 .HasForeignKey(x => x.VenueBookingId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasIndex(x => x.PlayerId);
         });
 

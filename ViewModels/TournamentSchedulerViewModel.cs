@@ -14,6 +14,7 @@ public sealed class SchedulerRow
     public string WinnerLine { get; init; } = string.Empty;
     public string OwnerLine { get; init; } = string.Empty;
     public bool CanEdit { get; init; }
+    public bool CanDelete { get; init; }
     public bool HasWinner => !string.IsNullOrWhiteSpace(WinnerLine);
     public bool HasOwner => !string.IsNullOrWhiteSpace(OwnerLine);
 }
@@ -147,7 +148,8 @@ public partial class TournamentSchedulerViewModel : ObservableObject
         OwnerLine = ShowUserFilter && !string.IsNullOrWhiteSpace(s.CreatedByUsername)
             ? $"Owner: {s.CreatedByUsername}"
             : string.Empty,
-        CanEdit = CanWrite && s.CanEdit
+        CanEdit = CanWrite && s.CanEdit,
+        CanDelete = CanWrite && s.CanEdit
     };
 
     private void MergeUserFilter(IReadOnlyList<SchedulerListItem> rows)
@@ -184,6 +186,14 @@ public partial class TournamentSchedulerViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task ViewAsync(SchedulerRow? row)
+    {
+        if (row is null) return;
+        await Shell.Current.GoToAsync($"{nameof(Pages.TournamentSchedulerDetailPage)}?id={row.Id}&view=1")
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task EditAsync(SchedulerRow? row)
     {
         if (row is null || !row.CanEdit) return;
@@ -194,7 +204,7 @@ public partial class TournamentSchedulerViewModel : ObservableObject
     [RelayCommand]
     private async Task DeleteAsync(SchedulerRow? row)
     {
-        if (row is null || !row.CanEdit) return;
+        if (row is null || !row.CanDelete) return;
         var ok = await Shell.Current.DisplayAlert(
             "Delete scheduler",
             $"Delete \"{row.Name}\"? This only removes the manual schedule.",

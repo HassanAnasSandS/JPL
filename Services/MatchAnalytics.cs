@@ -2,15 +2,6 @@ using JPL.Domain;
 
 namespace JPL.Services;
 
-public static class ShotZones
-{
-    public static readonly string[] Names =
-    [
-        "Long off", "Cover", "Point", "Third man",
-        "Fine leg", "Square leg", "Mid wicket", "Long on"
-    ];
-}
-
 public sealed class ChartPoint
 {
     public double X { get; set; }
@@ -53,14 +44,6 @@ public sealed class PartnershipRow
     public string ScoreLine => $"{Runs} ({Balls})";
 }
 
-public sealed class WagonSector
-{
-    public string Name { get; set; } = "";
-    public int Runs { get; set; }
-    public int Fours { get; set; }
-    public int Sixes { get; set; }
-}
-
 public sealed class InningsAnalytics
 {
     public int Number { get; set; }
@@ -78,8 +61,6 @@ public sealed class InningsAnalytics
     public List<PhaseRow> Phases { get; set; } = new();
     public List<PartnershipRow> Partnerships { get; set; } = new();
     public List<BarPoint> Momentum { get; set; } = new();
-    public List<WagonSector> Wagon { get; set; } = new();
-    public bool HasWagon { get; set; }
 }
 
 public sealed class MatchAnalyticsReport
@@ -180,7 +161,6 @@ public static class MatchAnalyticsBuilder
         Guid pairA = Guid.Empty, pairB = Guid.Empty;
         var pRuns = 0;
         var pBalls = 0;
-        var wagon = ShotZones.Names.Select(n => new WagonSector { Name = n }).ToArray();
 
         void ClosePartnership()
         {
@@ -206,15 +186,6 @@ public static class MatchAnalyticsBuilder
             if (d.RunsOffBat >= 6) inn.Sixes++;
             if (d.IsLegalDelivery && d.RunsOffBat == 0 && d.ExtraType == ExtraType.None && !d.IsWicket)
                 inn.Dots++;
-
-            if (d.ShotZone is >= 1 and <= 8 && d.RunsOffBat > 0)
-            {
-                var s = wagon[d.ShotZone - 1];
-                s.Runs += d.RunsOffBat;
-                if (d.RunsOffBat >= 6) s.Sixes++;
-                else if (d.RunsOffBat >= 4) s.Fours++;
-                inn.HasWagon = true;
-            }
 
             if (pairA == Guid.Empty)
             {
@@ -264,7 +235,6 @@ public static class MatchAnalyticsBuilder
         inn.Runs = total;
         inn.Wickets = wkts;
         inn.RunRate = legal > 0 ? $"{total * 6.0 / legal:0.00}" : "-";
-        inn.Wagon = wagon.ToList();
 
         var maxOver = overRuns.Count == 0 ? 0 : overRuns.Keys.Max();
         var innRr = legal > 0 ? total * 6.0 / legal : 0;

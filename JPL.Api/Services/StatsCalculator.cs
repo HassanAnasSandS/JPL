@@ -19,6 +19,21 @@ public sealed class PlayerCareerDto
     public int CaptainWon { get; set; }
     public int CaptainLoss { get; set; }
     public int CaptainTied { get; set; }
+    public int CaptainPoints => CaptainWon * 2 + CaptainTied;
+    public int CaptainRunsFor { get; set; }
+    public int CaptainRunsAgainst { get; set; }
+    public int CaptainBallsFor { get; set; }
+    public int CaptainBallsAgainst { get; set; }
+    public double CaptainNrr
+    {
+        get
+        {
+            var of = CaptainBallsFor <= 0 ? 0 : CaptainRunsFor / (CaptainBallsFor / 6.0);
+            var oa = CaptainBallsAgainst <= 0 ? 0 : CaptainRunsAgainst / (CaptainBallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string CaptainNrrText => CaptainMatches == 0 ? "-" : CaptainNrr.ToString("+0.000;-0.000;0.000");
 
     // Tournament (completed only) — same shape as Match
     public int Tournaments { get; set; }
@@ -57,14 +72,25 @@ public sealed class PlayerCareerDto
     public int CaughtOut { get; set; }
     public int LbwOut { get; set; }
     public int RunOut { get; set; }
+    /// <summary>
+    /// Times this player was the surviving batting partner when the other batter was run out
+    /// (i.e. they "got their partner run out").
+    /// </summary>
+    public int PartnerRunOuts { get; set; }
     public int StumpedOut { get; set; }
     public int HitWicketOut { get; set; }
     public int RetiredOut { get; set; }
     public int OtherOut { get; set; }
+    /// <summary>Distinct innings in which this player bowled at least one delivery.</summary>
+    public int InningsBowled { get; set; }
     public int OversBowledBalls { get; set; }
     public int RunsConceded { get; set; }
     public int Wickets { get; set; }
     public int DotBallsBowled { get; set; }
+    /// <summary>Boundaries of 4 off the bat conceded while bowling.</summary>
+    public int FoursConceded { get; set; }
+    /// <summary>Boundaries of 6+ off the bat conceded while bowling.</summary>
+    public int SixesConceded { get; set; }
     public int WidesBowled { get; set; }
     public int NoBallsBowled { get; set; }
     public int ByesConceded { get; set; }
@@ -78,6 +104,8 @@ public sealed class PlayerCareerDto
     public int Catches { get; set; }
     public int RunOutsEffected { get; set; }
     public int Stumpings { get; set; }
+    /// <summary>Catches dropped while fielding (credited to the fielder).</summary>
+    public int DroppedCatches { get; set; }
 
     // Attendance (venue bookings): Total = all venue rows; Present = listed; Absent = not listed
     public int AttendanceTotal { get; set; }
@@ -87,6 +115,19 @@ public sealed class PlayerCareerDto
         ? 0
         : Math.Round(AttendancePresent * 100.0 / AttendanceTotal, 1);
     public string AttendancePctText => AttendanceTotal == 0 ? "-" : AttendancePct.ToString("0.#") + "%";
+    /// <summary>Sum of this player's venue-booking share amounts.</summary>
+    public decimal PaymentTotal { get; set; }
+    /// <summary>Sum of shares marked Paid.</summary>
+    public decimal PaymentPaid { get; set; }
+    /// <summary>Unpaid share (PaymentTotal − PaymentPaid).</summary>
+    public decimal PaymentRemaining => Math.Max(0, PaymentTotal - PaymentPaid);
+    public double PaymentPaidPct => PaymentTotal <= 0
+        ? 0
+        : Math.Round((double)(PaymentPaid / PaymentTotal) * 100, 1);
+    public string PaymentTotalText => PaymentTotal.ToString("0.##");
+    public string PaymentPaidText => PaymentPaid.ToString("0.##");
+    public string PaymentRemainingText => PaymentRemaining.ToString("0.##");
+    public string PaymentPaidPctText => PaymentTotal <= 0 ? "-" : PaymentPaidPct.ToString("0.#") + "%";
 
     // Batting milestones (per innings)
     public int HighestScore { get; set; }
@@ -101,11 +142,17 @@ public sealed class PlayerCareerDto
 
     // Bowling milestones
     public int Maidens { get; set; }
+    /// <summary>Innings with 5+ bowler-credited wickets.</summary>
+    public int FiveWicketHauls { get; set; }
     public int BestBowlingWickets { get; set; }
     public int BestBowlingRuns { get; set; }
     public string BestBowlingText { get; set; } = "-";
     /// <summary>Bowler-credited wickets in three consecutive deliveries (same innings).</summary>
     public int HatTricks { get; set; }
+    /// <summary>Bowler-credited wickets where the batter was dismissed for 0.</summary>
+    public int DuckWkts { get; set; }
+    /// <summary>Bowler-credited wickets where the batter was dismissed first ball for 0.</summary>
+    public int GoldenDuckWkts { get; set; }
     public string HighestScoreText
     {
         get
@@ -135,7 +182,27 @@ public sealed class ConfrontationDto
     public int Fives { get; set; }
     public int Sixes { get; set; }
     public int Outs { get; set; }
+    public int Bowled { get; set; }
+    public int Caught { get; set; }
+    public int Lbw { get; set; }
+    public int RunOut { get; set; }
+    public int Stumped { get; set; }
+    public int HitWicket { get; set; }
     public int ExtrasConceded { get; set; }
+}
+
+/// <summary>Fielder vs a batter they dismissed (or dropped a catch against).</summary>
+public sealed class FieldingVsDto
+{
+    public Guid FielderId { get; set; }
+    public string FielderName { get; set; } = string.Empty;
+    public Guid BatterId { get; set; }
+    public string BatterName { get; set; } = string.Empty;
+    public int Catches { get; set; }
+    public int RunOuts { get; set; }
+    public int Stumpings { get; set; }
+    public int DroppedCatches { get; set; }
+    public int Total => Catches + RunOuts + Stumpings;
 }
 
 /// <summary>Captain vs opposing captain across completed matches (and series).</summary>
@@ -149,15 +216,34 @@ public sealed class CaptainVsDto
     public int Won { get; set; }
     public int Lost { get; set; }
     public int Tied { get; set; }
+    public int RunsFor { get; set; }
+    public int RunsAgainst { get; set; }
+    public int BallsFor { get; set; }
+    public int BallsAgainst { get; set; }
     public int Series { get; set; }
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
     public int SeriesTied { get; set; }
+    public int Points => Won * 2 + Tied;
     public double WinPct => Played == 0
         ? 0
         : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
     public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public double Nrr
+    {
+        get
+        {
+            var of = BallsFor <= 0 ? 0 : RunsFor / (BallsFor / 6.0);
+            var oa = BallsAgainst <= 0 ? 0 : RunsAgainst / (BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
     public string RecordText => $"{Won}–{Lost}–{Tied}";
+    public double SeriesWinPct => Series == 0
+        ? 0
+        : Math.Round(((SeriesWon + SeriesTied * 0.5) / Series) * 100, 1);
+    public string SeriesWinPctText => Series == 0 ? "-" : SeriesWinPct.ToString("0.#") + "%";
 }
 
 public sealed class RankingRowDto
@@ -178,6 +264,8 @@ public sealed class TeamCareerDto
 {
     public Guid TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
+    public Guid? CaptainPlayerId { get; set; }
+    public string? CaptainName { get; set; }
     public int Played { get; set; }
     public int Won { get; set; }
     public int Lost { get; set; }
@@ -190,6 +278,7 @@ public sealed class TeamCareerDto
     public int Tournaments { get; set; }
     public int TournamentWon { get; set; }
     public int TournamentLoss { get; set; }
+    public int TournamentTied { get; set; }
     public int Series { get; set; }
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
@@ -258,24 +347,64 @@ public sealed class RankingsDto
 public static class StatsCalculator
 {
     public static List<Guid>? NormalizeFormatIds(IReadOnlyList<Guid>? formatIds)
+        => NormalizeIds(formatIds);
+
+    public static List<Guid>? NormalizeIds(IReadOnlyList<Guid>? ids)
     {
-        if (formatIds is null || formatIds.Count == 0)
+        if (ids is null || ids.Count == 0)
             return null;
-        var ids = formatIds.Where(id => id != Guid.Empty).Distinct().ToList();
-        return ids.Count == 0 ? null : ids;
+        var list = ids.Where(id => id != Guid.Empty).Distinct().ToList();
+        return list.Count == 0 ? null : list;
     }
+
+    /// <summary>
+    /// Tournament / Series / Match multi-select: if any are set, keep matches that belong to
+    /// any selected tournament, any selected series, or the explicit match list (union).
+    /// </summary>
+    public static IQueryable<Match> ApplyEventMatchFilter(
+        IQueryable<Match> query,
+        IReadOnlyList<Guid>? tournamentIds,
+        IReadOnlyList<Guid>? seriesIds,
+        IReadOnlyList<Guid>? matchIds)
+    {
+        var tours = NormalizeIds(tournamentIds);
+        var series = NormalizeIds(seriesIds);
+        var matches = NormalizeIds(matchIds);
+        if (tours is null && series is null && matches is null)
+            return query;
+
+        return query.Where(m =>
+            (tours != null && m.TournamentId != null && tours.Contains(m.TournamentId.Value))
+            || (series != null && m.SeriesId != null && series.Contains(m.SeriesId.Value))
+            || (matches != null && matches.Contains(m.Id)));
+    }
+
+    public static bool HasEventScope(
+        IReadOnlyList<Guid>? tournamentIds,
+        IReadOnlyList<Guid>? seriesIds,
+        IReadOnlyList<Guid>? matchIds)
+        => NormalizeIds(tournamentIds) is not null
+           || NormalizeIds(seriesIds) is not null
+           || NormalizeIds(matchIds) is not null;
 
     public static async Task<RankingsDto> BuildRankingsAsync(
         ApiDbContext db,
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default)
     {
-        var board = await BuildLeaderboardAsync(db, fromUtc, toExclusiveUtc, formatIds: formatIds, ct: ct)
+        var board = await BuildLeaderboardAsync(
+                db, fromUtc, toExclusiveUtc, formatIds: formatIds,
+                tournamentIds: tournamentIds, seriesIds: seriesIds, matchIdsFilter: matchIds, ct: ct)
             .ConfigureAwait(false);
         var dto = BuildRankingsFromBoard(board);
-        dto.Team = await BuildTeamRankingsAsync(db, fromUtc, toExclusiveUtc, formatIds, ct).ConfigureAwait(false);
+        dto.Team = await BuildTeamRankingsAsync(
+                db, fromUtc, toExclusiveUtc, formatIds, tournamentIds, seriesIds, matchIds, ct)
+            .ConfigureAwait(false);
         return dto;
     }
 
@@ -301,15 +430,15 @@ public static class StatsCalculator
         static double BatPts(PlayerCareerDto p)
         {
             if (p.BallsFaced <= 0 && p.Runs <= 0) return 0;
-            double pts = p.Runs + p.Twos * 0.5 + p.Threes + p.Fours + p.Fives + p.Sixes * 2
-                         + p.Fifties * 12 + p.Hundreds * 25 + p.NotOuts * 3 + p.HighestScore * 0.2;
+            double pts = p.Runs + p.Fours * 2 + p.Sixes * 4
+                         + p.Fifties * 12 + p.Hundreds * 25 + p.NotOuts * 5 + p.HighestScore * 0.5;
             if (p.BallsFaced >= 6)
                 pts += (BatSr(p) - 100) * p.BallsFaced / 200.0;
             if (p.InningsBatted >= 2)
-                pts += (BatAvg(p) - 20) * Math.Min(p.InningsBatted, 15) * 0.35;
-            pts += p.Dots * -0.4 + p.Ducks * -6 + p.GoldenDucks * -4
-                   + p.RunOut * -3 + p.StumpedOut * -3 + p.HitWicketOut * -2
-                   + p.BowledOut * -1 + p.LbwOut * -1 + p.CaughtOut * -0.5;
+                pts += (BatAvg(p) - 10) * Math.Min(p.InningsBatted, 15) * 0.20;
+            pts += p.Dots * -0.2 + p.Ducks * -10 + p.GoldenDucks * -15
+                   + p.RunOut * -5 + p.StumpedOut * -5 + p.HitWicketOut * -5
+                   + p.BowledOut * -5 + p.LbwOut * -5 + p.CaughtOut * -5;
             return Math.Round(pts);
         }
 
@@ -317,7 +446,7 @@ public static class StatsCalculator
         {
             if (p.Wickets <= 0 && p.OversBowledBalls <= 0) return 0;
             var overs = p.OversBowledBalls / 6.0;
-            double pts = p.Wickets * 25 + p.BowledWkts * 3 + p.LbwWkts * 2 + p.StumpedWkts * 2
+            double pts = p.Wickets * 10 + p.BowledWkts * 3 + p.LbwWkts * 2 + p.StumpedWkts * 2
                          + p.HitWicketWkts * 2 + p.Maidens * 8 + p.DotBallsBowled * 0.35
                          + p.HatTricks * 20 + p.BestBowlingWickets * 2;
             if (p.OversBowledBalls >= 6)
@@ -339,9 +468,10 @@ public static class StatsCalculator
         static double FieldPts(PlayerCareerDto p)
         {
             var actions = FieldActions(p);
-            if (actions <= 0) return 0;
-            double pts = p.Catches * 10 + p.RunOutsEffected * 12 + p.Stumpings * 15;
-            if (p.Matches >= 4)
+            if (actions <= 0 && p.DroppedCatches <= 0) return 0;
+            double pts = p.Catches * 10 + p.RunOutsEffected * 12 + p.Stumpings * 15
+                         + p.DroppedCatches * -10;
+            if (p.Matches >= 4 && actions > 0)
             {
                 var expected = p.Matches * 0.25;
                 if (actions < expected)
@@ -431,7 +561,7 @@ public static class StatsCalculator
                 PrimaryValue = FieldPts(p).ToString("0"),
                 SecondaryLabel = "Ct",
                 SecondaryValue = p.Catches.ToString(),
-                Detail = $"Ct {p.Catches} · RO {p.RunOutsEffected} · St {p.Stumpings} · Total {FieldActions(p)}",
+                Detail = $"Ct {p.Catches} · RO {p.RunOutsEffected} · St {p.Stumpings} · Drop {p.DroppedCatches} · Total {FieldActions(p)}",
                 SortScore = FieldPts(p)
             })
             .ToList();
@@ -472,6 +602,9 @@ public static class StatsCalculator
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIdsFilter = null,
         CancellationToken ct = default)
     {
         var matchQuery = db.Matches.AsNoTracking()
@@ -483,6 +616,7 @@ public static class StatsCalculator
         var formatIdList = NormalizeFormatIds(formatIds);
         if (formatIdList is not null)
             matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIdsFilter);
 
         var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
         if (matches.Count == 0)
@@ -497,10 +631,24 @@ public static class StatsCalculator
         var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
 
         var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
-        var names = await db.Teams.AsNoTracking()
+        var teamRows = await db.Teams.AsNoTracking()
             .Where(t => teamIds.Contains(t.Id))
-            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .Select(t => new { t.Id, t.Name, t.CaptainPlayerId })
+            .ToListAsync(ct)
             .ConfigureAwait(false);
+        var names = teamRows.ToDictionary(t => t.Id, t => t.Name);
+        var captainByTeam = teamRows.ToDictionary(t => t.Id, t => t.CaptainPlayerId);
+        var captainIds = teamRows
+            .Where(t => t.CaptainPlayerId is Guid)
+            .Select(t => t.CaptainPlayerId!.Value)
+            .Distinct()
+            .ToList();
+        var captainNames = captainIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Players.AsNoTracking()
+                .Where(p => captainIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+                .ConfigureAwait(false);
 
         var rows = new Dictionary<Guid, TeamAccum>();
         foreach (var match in matches)
@@ -570,17 +718,27 @@ public static class StatsCalculator
             .ThenByDescending(x => x.t.Won)
             .ThenByDescending(x => x.t.RunsFor)
             .ThenBy(x => x.t.Name, StringComparer.OrdinalIgnoreCase)
-            .Select((x, i) => new RankingRowDto
+            .Select((x, i) =>
             {
-                Rank = i + 1,
-                PlayerId = x.t.TeamId,
-                PlayerName = x.t.Name,
-                PrimaryLabel = "Pts",
-                PrimaryValue = x.pts.ToString(),
-                SecondaryLabel = "NRR",
-                SecondaryValue = NrrText(x.t),
-                Detail = $"P {x.t.Played} · W {x.t.Won} · L {x.t.Lost} · T {x.t.Tied} · Win% {WinPctText(x.t)} · NRR {NrrText(x.t)}",
-                SortScore = x.pts
+                var capId = captainByTeam.GetValueOrDefault(x.t.TeamId);
+                var capName = capId is Guid cid ? captainNames.GetValueOrDefault(cid) : null;
+                var display = string.IsNullOrWhiteSpace(capName)
+                    ? x.t.Name
+                    : $"{x.t.Name} · {capName}";
+                return new RankingRowDto
+                {
+                    Rank = i + 1,
+                    PlayerId = x.t.TeamId,
+                    PlayerName = display,
+                    PrimaryLabel = "Pts",
+                    PrimaryValue = x.pts.ToString(),
+                    SecondaryLabel = "NRR",
+                    SecondaryValue = NrrText(x.t),
+                    Detail = string.IsNullOrWhiteSpace(capName)
+                        ? $"P {x.t.Played} · W {x.t.Won} · L {x.t.Lost} · T {x.t.Tied} · Win% {WinPctText(x.t)} · NRR {NrrText(x.t)}"
+                        : $"Cap {capName} · P {x.t.Played} · W {x.t.Won} · L {x.t.Lost} · T {x.t.Tied} · Win% {WinPctText(x.t)} · NRR {NrrText(x.t)}",
+                    SortScore = x.pts
+                };
             })
             .ToList();
     }
@@ -592,6 +750,9 @@ public static class StatsCalculator
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIdsFilter = null,
         CancellationToken ct = default)
     {
         string? venueName = null;
@@ -619,6 +780,7 @@ public static class StatsCalculator
         var formatIdList = NormalizeFormatIds(formatIds);
         if (formatIdList is not null)
             matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIdsFilter);
 
         var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
         var matchIds = matches.Select(m => m.Id).ToList();
@@ -631,6 +793,10 @@ public static class StatsCalculator
                 .ConfigureAwait(false);
         var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
 
+        var tourIdFilter = NormalizeIds(tournamentIds);
+        var seriesIdFilter = NormalizeIds(seriesIds);
+        var eventScoped = HasEventScope(tournamentIds, seriesIds, matchIdsFilter);
+
         IQueryable<Tournament> tournamentQuery = db.Tournaments.AsNoTracking()
             .Where(t => !t.IsDeleted && t.Status == TournamentStatus.Completed)
             .Include(t => t.Teams);
@@ -642,6 +808,19 @@ public static class StatsCalculator
             tournamentQuery = tournamentQuery.Where(t => t.VenueId == tourVenueId);
         if (formatIdList is not null)
             tournamentQuery = tournamentQuery.Where(t => formatIdList.Contains(t.FormatId ?? Guid.Empty));
+        if (tourIdFilter is not null)
+            tournamentQuery = tournamentQuery.Where(t => tourIdFilter.Contains(t.Id));
+        else if (eventScoped)
+        {
+            var fromMatches = matches
+                .Where(m => m.TournamentId is Guid)
+                .Select(m => m.TournamentId!.Value)
+                .Distinct()
+                .ToList();
+            tournamentQuery = fromMatches.Count == 0
+                ? tournamentQuery.Where(_ => false)
+                : tournamentQuery.Where(t => fromMatches.Contains(t.Id));
+        }
         var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
 
         IQueryable<Series> seriesQuery = db.Series.AsNoTracking()
@@ -654,6 +833,19 @@ public static class StatsCalculator
             seriesQuery = seriesQuery.Where(s => s.VenueId == seriesVenueId);
         if (formatIdList is not null)
             seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
+        if (seriesIdFilter is not null)
+            seriesQuery = seriesQuery.Where(s => seriesIdFilter.Contains(s.Id));
+        else if (eventScoped)
+        {
+            var fromMatches = matches
+                .Where(m => m.SeriesId is Guid)
+                .Select(m => m.SeriesId!.Value)
+                .Distinct()
+                .ToList();
+            seriesQuery = fromMatches.Count == 0
+                ? seriesQuery.Where(_ => false)
+                : seriesQuery.Where(s => fromMatches.Contains(s.Id));
+        }
         var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
 
         var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId })
@@ -664,20 +856,37 @@ public static class StatsCalculator
         if (teamIds.Count == 0)
             return Array.Empty<TeamCareerDto>();
 
-        var names = await db.Teams.AsNoTracking()
+        var teamMeta = await db.Teams.AsNoTracking()
             .Where(t => teamIds.Contains(t.Id))
-            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .Select(t => new { t.Id, t.Name, t.CaptainPlayerId })
+            .ToListAsync(ct)
             .ConfigureAwait(false);
+        var names = teamMeta.ToDictionary(t => t.Id, t => t.Name);
+        var captainByTeam = teamMeta.ToDictionary(t => t.Id, t => t.CaptainPlayerId);
+        var captainIds = teamMeta
+            .Where(t => t.CaptainPlayerId is Guid)
+            .Select(t => t.CaptainPlayerId!.Value)
+            .Distinct()
+            .ToList();
+        var captainNames = captainIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Players.AsNoTracking()
+                .Where(p => captainIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+                .ConfigureAwait(false);
 
         var rows = new Dictionary<Guid, TeamCareerDto>();
         TeamCareerDto Row(Guid teamId)
         {
             if (rows.TryGetValue(teamId, out var existing))
                 return existing;
+            var capId = captainByTeam.GetValueOrDefault(teamId);
             var created = new TeamCareerDto
             {
                 TeamId = teamId,
-                TeamName = names.GetValueOrDefault(teamId, "?")
+                TeamName = names.GetValueOrDefault(teamId, "?"),
+                CaptainPlayerId = capId,
+                CaptainName = capId is Guid cid ? captainNames.GetValueOrDefault(cid) : null
             };
             rows[teamId] = created;
             return created;
@@ -730,6 +939,8 @@ public static class StatsCalculator
                 row.Tournaments++;
                 if (tour.WinnerTeamId == tt.TeamId)
                     row.TournamentWon++;
+                else if (tour.WinnerTeamId is null)
+                    row.TournamentTied++;
                 else
                     row.TournamentLoss++;
             }
@@ -767,6 +978,9 @@ public static class StatsCalculator
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIdsFilter = null,
         CancellationToken ct = default)
     {
         string? venueName = null;
@@ -795,6 +1009,7 @@ public static class StatsCalculator
         var formatIdList = NormalizeFormatIds(formatIds);
         if (formatIdList is not null)
             matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIdsFilter);
 
         var matches = await matchQuery.ToListAsync(ct).ConfigureAwait(false);
         var matchIds = matches.Select(m => m.Id).ToList();
@@ -929,6 +1144,10 @@ public static class StatsCalculator
         DateTime? toExclusiveUtc = null,
         Guid? venueId = null,
         IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIdsFilter = null,
+        bool attendanceFromDebut = false,
         CancellationToken ct = default)
     {
         var players = await db.Players.AsNoTracking()
@@ -962,24 +1181,33 @@ public static class StatsCalculator
         var formatIdList = NormalizeFormatIds(formatIds);
         if (formatIdList is not null)
             matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIdsFilter);
 
         var matches = await matchQuery
             .ToListAsync(ct)
             .ConfigureAwait(false);
         var matchIds = matches.Select(m => m.Id).ToList();
-        var allDeliveries = await db.Deliveries.AsNoTracking()
-            .Where(d => matchIds.Contains(d.MatchId))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-        var innings = await db.Innings.AsNoTracking()
-            .Where(i => matchIds.Contains(i.MatchId))
-            .Include(i => i.Deliveries)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var allDeliveries = matchIds.Count == 0
+            ? new List<Delivery>()
+            : await db.Deliveries.AsNoTracking()
+                .Where(d => matchIds.Contains(d.MatchId))
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        var innings = matchIds.Count == 0
+            ? new List<Innings>()
+            : await db.Innings.AsNoTracking()
+                .Where(i => matchIds.Contains(i.MatchId))
+                .Include(i => i.Deliveries)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
         var teams = await db.Teams.AsNoTracking()
             .Include(t => t.TeamPlayers)
             .ToDictionaryAsync(t => t.Id, t => t, ct)
             .ConfigureAwait(false);
+
+        var tourIdFilter = NormalizeIds(tournamentIds);
+        var seriesIdFilter = NormalizeIds(seriesIds);
+        var eventScoped = HasEventScope(tournamentIds, seriesIds, matchIdsFilter);
 
         IQueryable<Tournament> tournamentQuery = db.Tournaments.AsNoTracking()
             .Where(t => !t.IsDeleted && t.Status == TournamentStatus.Completed)
@@ -992,6 +1220,19 @@ public static class StatsCalculator
             tournamentQuery = tournamentQuery.Where(t => t.VenueId == tourVenueId);
         if (formatIdList is not null)
             tournamentQuery = tournamentQuery.Where(t => formatIdList.Contains(t.FormatId ?? Guid.Empty));
+        if (tourIdFilter is not null)
+            tournamentQuery = tournamentQuery.Where(t => tourIdFilter.Contains(t.Id));
+        else if (eventScoped)
+        {
+            var fromMatches = matches
+                .Where(m => m.TournamentId is Guid)
+                .Select(m => m.TournamentId!.Value)
+                .Distinct()
+                .ToList();
+            tournamentQuery = fromMatches.Count == 0
+                ? tournamentQuery.Where(_ => false)
+                : tournamentQuery.Where(t => fromMatches.Contains(t.Id));
+        }
         var tournaments = await tournamentQuery.ToListAsync(ct).ConfigureAwait(false);
 
         IQueryable<Series> seriesQuery = db.Series.AsNoTracking()
@@ -1004,6 +1245,19 @@ public static class StatsCalculator
             seriesQuery = seriesQuery.Where(s => s.VenueId == seriesVenueId);
         if (formatIdList is not null)
             seriesQuery = seriesQuery.Where(s => formatIdList.Contains(s.FormatId ?? Guid.Empty));
+        if (seriesIdFilter is not null)
+            seriesQuery = seriesQuery.Where(s => seriesIdFilter.Contains(s.Id));
+        else if (eventScoped)
+        {
+            var fromMatches = matches
+                .Where(m => m.SeriesId is Guid)
+                .Select(m => m.SeriesId!.Value)
+                .Distinct()
+                .ToList();
+            seriesQuery = fromMatches.Count == 0
+                ? seriesQuery.Where(_ => false)
+                : seriesQuery.Where(s => fromMatches.Contains(s.Id));
+        }
         var seriesList = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
 
         var inningsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
@@ -1029,12 +1283,96 @@ public static class StatsCalculator
             .Include(b => b.Participants)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        // Total = sum of all venue booking rows; Present = listed as participant; Absent = Total − Present.
+
+        // Debut day = calendar day of the player's first completed match (local date, not UTC instant).
+        // Bookings are stored as local midnights (+05); comparing raw UTC instants wrongly drops same-day rows.
+        var debutDayByPlayer = new Dictionary<Guid, DateTime>();
+        if (attendanceFromDebut)
+        {
+            void ConsiderDebut(Guid pid, DateTime matchUtc)
+            {
+                if (pid == Guid.Empty)
+                    return;
+                var day = AttendanceCalendarDay(matchUtc);
+                if (!debutDayByPlayer.TryGetValue(pid, out var existing) || day < existing)
+                    debutDayByPlayer[pid] = day;
+            }
+
+            var debutMatches = await db.Matches.AsNoTracking()
+                .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted)
+                .Select(m => new { m.Id, m.MatchDateUtc, m.SquadRosterJson })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            foreach (var match in debutMatches)
+            {
+                var snap = MatchSquadSnapshot.TryParse(match.SquadRosterJson);
+                if (snap is null)
+                    continue;
+                foreach (var pid in snap.PlayersOfTeamA().Concat(snap.PlayersOfTeamB()))
+                    ConsiderDebut(pid, match.MatchDateUtc);
+            }
+
+            // SQL mins — avoid loading every delivery into memory (that was canceling filter-options).
+            var completed = db.Matches.AsNoTracking()
+                .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted);
+            var batterDebuts = await (
+                    from d in db.Deliveries.AsNoTracking()
+                    join m in completed on d.MatchId equals m.Id
+                    group m.MatchDateUtc by d.BatterId
+                    into g
+                    select new { PlayerId = g.Key, First = g.Min() })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var bowlerDebuts = await (
+                    from d in db.Deliveries.AsNoTracking()
+                    join m in completed on d.MatchId equals m.Id
+                    group m.MatchDateUtc by d.BowlerId
+                    into g
+                    select new { PlayerId = g.Key, First = g.Min() })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var dismissedDebuts = await (
+                    from d in db.Deliveries.AsNoTracking()
+                    join m in completed on d.MatchId equals m.Id
+                    where d.DismissedPlayerId != null
+                    group m.MatchDateUtc by d.DismissedPlayerId!.Value
+                    into g
+                    select new { PlayerId = g.Key, First = g.Min() })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var fielderDebuts = await (
+                    from d in db.Deliveries.AsNoTracking()
+                    join m in completed on d.MatchId equals m.Id
+                    where d.FielderId != null
+                    group m.MatchDateUtc by d.FielderId!.Value
+                    into g
+                    select new { PlayerId = g.Key, First = g.Min() })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            foreach (var row in batterDebuts.Concat(bowlerDebuts).Concat(dismissedDebuts).Concat(fielderDebuts))
+                ConsiderDebut(row.PlayerId, row.First);
+        }
+
+        // Total = all venue booking rows (or from each player's debut); Present = listed; Absent = Total − Present.
         var attendanceTotal = venueBookings.Count;
         var presentByPlayer = venueBookings
             .SelectMany(b => b.Participants.Select(p => new { p.PlayerId, BookingId = b.Id }))
             .GroupBy(x => x.PlayerId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.BookingId).Distinct().Count());
+        var paymentByPlayer = venueBookings
+            .SelectMany(b => b.Participants)
+            .GroupBy(p => p.PlayerId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var total = g.Sum(x => x.Amount);
+                    var paid = g.Where(x => string.Equals(x.Status, VenueBookingPaymentStatus.Paid, StringComparison.OrdinalIgnoreCase))
+                        .Sum(x => x.Amount);
+                    return (Total: total, Paid: paid);
+                });
 
         var list = new List<PlayerCareerDto>();
         foreach (var player in players)
@@ -1049,18 +1387,47 @@ public static class StatsCalculator
             var summary = new PlayerCareerDto { PlayerId = player.Id, PlayerName = player.FullName };
             ApplyBatting(summary, asBatter);
             ApplyDismissals(summary, outs);
+            ApplyPartnerRunOuts(summary, allDeliveries, player.Id);
             ApplyBowling(summary, asBowler);
             ApplyBattingMilestones(summary, asBatter, outs);
-            ApplyBowlingMilestones(summary, asBowler);
+            ApplyBowlingMilestones(summary, asBowler, allDeliveries, matches, inningsById);
             ApplyFielding(summary, allDeliveries, player.Id);
             ApplyMatchResults(summary, player.Id, matches, inningsByMatch, inningsById, asBatter, asBowler, teams);
             ApplyTournamentResults(summary, player.Id, tournaments, teams);
             ApplySeriesResults(summary, player.Id, seriesList, teams);
-            ApplyAttendance(summary, attendanceTotal, presentByPlayer.GetValueOrDefault(player.Id));
 
+            if (attendanceFromDebut && debutDayByPlayer.TryGetValue(player.Id, out var debutDay))
+            {
+                var relevant = venueBookings
+                    .Where(b => AttendanceCalendarDay(b.BookingDateUtc) >= debutDay)
+                    .ToList();
+                var present = relevant.Count(b => b.Participants.Any(p => p.PlayerId == player.Id));
+                var shares = relevant.SelectMany(b => b.Participants.Where(p => p.PlayerId == player.Id)).ToList();
+                var due = shares.Sum(p => p.Amount);
+                var paidAmt = shares
+                    .Where(p => string.Equals(p.Status, VenueBookingPaymentStatus.Paid, StringComparison.OrdinalIgnoreCase))
+                    .Sum(p => p.Amount);
+                ApplyAttendance(summary, relevant.Count, present, due, paidAmt);
+            }
+            else if (attendanceFromDebut)
+            {
+                // No completed match yet — don't invent a venue "debut"; leave attendance empty.
+                ApplyAttendance(summary, 0, 0, 0, 0);
+            }
+            else
+            {
+                paymentByPlayer.TryGetValue(player.Id, out var pay);
+                ApplyAttendance(summary, attendanceTotal, presentByPlayer.GetValueOrDefault(player.Id), pay.Total, pay.Paid);
+            }
+
+            // Substitute fielders never bat or bowl, so their only footprint is a catch /
+            // run-out / stumping — keep them on the board without counting a match played.
             if (summary.Matches == 0 && summary.Runs == 0 && summary.Wickets == 0
                 && asBatter.Count == 0 && asBowler.Count == 0
+                && summary.Catches == 0 && summary.RunOutsEffected == 0 && summary.Stumpings == 0
+                && summary.DroppedCatches == 0
                 && summary.AttendancePresent == 0
+                && summary.PaymentTotal <= 0
                 && summary.Tournaments == 0
                 && summary.Series == 0)
                 continue;
@@ -1150,14 +1517,16 @@ public static class StatsCalculator
             summary.Sessions = sessionsByPlayer.GetValueOrDefault(player.Id)?.Count ?? 0;
             ApplyBatting(summary, asBatter);
             ApplyDismissals(summary, outs);
+            ApplyPartnerRunOuts(summary, battingBalls, player.Id);
             ApplyBowling(summary, asBowler);
             ApplyBattingMilestones(summary, asBatter, outs);
-            ApplyBowlingMilestones(summary, asBowler);
+            ApplyBowlingMilestones(summary, asBowler, battingBalls);
             ApplyFielding(summary, bowlingBalls, player.Id);
 
             if (summary.Sessions == 0 && summary.Runs == 0 && summary.Wickets == 0
                 && asBatter.Count == 0 && asBowler.Count == 0
-                && summary.Catches == 0 && summary.RunOutsEffected == 0 && summary.Stumpings == 0)
+                && summary.Catches == 0 && summary.RunOutsEffected == 0 && summary.Stumpings == 0
+                && summary.DroppedCatches == 0)
                 continue;
 
             list.Add(summary);
@@ -1255,6 +1624,7 @@ public static class StatsCalculator
         WicketType = d.WicketType,
         DismissedPlayerId = d.DismissedPlayerId,
         FielderId = d.FielderId,
+        IsDroppedCatch = d.IsDroppedCatch,
         IsLegalDelivery = d.IsLegalDelivery,
         CreatedAtUtc = d.CreatedAtUtc,
         Version = d.Version
@@ -1275,9 +1645,8 @@ public static class StatsCalculator
         if (deliveries.Count == 0)
             return Array.Empty<ConfrontationDto>();
 
-        var names = await db.Players.AsNoTracking()
-            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
-            .ConfigureAwait(false);
+        var nameIds = deliveries.Select(d => d.BowlerId).Concat(deliveries.Select(d => d.BatterId)).Append(playerId);
+        var names = await PlayerNamesAsync(db, nameIds, ct).ConfigureAwait(false);
 
         var groups = asBatterPerspective
             ? deliveries.GroupBy(d => d.BowlerId)
@@ -1313,6 +1682,101 @@ public static class StatsCalculator
             : stats.OrderByDescending(s => s.Outs).ThenBy(s => s.Runs).ToList();
     }
 
+    /// <summary>1 vs 1 fielding: this fielder vs every batter they affected.</summary>
+    public static async Task<IReadOnlyList<FieldingVsDto>> BuildFieldingVsAsync(
+        ApiDbContext db,
+        Guid playerId,
+        CancellationToken ct)
+    {
+        var deliveries = await db.Deliveries.AsNoTracking()
+            .Where(d => d.FielderId == playerId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return await BuildFieldingVsFromDeliveriesAsync(db, playerId, deliveries, ct).ConfigureAwait(false);
+    }
+
+    public static async Task<IReadOnlyList<FieldingVsDto>> BuildNetsFieldingVsAsync(
+        ApiDbContext db,
+        Guid playerId,
+        CancellationToken ct)
+    {
+        var completedIds = await db.NetSessions.AsNoTracking()
+            .Where(s => s.Status == NetSessionStatus.Completed && !s.IsDeleted)
+            .Select(s => s.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (completedIds.Count == 0)
+            return Array.Empty<FieldingVsDto>();
+
+        var netBalls = await db.NetDeliveries.AsNoTracking()
+            .Where(d => completedIds.Contains(d.SessionId) && d.FielderId == playerId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var deliveries = netBalls.Select(d => FromNet(d, d.SessionId)).ToList();
+        return await BuildFieldingVsFromDeliveriesAsync(db, playerId, deliveries, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<IReadOnlyList<FieldingVsDto>> BuildFieldingVsFromDeliveriesAsync(
+        ApiDbContext db,
+        Guid playerId,
+        List<Delivery> deliveries,
+        CancellationToken ct)
+    {
+        if (deliveries.Count == 0)
+            return Array.Empty<FieldingVsDto>();
+
+        var rows = new Dictionary<Guid, FieldingVsDto>();
+        foreach (var d in deliveries)
+        {
+            Guid? opponentId = null;
+            if (d.IsDroppedCatch && !d.IsWicket)
+                opponentId = d.BatterId;
+            else if (d.IsWicket)
+                opponentId = d.DismissedPlayerId ?? d.BatterId;
+
+            if (opponentId is not Guid opp || opp == Guid.Empty || opp == playerId)
+                continue;
+
+            if (!rows.TryGetValue(opp, out var row))
+            {
+                row = new FieldingVsDto { FielderId = playerId, BatterId = opp };
+                rows[opp] = row;
+            }
+
+            if (d.IsDroppedCatch && !d.IsWicket)
+            {
+                row.DroppedCatches++;
+                continue;
+            }
+
+            switch (d.WicketType)
+            {
+                case WicketType.Caught: row.Catches++; break;
+                case WicketType.RunOut: row.RunOuts++; break;
+                case WicketType.Stumped: row.Stumpings++; break;
+            }
+        }
+
+        if (rows.Count == 0)
+            return Array.Empty<FieldingVsDto>();
+
+        var nameIds = rows.Keys.Append(playerId);
+        var names = await PlayerNamesAsync(db, nameIds, ct).ConfigureAwait(false);
+        var fielderName = names.GetValueOrDefault(playerId, "?");
+        foreach (var row in rows.Values)
+        {
+            row.FielderName = fielderName;
+            row.BatterName = names.GetValueOrDefault(row.BatterId, "?");
+        }
+
+        return rows.Values
+            .OrderByDescending(r => r.Total)
+            .ThenByDescending(r => r.Catches)
+            .ThenByDescending(r => r.RunOuts)
+            .ThenBy(r => r.BatterName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     /// <summary>1 vs 1 as captain: this player vs every opposing captain faced.</summary>
     public static async Task<IReadOnlyList<CaptainVsDto>> BuildCaptainVsAsync(
         ApiDbContext db,
@@ -1320,13 +1784,16 @@ public static class StatsCalculator
         CancellationToken ct = default)
     {
         var teams = await db.Teams.AsNoTracking()
-            .Include(t => t.TeamPlayers)
             .ToDictionaryAsync(t => t.Id, t => t, ct)
             .ConfigureAwait(false);
         var captainTeamIds = teams.Values
             .Where(t => t.CaptainPlayerId == playerId)
             .Select(t => t.Id)
-            .ToList();
+            .ToHashSet();
+
+        // Same captain resolution as career captain stats: match override, else team captain.
+        Guid? CaptainOf(Guid teamId, Guid? matchCaptainId)
+            => matchCaptainId ?? (teams.TryGetValue(teamId, out var team) ? team.CaptainPlayerId : null);
 
         var matches = await db.Matches.AsNoTracking()
             .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted
@@ -1347,6 +1814,7 @@ public static class StatsCalculator
                 .ConfigureAwait(false);
         var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
 
+        // Series where this player was captain of either side (team captain roster).
         var seriesList = await db.Series.AsNoTracking()
             .Where(s => !s.IsDeleted && s.Status == SeriesStatus.Completed
                         && (captainTeamIds.Contains(s.TeamAId) || captainTeamIds.Contains(s.TeamBId)))
@@ -1356,13 +1824,12 @@ public static class StatsCalculator
         var rows = new Dictionary<Guid, CaptainVsDto>();
         var nameIds = new HashSet<Guid> { playerId };
 
-        Guid? CaptainOf(Guid teamId, Guid? matchCaptainId)
-            => matchCaptainId ?? (teams.TryGetValue(teamId, out var team) ? team.CaptainPlayerId : null);
-
         foreach (var match in matches)
         {
             var capA = CaptainOf(match.TeamAId, match.TeamACaptainId);
             var capB = CaptainOf(match.TeamBId, match.TeamBCaptainId);
+
+            // Only count when this player was the effective captain for the match.
             Guid? opponentId = null;
             Guid? ourTeamId = null;
             if (capA == playerId)
@@ -1375,6 +1842,7 @@ public static class StatsCalculator
                 opponentId = capA;
                 ourTeamId = match.TeamBId;
             }
+
             if (opponentId is not Guid opp || opp == Guid.Empty || opp == playerId || ourTeamId is null)
                 continue;
 
@@ -1387,7 +1855,14 @@ public static class StatsCalculator
 
             innsByMatch.TryGetValue(match.Id, out var inns);
             inns ??= new List<Innings>();
+            var oppTeamIdForMatch = ourTeamId == match.TeamAId ? match.TeamBId : match.TeamAId;
+            var (usRuns, usBalls) = TeamMatchTotals(inns, ourTeamId.Value);
+            var (themRuns, themBalls) = TeamMatchTotals(inns, oppTeamIdForMatch);
             row.Played++;
+            row.RunsFor += usRuns;
+            row.RunsAgainst += themRuns;
+            row.BallsFor += usBalls;
+            row.BallsAgainst += themBalls;
             var (winner, tied) = ResolveResult(match, inns);
             if (tied) row.Tied++;
             else if (winner == ourTeamId) row.Won++;
@@ -1410,8 +1885,9 @@ public static class StatsCalculator
             }
             if (ourTeamId is null || oppTeamId is null)
                 continue;
-            if (!teams.TryGetValue(oppTeamId.Value, out var oppTeam) || oppTeam.CaptainPlayerId is not Guid opp
-                || opp == Guid.Empty || opp == playerId)
+
+            var oppCap = CaptainOf(oppTeamId.Value, matchCaptainId: null);
+            if (oppCap is not Guid opp || opp == Guid.Empty || opp == playerId)
                 continue;
 
             if (!rows.TryGetValue(opp, out var row))
@@ -1475,9 +1951,8 @@ public static class StatsCalculator
         if (deliveries.Count == 0)
             return Array.Empty<ConfrontationDto>();
 
-        var names = await db.Players.AsNoTracking()
-            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
-            .ConfigureAwait(false);
+        var nameIds = deliveries.Select(d => d.BowlerId).Concat(deliveries.Select(d => d.BatterId)).Append(playerId);
+        var names = await PlayerNamesAsync(db, nameIds, ct).ConfigureAwait(false);
 
         var groups = asBatterPerspective
             ? deliveries.GroupBy(d => d.BowlerId)
@@ -1522,12 +1997,13 @@ public static class StatsCalculator
         List<Delivery> asBowler,
         Dictionary<Guid, Team> teams)
     {
-        var played = asBatter.Select(d => d.MatchId).Concat(asBowler.Select(d => d.MatchId)).ToHashSet();
-        foreach (var match in completedMatches.Where(m => played.Contains(m.Id)))
+        foreach (var match in completedMatches)
         {
             if (!inningsByMatch.TryGetValue(match.Id, out var matchInns))
                 continue;
-            var playerTeamId = ResolvePlayerTeam(playerId, asBatter, asBowler, inningsById, match.Id);
+            // Playing XI (or bat/bowl appearance) counts as a match — not only balls faced/bowled.
+            var playerTeamId = ResolvePlayerTeamFromSquad(match, playerId)
+                ?? ResolvePlayerTeam(playerId, asBatter, asBowler, inningsById, match.Id);
             if (playerTeamId is null)
                 continue;
 
@@ -1546,7 +2022,31 @@ public static class StatsCalculator
             if (tied) summary.CaptainTied++;
             else if (winnerId == playerTeamId) summary.CaptainWon++;
             else summary.CaptainLoss++;
+
+            var (usRuns, usBalls) = TeamMatchTotals(matchInns, playerTeamId.Value);
+            var oppTeamId = playerTeamId == match.TeamAId ? match.TeamBId : match.TeamAId;
+            var (themRuns, themBalls) = TeamMatchTotals(matchInns, oppTeamId);
+            summary.CaptainRunsFor += usRuns;
+            summary.CaptainBallsFor += usBalls;
+            summary.CaptainRunsAgainst += themRuns;
+            summary.CaptainBallsAgainst += themBalls;
         }
+    }
+
+    /// <summary>Team id if this player was named in the match playing XI (squad roster).</summary>
+    private static Guid? ResolvePlayerTeamFromSquad(Match match, Guid playerId)
+    {
+        var snap = MatchSquadSnapshot.TryParse(match.SquadRosterJson);
+        if (snap is null)
+            return null;
+
+        var teamAId = match.TeamAId != Guid.Empty ? match.TeamAId : snap.TeamAId;
+        var teamBId = match.TeamBId != Guid.Empty ? match.TeamBId : snap.TeamBId;
+        if (teamAId != Guid.Empty && snap.PlayersOfTeamA().Contains(playerId))
+            return teamAId;
+        if (teamBId != Guid.Empty && snap.PlayersOfTeamB().Contains(playerId))
+            return teamBId;
+        return null;
     }
 
     private static void ApplyTournamentResults(
@@ -1575,6 +2075,7 @@ public static class StatsCalculator
             summary.Tournaments++;
             var won = tour.WinnerTeamId == playerTeamId;
             if (won) summary.TournamentWon++;
+            else if (tour.WinnerTeamId is null) summary.TournamentTied++;
             else summary.TournamentLoss++;
 
             if (!teams.TryGetValue(playerTeamId.Value, out var playerTeam)
@@ -1583,6 +2084,7 @@ public static class StatsCalculator
 
             summary.CaptainTournaments++;
             if (won) summary.CaptainTournamentWon++;
+            else if (tour.WinnerTeamId is null) summary.CaptainTournamentTied++;
             else summary.CaptainTournamentLoss++;
         }
     }
@@ -1698,6 +2200,21 @@ public static class StatsCalculator
         }
     }
 
+    /// <summary>
+    /// Count run-outs where this player was at the crease but the partner was dismissed
+    /// (surviving batter when partner was run out).
+    /// </summary>
+    private static void ApplyPartnerRunOuts(PlayerCareerDto s, IReadOnlyList<Delivery> all, Guid playerId)
+    {
+        foreach (var d in all)
+        {
+            if (!d.IsWicket || d.WicketType != WicketType.RunOut) continue;
+            if (d.DismissedPlayerId is not Guid dismissed || dismissed == playerId) continue;
+            if (d.BatterId == playerId || d.NonStrikerId == playerId)
+                s.PartnerRunOuts++;
+        }
+    }
+
     private static void CountBat(PlayerCareerDto s, int r, bool dot)
     {
         switch (r)
@@ -1714,12 +2231,13 @@ public static class StatsCalculator
 
     private static void ApplyBowling(PlayerCareerDto s, List<Delivery> asBowler)
     {
+        s.InningsBowled = asBowler.Select(d => d.InningsId).Distinct().Count();
         foreach (var d in asBowler)
         {
             switch (d.ExtraType)
             {
-                case ExtraType.Wide: s.WidesBowled++; break;
-                case ExtraType.NoBall: s.NoBallsBowled++; break;
+                case ExtraType.Wide: s.WidesBowled += d.ExtraRuns; break;
+                case ExtraType.NoBall: s.NoBallsBowled += d.ExtraRuns; break;
                 case ExtraType.Bye: s.ByesConceded += d.ExtraRuns; break;
                 case ExtraType.LegBye: s.LegByesConceded += d.ExtraRuns; break;
             }
@@ -1729,6 +2247,12 @@ public static class StatsCalculator
                 s.OversBowledBalls++;
                 if (d.RunsOffBat == 0 && d.ExtraRuns == 0 && !d.IsWicket)
                     s.DotBallsBowled++;
+            }
+
+            switch (d.RunsOffBat)
+            {
+                case 4: s.FoursConceded++; break;
+                case >= 6: s.SixesConceded++; break;
             }
 
             s.RunsConceded += d.RunsOffBat + d.ExtraRuns;
@@ -1798,10 +2322,17 @@ public static class StatsCalculator
         }
     }
 
-    private static void ApplyBowlingMilestones(PlayerCareerDto s, List<Delivery> asBowler)
+    private static void ApplyBowlingMilestones(
+        PlayerCareerDto s,
+        List<Delivery> asBowler,
+        IReadOnlyList<Delivery> allDeliveries,
+        IReadOnlyList<Match>? matches = null,
+        IReadOnlyDictionary<Guid, Innings>? inningsById = null)
     {
         var bestWkts = -1;
         var bestRuns = int.MaxValue;
+        var byInnings = allDeliveries.GroupBy(d => d.InningsId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(d => d.Sequence).ToList());
 
         foreach (var innGroup in asBowler.GroupBy(d => d.InningsId))
         {
@@ -1826,13 +2357,27 @@ public static class StatsCalculator
                 }
             }
 
+            if (wkts >= 5)
+                s.FiveWicketHauls++;
+
             if (wkts > bestWkts || (wkts == bestWkts && runs < bestRuns))
             {
                 bestWkts = wkts;
                 bestRuns = runs;
             }
 
-            s.HatTricks += CountHatTricks(list);
+            if (!byInnings.TryGetValue(innGroup.Key, out var innBalls))
+                continue;
+            foreach (var wicket in list.Where(IsBowlerWicket))
+            {
+                var dismissedId = wicket.DismissedPlayerId ?? wicket.BatterId;
+                var (batterRuns, batterBalls) = BatterScoreUpTo(innBalls, dismissedId, wicket.Sequence);
+                if (batterRuns != 0)
+                    continue;
+                s.DuckWkts++;
+                if (batterBalls == 1)
+                    s.GoldenDuckWkts++;
+            }
         }
 
         if (bestWkts >= 0)
@@ -1841,6 +2386,56 @@ public static class StatsCalculator
             s.BestBowlingRuns = bestRuns;
             s.BestBowlingText = $"{bestWkts}/{bestRuns}";
         }
+
+        // ICC: hat-trick = 3 consecutive bowler-credited wickets in the bowler's
+        // delivery stream — same over, across overs, or across matches.
+        s.HatTricks = CountHatTricks(OrderBowlerCareerDeliveries(asBowler, matches, inningsById));
+    }
+
+    private static List<Delivery> OrderBowlerCareerDeliveries(
+        List<Delivery> asBowler,
+        IReadOnlyList<Match>? matches,
+        IReadOnlyDictionary<Guid, Innings>? inningsById)
+    {
+        var matchDateById = matches?.ToDictionary(m => m.Id, m => m.MatchDateUtc);
+        return asBowler
+            .OrderBy(d => matchDateById != null && matchDateById.TryGetValue(d.MatchId, out var dt)
+                ? dt
+                : d.CreatedAtUtc)
+            .ThenBy(d => d.MatchId)
+            .ThenBy(d => inningsById != null && inningsById.TryGetValue(d.InningsId, out var inn)
+                ? inn.InningsNumber
+                : 0)
+            .ThenBy(d => d.Sequence)
+            .ToList();
+    }
+
+    private static (int Runs, int Balls) BatterScoreUpTo(
+        IReadOnlyList<Delivery> inningsBalls,
+        Guid batterId,
+        int upToSequenceInclusive)
+    {
+        var runs = 0;
+        var balls = 0;
+        foreach (var d in inningsBalls)
+        {
+            if (d.Sequence > upToSequenceInclusive)
+                break;
+            if (d.BatterId != batterId)
+                continue;
+            if (d.ExtraType == ExtraType.Wide)
+                continue;
+            if (d.ExtraType == ExtraType.NoBall)
+            {
+                runs += d.RunsOffBat;
+                continue;
+            }
+            if (!d.IsLegalDelivery)
+                continue;
+            balls++;
+            runs += d.RunsOffBat;
+        }
+        return (runs, balls);
     }
 
     private static bool IsBowlerWicket(Delivery d) =>
@@ -1849,14 +2444,14 @@ public static class StatsCalculator
             WicketType.Stumped or WicketType.HitWicket;
 
     /// <summary>
-    /// Three bowler-credited wickets in three consecutive deliveries (wides/no-balls included).
-    /// Can span overs; run-outs break the streak.
+    /// Three bowler-credited wickets in three consecutive deliveries by that bowler
+    /// (wides/no-balls included in the stream). Spans overs and matches; run-outs break the streak.
     /// </summary>
-    private static int CountHatTricks(IReadOnlyList<Delivery> bowledInInnings)
+    private static int CountHatTricks(IReadOnlyList<Delivery> bowlerCareerOrdered)
     {
         var hatTricks = 0;
         var streak = 0;
-        foreach (var d in bowledInInnings)
+        foreach (var d in bowlerCareerOrdered)
         {
             if (IsBowlerWicket(d))
             {
@@ -1896,17 +2491,45 @@ public static class StatsCalculator
         return maidens;
     }
 
-    private static void ApplyAttendance(PlayerCareerDto s, int venueTotal, int presentCount)
+    private static void ApplyAttendance(
+        PlayerCareerDto s,
+        int venueTotal,
+        int presentCount,
+        decimal paymentTotal = 0,
+        decimal paymentPaid = 0)
     {
         s.AttendanceTotal = venueTotal;
         s.AttendancePresent = presentCount;
         s.AttendanceAbsent = Math.Max(0, venueTotal - presentCount);
+        s.PaymentTotal = paymentTotal < 0 ? 0 : paymentTotal;
+        s.PaymentPaid = paymentPaid < 0 ? 0 : Math.Min(paymentPaid, s.PaymentTotal);
+    }
+
+    /// <summary>
+    /// Calendar day for attendance/debut compares. Match times are UTC; booking dates are local midnights.
+    /// Using .Date on UTC instants drops same-day bookings (e.g. 26 Jul 00:00 +05 &lt; 26 Jul 03:49Z).
+    /// </summary>
+    private static DateTime AttendanceCalendarDay(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Utc)
+            return value.ToLocalTime().Date;
+        // Unspecified/local: treat the stored clock as the intended calendar day.
+        return DateTime.SpecifyKind(value.Date, DateTimeKind.Unspecified);
     }
 
     private static void ApplyFielding(PlayerCareerDto s, List<Delivery> all, Guid playerId)
     {
-        foreach (var d in all.Where(x => x.FielderId == playerId && x.IsWicket))
+        foreach (var d in all.Where(x => x.FielderId == playerId))
         {
+            if (d.IsDroppedCatch && !d.IsWicket)
+            {
+                s.DroppedCatches++;
+                continue;
+            }
+
+            if (!d.IsWicket)
+                continue;
+
             switch (d.WicketType)
             {
                 case WicketType.Caught: s.Catches++; break;
@@ -1914,6 +2537,18 @@ public static class StatsCalculator
                 case WicketType.Stumped: s.Stumpings++; break;
             }
         }
+    }
+
+    private static async Task<Dictionary<Guid, string>> PlayerNamesAsync(
+        ApiDbContext db, IEnumerable<Guid> ids, CancellationToken ct)
+    {
+        var list = ids.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (list.Count == 0)
+            return new Dictionary<Guid, string>();
+        return await db.Players.AsNoTracking()
+            .Where(p => list.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+            .ConfigureAwait(false);
     }
 
     private static void ApplyConfrontation(ConfrontationDto row, Delivery d)
@@ -1934,7 +2569,18 @@ public static class StatsCalculator
             }
         }
         row.ExtrasConceded += d.ExtraRuns;
-        if (d.IsWicket && d.DismissedPlayerId == d.BatterId)
-            row.Outs++;
+        if (!d.IsWicket || d.DismissedPlayerId != d.BatterId)
+            return;
+
+        row.Outs++;
+        switch (d.WicketType)
+        {
+            case WicketType.Bowled: row.Bowled++; break;
+            case WicketType.Caught: row.Caught++; break;
+            case WicketType.Lbw: row.Lbw++; break;
+            case WicketType.RunOut: row.RunOut++; break;
+            case WicketType.Stumped: row.Stumped++; break;
+            case WicketType.HitWicket: row.HitWicket++; break;
+        }
     }
 }

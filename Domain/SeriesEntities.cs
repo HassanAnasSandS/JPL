@@ -25,6 +25,11 @@ public sealed class Series
     public int BowlerMaxOvers { get; set; }
     public SeriesStatus Status { get; set; } = SeriesStatus.Draft;
     public Guid? WinnerTeamId { get; set; }
+    /// <summary>Auto from all completed matches (same points idea as Player of the Match).</summary>
+    public Guid? PlayerOfTheSeriesPlayerId { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
     /// <summary>True when the series finished with equal match wins.</summary>
     public bool IsTied { get; set; }
     public long Version { get; set; } = 1;

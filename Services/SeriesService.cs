@@ -37,6 +37,14 @@ public sealed class SeriesDetail
     public string StatusText { get; set; } = string.Empty;
     public Guid? WinnerTeamId { get; set; }
     public string? WinnerTeamName { get; set; }
+    public Guid? PlayerOfTheSeriesPlayerId { get; set; }
+    public string? PlayerOfTheSeriesName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
     public bool IsTied { get; set; }
     public string ScoreLine { get; set; } = string.Empty;
     public IReadOnlyList<SeriesFixtureItem> Fixtures { get; init; } = Array.Empty<SeriesFixtureItem>();
@@ -211,7 +219,9 @@ public sealed class SeriesService : ISeriesService
     {
         _auth.EnsureCanWrite();
         var remote = await _api.GenerateSeriesAsync(id, ct).ConfigureAwait(false);
-        return ToDetail(remote);
+        var detail = ToDetail(remote);
+        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
+        return detail;
     }
 
     public Task LinkMatchAsync(Guid seriesId, Guid fixtureId, Guid matchId, CancellationToken ct = default)
@@ -320,6 +330,14 @@ public sealed class SeriesService : ISeriesService
             StatusText = dto.StatusText,
             WinnerTeamId = dto.WinnerTeamId,
             WinnerTeamName = dto.WinnerTeamName,
+            PlayerOfTheSeriesPlayerId = dto.PlayerOfTheSeriesPlayerId,
+            PlayerOfTheSeriesName = dto.PlayerOfTheSeriesName,
+            BestBatsmanPlayerId = dto.BestBatsmanPlayerId,
+            BestBatsmanName = dto.BestBatsmanName,
+            BestBowlerPlayerId = dto.BestBowlerPlayerId,
+            BestBowlerName = dto.BestBowlerName,
+            BestFielderPlayerId = dto.BestFielderPlayerId,
+            BestFielderName = dto.BestFielderName,
             IsTied = dto.IsTied,
             ScoreLine = dto.IsTied ? $"Series tied {score}" : score,
             Fixtures = dto.Fixtures.Select(f => new SeriesFixtureItem
@@ -475,9 +493,9 @@ public sealed class SeriesService : ISeriesService
             else if (byFixture.TryGetValue(f.Id, out var byFix))
                 local = byFix;
 
+            // Start stays visible even if another match is active; StartFixtureAsync gates that.
             f.CanStart = f.MatchId is null && !draft
-                         && detail.Status is not 0 and not 3
-                         && liveId is null;
+                         && detail.Status is not 0 and not 3;
             f.CanResume = local is not null
                           && (local.Status is MatchStatus.Setup or MatchStatus.InProgress)
                           && !draft

@@ -1,6 +1,9 @@
 namespace JPL.Services;
 
-/// <summary>Session unlock for Auctions write actions (Add / Edit / Delete).</summary>
+/// <summary>
+/// Session lock kept for AuthService. Auction add/edit no longer uses a module password —
+/// league admins can create; only the creator admin can edit/run/delete.
+/// </summary>
 public interface IAuctionsModuleGate
 {
     bool IsUnlocked { get; }
@@ -11,23 +14,15 @@ public interface IAuctionsModuleGate
 
 public sealed class AuctionsModuleGate : IAuctionsModuleGate
 {
-    public const string ModulePassword = "25593";
+    public bool IsUnlocked { get; private set; } = true;
 
-    public bool IsUnlocked { get; private set; }
-
-    public bool TryUnlock(string? password)
+    public bool TryUnlock(string? _)
     {
-        if (string.Equals(password?.Trim(), ModulePassword, StringComparison.Ordinal))
-        {
-            IsUnlocked = true;
-            return true;
-        }
-
-        IsUnlocked = false;
-        return false;
+        IsUnlocked = true;
+        return true;
     }
 
     public void Unlock() => IsUnlocked = true;
 
-    public void Lock() => IsUnlocked = false;
+    public void Lock() => IsUnlocked = true;
 }

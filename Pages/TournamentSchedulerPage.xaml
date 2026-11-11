@@ -9,11 +9,24 @@
              Title="Tournament Scheduler"
              HideSoftInputOnTapped="True">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="14" RowSpacing="10">
+    <ContentPage.Resources>
+        <Style x:Key="SchedulerAction" TargetType="Button">
+            <Setter Property="FontSize" Value="{OnIdiom Phone=12, Default=11}" />
+            <Setter Property="Padding" Value="{OnIdiom Phone='12,6', Default='10,4'}" />
+            <Setter Property="MinimumHeightRequest" Value="{OnIdiom Phone=36, Default=28}" />
+            <Setter Property="MinimumWidthRequest" Value="{OnIdiom Phone=64, Default=52}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Margin" Value="{OnIdiom Phone='0,0,6,4', Default='0,0,4,0'}" />
+        </Style>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto"
+          Padding="{OnIdiom Phone=14, Default=10}"
+          RowSpacing="{OnIdiom Phone=10, Default=8}">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <VerticalStackLayout Spacing="2" VerticalOptions="Center">
                 <Label Text="Tournament Scheduler"
-                       FontSize="22"
+                       FontSize="{OnIdiom Phone=22, Default=20}"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
                 <Label Text="{Binding CountLabel}"
@@ -21,12 +34,13 @@
                        TextColor="{StaticResource TextSecondary}" />
                 <Label Text="Manual groups, round robin, and knockout — no live scoring"
                        Style="{StaticResource MutedLabel}"
-                       FontSize="12" />
+                       FontSize="{OnIdiom Phone=12, Default=11}"
+                       IsVisible="{OnIdiom Phone=True, Default=False}" />
             </VerticalStackLayout>
             <Button Grid.Column="1"
                     Text="+ New"
                     Style="{StaticResource GoldButton}"
-                    Padding="16,10"
+                    Padding="{OnIdiom Phone='16,10', Default='14,8'}"
                     VerticalOptions="Center"
                     IsVisible="{Binding CanWrite}"
                     Clicked="OnAddClicked" />
@@ -50,72 +64,157 @@
         <RefreshView Grid.Row="2"
                      IsRefreshing="{Binding IsBusy}"
                      Command="{Binding LoadCommand}">
-            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+            <CollectionView x:Name="SchedulerList"
+                            ItemsSource="{Binding Items}"
+                            SelectionMode="None"
                             RemainingItemsThreshold="1"
                             RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
                             EmptyView="No scheduled tournaments yet. Create one, add teams, then record results by hand.">
+                <CollectionView.ItemsLayout>
+                    <GridItemsLayout x:Name="SchedulerGridLayout"
+                                     Orientation="Vertical"
+                                     Span="1"
+                                     HorizontalItemSpacing="10"
+                                     VerticalItemSpacing="8" />
+                </CollectionView.ItemsLayout>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="vm:SchedulerRow">
-                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
-                            <VerticalStackLayout Spacing="8">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="{Binding Name}"
-                                               FontAttributes="Bold"
-                                               FontSize="17"
-                                               TextColor="{StaticResource Primary}" />
-                                        <Label Text="{Binding MetaLine}"
-                                               FontSize="12"
-                                               Style="{StaticResource MutedLabel}" />
-                                        <Label Text="{Binding OwnerLine}"
-                                               IsVisible="{Binding HasOwner}"
-                                               FontSize="12"
-                                               FontAttributes="Bold"
-                                               TextColor="{StaticResource Secondary}" />
-                                    </VerticalStackLayout>
-                                    <Border Grid.Column="1"
-                                            StrokeThickness="0"
+                        <Grid>
+                        <!-- Desktop: one compact row — info | status | actions -->
+                        <Border Style="{StaticResource CardBorder}"
+                                Padding="10"
+                                HorizontalOptions="Fill"
+                                VerticalOptions="Fill"
+                                IsVisible="{OnIdiom Phone=False, Default=True}">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                                  RowSpacing="4">
+                                <Label Text="{Binding Name}"
+                                       FontAttributes="Bold"
+                                       FontSize="14"
+                                       TextColor="{StaticResource Primary}"
+                                       LineBreakMode="WordWrap" />
+                                <HorizontalStackLayout Grid.Row="1"
+                                                       Spacing="6">
+                                    <Border StrokeThickness="0"
                                             BackgroundColor="#E8EEF5"
-                                            Padding="10,6"
-                                            StrokeShape="RoundRectangle 8"
-                                            VerticalOptions="Start">
+                                            Padding="8,4"
+                                            StrokeShape="RoundRectangle 6"
+                                            VerticalOptions="Center">
                                         <Label Text="{Binding StatusText}"
-                                               FontSize="11"
+                                               FontSize="10"
                                                FontAttributes="Bold"
                                                TextColor="{StaticResource Primary}" />
                                     </Border>
-                                </Grid>
-                                <Label Text="{Binding WinnerLine}"
-                                       IsVisible="{Binding HasWinner}"
-                                       FontSize="13"
-                                       FontAttributes="Bold"
-                                       TextColor="{StaticResource Secondary}" />
-                                <HorizontalStackLayout Spacing="8">
+                                    <Button Text="View"
+                                            Style="{StaticResource SchedulerAction}"
+                                            BackgroundColor="{StaticResource Secondary}"
+                                            TextColor="{StaticResource Primary}"
+                                            Clicked="OnViewClicked"
+                                            CommandParameter="{Binding .}" />
                                     <Button Text="Open"
-                                            Padding="12,6"
-                                            FontSize="12"
-                                            Style="{StaticResource GoldButton}"
+                                            Style="{StaticResource SchedulerAction}"
+                                            BackgroundColor="#E8EEF5"
+                                            TextColor="{StaticResource Primary}"
+                                            IsVisible="{Binding CanEdit}"
                                             Clicked="OnOpenClicked"
                                             CommandParameter="{Binding .}" />
                                     <Button Text="Edit"
-                                            Padding="12,6"
-                                            FontSize="12"
+                                            Style="{StaticResource SchedulerAction}"
                                             BackgroundColor="#E8EEF5"
                                             TextColor="{StaticResource Primary}"
                                             IsVisible="{Binding CanEdit}"
                                             Clicked="OnEditClicked"
                                             CommandParameter="{Binding .}" />
                                     <Button Text="Delete"
-                                            Padding="12,6"
-                                            FontSize="12"
+                                            Style="{StaticResource SchedulerAction}"
                                             BackgroundColor="#FFE8EC"
                                             TextColor="{StaticResource Danger}"
-                                            IsVisible="{Binding CanEdit}"
+                                            IsVisible="{Binding CanDelete}"
                                             Clicked="OnDeleteClicked"
                                             CommandParameter="{Binding .}" />
                                 </HorizontalStackLayout>
+                                <Label Grid.Row="2"
+                                       Text="{Binding OwnerLine}"
+                                       IsVisible="{Binding HasOwner}"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}"
+                                       LineBreakMode="WordWrap" />
+                                <Label Grid.Row="3"
+                                       Text="{Binding WinnerLine}"
+                                       IsVisible="{Binding HasWinner}"
+                                       FontSize="12"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}"
+                                       LineBreakMode="WordWrap" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Phone: stacked card -->
+                        <Border Style="{StaticResource CardBorder}"
+                                Margin="0,0,0,8"
+                                Padding="12"
+                                IsVisible="{OnIdiom Phone=True, Default=False}">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="{Binding Name}"
+                                       FontAttributes="Bold"
+                                       FontSize="16"
+                                       TextColor="{StaticResource Primary}"
+                                       LineBreakMode="WordWrap" />
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="#E8EEF5"
+                                        Padding="10,6"
+                                        StrokeShape="RoundRectangle 8"
+                                        HorizontalOptions="Start">
+                                    <Label Text="{Binding StatusText}"
+                                           FontSize="11"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource Primary}" />
+                                </Border>
+                                <Label Text="{Binding OwnerLine}"
+                                       IsVisible="{Binding HasOwner}"
+                                       FontSize="12"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}"
+                                       LineBreakMode="WordWrap" />
+                                <Label Text="{Binding WinnerLine}"
+                                       IsVisible="{Binding HasWinner}"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Secondary}"
+                                       LineBreakMode="WordWrap" />
+                                <FlexLayout Wrap="Wrap" AlignItems="Start" JustifyContent="Start">
+                                    <Button Text="View"
+                                            Style="{StaticResource SchedulerAction}"
+                                            BackgroundColor="{StaticResource Secondary}"
+                                            TextColor="{StaticResource Primary}"
+                                            Clicked="OnViewClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Open"
+                                            Style="{StaticResource SchedulerAction}"
+                                            BackgroundColor="#E8EEF5"
+                                            TextColor="{StaticResource Primary}"
+                                            IsVisible="{Binding CanEdit}"
+                                            Clicked="OnOpenClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Edit"
+                                            Style="{StaticResource SchedulerAction}"
+                                            BackgroundColor="#E8EEF5"
+                                            TextColor="{StaticResource Primary}"
+                                            IsVisible="{Binding CanEdit}"
+                                            Clicked="OnEditClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Delete"
+                                            Style="{StaticResource SchedulerAction}"
+                                            BackgroundColor="#FFE8EC"
+                                            TextColor="{StaticResource Danger}"
+                                            IsVisible="{Binding CanDelete}"
+                                            Clicked="OnDeleteClicked"
+                                            CommandParameter="{Binding .}" />
+                                </FlexLayout>
                             </VerticalStackLayout>
                         </Border>
+                        </Grid>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
             </CollectionView>

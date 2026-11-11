@@ -7,7 +7,7 @@ using AndroidX.Activity;
 namespace JPL;
 
 [Activity(
-    Theme = "@style/Maui.SplashTheme",
+    Theme = "@style/Cric.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTop,
     EnableOnBackInvokedCallback = true,

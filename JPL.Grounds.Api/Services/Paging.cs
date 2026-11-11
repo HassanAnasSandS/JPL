@@ -2,7 +2,7 @@ namespace JPL.Grounds.Api.Services;
 
 public static class Paging
 {
-    public const int DefaultTake = 5;
+    public const int DefaultTake = 15;
     public const int MaxTake = 50;
 
     public static int ClampTake(int take)

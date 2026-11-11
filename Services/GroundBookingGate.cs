@@ -7,24 +7,32 @@ public static class GroundBookingGate
         if (auth.Current?.CanBookGrounds == true)
             return true;
 
-        if (auth.Current?.IsGuest != true)
-            return false;
-
         var page = Shell.Current
                    ?? (Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0].Page : null);
         if (page is null)
             return false;
 
-        var signup = await page.DisplayAlert(
-            "Sign up required",
-            "Create your own Cric360 account to book a ground. Guest login cannot send bookings.",
-            "Sign up",
-            "Cancel").ConfigureAwait(true);
-        if (!signup)
-            return false;
+        // Guest (or not signed in): must create a real account to book.
+        if (auth.Current is null || auth.Current.IsGuest)
+        {
+            var signup = await page.DisplayAlert(
+                "Login required",
+                "Please login or sign up to book a ground. Browsing stays open without an account.",
+                "Login / Sign up",
+                "Cancel").ConfigureAwait(true);
+            if (!signup)
+                return false;
 
-        await auth.LogoutAsync().ConfigureAwait(true);
-        await navigator.ShowLoginAsync(openSignup: true).ConfigureAwait(true);
+            await auth.LogoutAsync().ConfigureAwait(true);
+            await navigator.ShowLoginAsync(openSignup: true).ConfigureAwait(true);
+            return false;
+        }
+
+        // Ground owners book from the owner dashboard, not the public book flow.
+        await page.DisplayAlert(
+            "Booking",
+            "Ground owners manage bookings from My Grounds.",
+            "OK").ConfigureAwait(true);
         return false;
     }
 }

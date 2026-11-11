@@ -135,7 +135,7 @@ public sealed record DeliveryInput(
     WicketType WicketType,
     Guid? DismissedPlayerId,
     Guid? FielderId = null,
-    byte ShotZone = 0);
+    bool IsDroppedCatch = false);
 
 /// <summary>Crease/bowler state stored on the deleted ball — restore UI after undo.</summary>
 public sealed record UndoneDelivery(
@@ -246,6 +246,14 @@ public sealed class BowlingCardRow
     public int RunsConceded { get; set; }
     public int Wickets { get; set; }
     public int Maidens { get; set; }
+    /// <summary>Wide runs conceded by this bowler.</summary>
+    public int Wides { get; set; }
+    /// <summary>No-ball runs conceded by this bowler.</summary>
+    public int NoBalls { get; set; }
+    /// <summary>Bye runs conceded while this bowler was bowling.</summary>
+    public int Byes { get; set; }
+    /// <summary>Leg-bye runs conceded while this bowler was bowling.</summary>
+    public int LegByes { get; set; }
     public bool IsCaptain { get; set; }
     public string DisplayName => IsCaptain ? $"{Name} (C)" : Name;
     public string OversText
@@ -257,6 +265,7 @@ public sealed class BowlingCardRow
             return $"{o}.{b}";
         }
     }
+    public int Extras => Wides + NoBalls + Byes + LegByes;
     public double Economy => BallsBowled == 0 ? 0 : Math.Round(RunsConceded * 6.0 / BallsBowled, 2);
     public string EconomyText => Economy.ToString("0.00");
     public string FiguresText => $"{OversText}-{Maidens}-{RunsConceded}-{Wickets}";
@@ -271,7 +280,8 @@ public sealed record InningsScorecard(
     int TotalRuns,
     int Wickets,
     string DidNotBatText = "",
-    string DidNotBowlText = "");
+    string DidNotBowlText = "",
+    IReadOnlyList<OverBallMark>? ThisOver = null);
 
 public sealed class InningsScorecardSection
 {
@@ -412,6 +422,14 @@ public interface IMatchService
     Task<MatchListItem?> GetActiveMatchAsync(CancellationToken ct = default);
     /// <summary>True when this phone has the SQLite scoring row AND the current admin started the match.</summary>
     Task<bool> IsScoredOnThisDeviceAsync(Guid matchId, CancellationToken ct = default);
+    /// <summary>
+    /// Make sure this device holds the scoring rows for <paramref name="matchId"/>: download the
+    /// Match/Innings/Delivery graph from the server when SQLite is empty (app reinstall), and take
+    /// ownership back onto this install when the signed-in admin started the match elsewhere.
+    /// Returns false when neither this device nor the server has the match.
+    /// </summary>
+    Task<bool> EnsureLocalMatchAsync(
+        Guid matchId, bool reclaimDeviceIfOwner = true, CancellationToken ct = default);
     Task<Match> CreateAsync(MatchDraft draft, CancellationToken ct = default);
     Task<Innings> StartInningsAsync(Guid matchId, Guid battingTeamId, Guid bowlingTeamId, bool isFollowOn = false, CancellationToken ct = default);
     Task<EndInningsResult> EndInningsAsync(Guid matchId, CancellationToken ct = default);
@@ -422,6 +440,7 @@ public interface IMatchService
     Task<InningsScorecard?> GetLiveScorecardAsync(Guid matchId, Guid? strikerId = null, Guid? nonStrikerId = null, CancellationToken ct = default);
     /// <summary>Full batting/bowling scorecard for every innings (completed or local ongoing).</summary>
     Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default);
+    Task<PlayerMatchReport?> GetPlayerMatchReportAsync(Guid matchId, Guid playerId, CancellationToken ct = default);
     Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default);
     Task CompleteMatchAsync(Guid matchId, CancellationToken ct = default);
     /// <summary>Squad players for POTM picker (from match roster snapshot).</summary>
@@ -595,12 +614,15 @@ public sealed class MatchService : IMatchService
     public async Task<MatchListItem?> GetActiveMatchAsync(CancellationToken ct = default)
     {
         await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
+        await ReclaimOwnedActiveDevicesAsync(ct).ConfigureAwait(false);
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        // Sort in memory so active match is the latest in-progress row.
+        // Only matches this admin can score count as "active". Foreign leftovers
+        // (other account / other device) must not block Start with a View-only error.
         var match = (await db.Matches.AsNoTracking()
                 .Where(m => m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress)
                 .ToListAsync(ct)
                 .ConfigureAwait(false))
+            .Where(m => ScoringOwnership.IsOwner(m, _auth))
             .OrderByDescending(m => m.Status == MatchStatus.InProgress)
             .ThenByDescending(m => m.MatchDateUtc)
             .FirstOrDefault();
@@ -613,6 +635,7 @@ public sealed class MatchService : IMatchService
 
     public async Task<bool> IsScoredOnThisDeviceAsync(Guid matchId, CancellationToken ct = default)
     {
+        await ReclaimOwnedActiveDevicesAsync(ct).ConfigureAwait(false);
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var match = await db.Matches.AsNoTracking()
             .FirstOrDefaultAsync(
@@ -622,6 +645,154 @@ public sealed class MatchService : IMatchService
             .ConfigureAwait(false);
         return match is not null && ScoringOwnership.IsOwner(match, _auth);
     }
+
+    public async Task<bool> EnsureLocalMatchAsync(
+        Guid matchId, bool reclaimDeviceIfOwner = true, CancellationToken ct = default)
+    {
+        if (matchId == Guid.Empty)
+            return false;
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+
+        // Ignore filters: a soft-deleted or other-league row still owns the primary key,
+        // so re-inserting the downloaded match would fail.
+        var existing = await db.Matches.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct)
+            .ConfigureAwait(false);
+        if (existing is not null)
+        {
+            if (existing.IsDeleted || existing.LeagueId != db.CurrentLeagueId)
+                return false;
+            await ReclaimScoringDeviceAsync(db, existing, reclaimDeviceIfOwner, ct).ConfigureAwait(false);
+            return true;
+        }
+
+        ApiMatchExportDto? export;
+        try
+        {
+            export = await _api.GetMatchExportAsync(matchId, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Offline, or an older API without the export endpoint.
+            return false;
+        }
+
+        if (export?.Match is not ApiMatchRowDto row || row.IsDeleted)
+            return false;
+
+        var match = FromExport(row);
+        db.Matches.Add(match);
+        foreach (var i in export.Innings.OrderBy(x => x.InningsNumber))
+            db.Innings.Add(FromExport(i));
+        foreach (var d in export.Deliveries.OrderBy(x => x.InningsId).ThenBy(x => x.Sequence))
+            db.Deliveries.Add(FromExport(d));
+
+        // LeagueId is stamped on save; Ids stay the client Guids the server was given.
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await ReclaimScoringDeviceAsync(db, match, reclaimDeviceIfOwner, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// A reinstall mints a new <see cref="DeviceInstall.Id"/>, which would otherwise leave the
+    /// admin who started the match unable to score it. Move ownership here and re-publish so the
+    /// API accepts the following balls from this install.
+    /// </summary>
+    private async Task ReclaimScoringDeviceAsync(
+        JplDbContext db, Match match, bool reclaim, CancellationToken ct)
+    {
+        if (!reclaim || !_auth.CanWrite)
+            return;
+        if (match.Status is not (MatchStatus.Setup or MatchStatus.InProgress))
+            return;
+        if (_auth.Current?.UserId is not Guid userId)
+            return;
+        if (match.StartedByUserId is Guid owner && owner != userId)
+            return;
+
+        var deviceId = DeviceInstall.Id;
+        if (match.StartedByUserId == userId && match.StartedOnDeviceId == deviceId)
+            return;
+
+        match.StartedByUserId = userId;
+        match.StartedOnDeviceId = deviceId;
+        match.UpdatedAtUtc = DateTime.Now;
+        match.Version++;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await PublishLiveMatchAsync(match, inningsId: null, deliveryId: null, ct).ConfigureAwait(false);
+    }
+
+    private static Match FromExport(ApiMatchRowDto r) => new()
+    {
+        Id = r.Id,
+        Title = r.Title,
+        TeamAId = r.TeamAId,
+        TeamBId = r.TeamBId,
+        TeamACaptainId = r.TeamACaptainId,
+        TeamBCaptainId = r.TeamBCaptainId,
+        OversLimit = r.OversLimit,
+        OversMode = (OversMode)r.OversMode,
+        Format = (MatchFormat)r.Format,
+        FormatId = r.FormatId,
+        MatchDateUtc = r.MatchDateUtc,
+        Venue = r.Venue,
+        Status = (MatchStatus)r.Status,
+        TossWinnerTeamId = r.TossWinnerTeamId,
+        TossWinnerBatsFirst = r.TossWinnerBatsFirst,
+        LastBatsmanCanBatAsSingleWicket = r.LastBatsmanCanBatAsSingleWicket,
+        BowlerMaxOvers = r.BowlerMaxOvers,
+        PlayerOfTheMatchPlayerId = r.PlayerOfTheMatchPlayerId,
+        TournamentId = r.TournamentId,
+        TournamentFixtureId = r.TournamentFixtureId,
+        SeriesId = r.SeriesId,
+        SeriesFixtureId = r.SeriesFixtureId,
+        Version = r.Version,
+        CreatedAtUtc = r.CreatedAtUtc,
+        UpdatedAtUtc = r.UpdatedAtUtc,
+        IsDeleted = false,
+        SquadRosterJson = r.SquadRosterJson,
+        IsLiveTelecast = r.IsLiveTelecast,
+        LiveStreamUrl = r.LiveStreamUrl,
+        StartedByUserId = r.StartedByUserId,
+        StartedOnDeviceId = r.StartedOnDeviceId
+    };
+
+    private static Innings FromExport(ApiInningsRowDto r) => new()
+    {
+        Id = r.Id,
+        MatchId = r.MatchId,
+        InningsNumber = r.InningsNumber,
+        BattingTeamId = r.BattingTeamId,
+        BowlingTeamId = r.BowlingTeamId,
+        IsCompleted = r.IsCompleted,
+        IsFollowOn = r.IsFollowOn,
+        StartedAtUtc = r.StartedAtUtc
+    };
+
+    private static Delivery FromExport(ApiDeliveryRowDto r) => new()
+    {
+        Id = r.Id,
+        MatchId = r.MatchId,
+        InningsId = r.InningsId,
+        Sequence = r.Sequence,
+        OverNumber = r.OverNumber,
+        BallInOver = r.BallInOver,
+        BatterId = r.BatterId,
+        NonStrikerId = r.NonStrikerId,
+        BowlerId = r.BowlerId,
+        RunsOffBat = r.RunsOffBat,
+        ExtraRuns = r.ExtraRuns,
+        ExtraType = (ExtraType)r.ExtraType,
+        IsWicket = r.IsWicket,
+        WicketType = (WicketType)r.WicketType,
+        DismissedPlayerId = r.DismissedPlayerId,
+        FielderId = r.FielderId,
+        IsDroppedCatch = r.IsDroppedCatch,
+        IsLegalDelivery = r.IsLegalDelivery,
+        CreatedAtUtc = r.CreatedAtUtc,
+        Version = r.Version
+    };
 
     private async Task EnsureLocalScoringOwnersAsync(CancellationToken ct)
     {
@@ -641,6 +812,29 @@ public sealed class MatchService : IMatchService
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Same admin, new install id (reinstall / cleared prefs): take the scoring device back
+    /// so Start / Continue is not stuck on View-only.
+    /// </summary>
+    private async Task ReclaimOwnedActiveDevicesAsync(CancellationToken ct)
+    {
+        if (!_auth.CanWrite || _auth.Current?.UserId is not Guid userId)
+            return;
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var deviceId = DeviceInstall.Id;
+        var rows = await db.Matches
+            .Where(m =>
+                (m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress)
+                && (m.StartedByUserId == null || m.StartedByUserId == userId)
+                && (m.StartedOnDeviceId == null || m.StartedOnDeviceId != deviceId))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (rows.Count == 0)
+            return;
+        foreach (var match in rows)
+            await ReclaimScoringDeviceAsync(db, match, reclaim: true, ct).ConfigureAwait(false);
+    }
+
     private void EnsureScoringOwner(Match match) => ScoringOwnership.EnsureOwner(match, _auth);
 
     private static string OneLeagueMatchMessage(string title) =>
@@ -657,6 +851,8 @@ public sealed class MatchService : IMatchService
             .ConfigureAwait(false);
         if (exceptMatchId is Guid id)
             rows = rows.Where(m => m.Id != id).ToList();
+        // Foreign (other account/device) leftovers must not block creating/scoring ours.
+        rows = rows.Where(m => ScoringOwnership.IsOwner(m, _auth)).ToList();
         return rows
             .OrderByDescending(m => m.Status == MatchStatus.InProgress)
             .ThenByDescending(m => m.UpdatedAtUtc)
@@ -1003,6 +1199,8 @@ public sealed class MatchService : IMatchService
             TeamBCaptainName = roster.TeamBCaptainName,
             TeamAPlayers = roster.TeamAPlayers,
             TeamBPlayers = roster.TeamBPlayers,
+            TeamASubstitutes = roster.TeamASubstitutes,
+            TeamBSubstitutes = roster.TeamBSubstitutes,
             BattingTeamId = match.TeamAId,
             BowlingTeamId = match.TeamBId
         });
@@ -1202,6 +1400,8 @@ public sealed class MatchService : IMatchService
 
         var isWideOrNb = input.ExtraType is ExtraType.Wide or ExtraType.NoBall;
         var isLegal = !isWideOrNb;
+        if (input.RunsOffBat == 5)
+            throw new InvalidOperationException("5 runs off the bat is not allowed.");
 
         var delivery = new Delivery
         {
@@ -1219,9 +1419,11 @@ public sealed class MatchService : IMatchService
             IsWicket = input.IsWicket,
             WicketType = input.IsWicket ? input.WicketType : WicketType.None,
             DismissedPlayerId = input.IsWicket ? (input.DismissedPlayerId ?? input.BatterId) : null,
-            FielderId = input.IsWicket ? input.FielderId : null,
-            IsLegalDelivery = isLegal,
-            ShotZone = input.ShotZone
+            IsDroppedCatch = !input.IsWicket && input.IsDroppedCatch,
+            FielderId = input.IsWicket || (!input.IsWicket && input.IsDroppedCatch)
+                ? input.FielderId
+                : null,
+            IsLegalDelivery = isLegal
         };
 
         match.Status = MatchStatus.InProgress;
@@ -1277,15 +1479,12 @@ public sealed class MatchService : IMatchService
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
 
-        if (match.IsLiveTelecast)
+        try
         {
-            try
-            {
-                await _live.EnqueueDeliveryDeleteAsync(matchId, undoneId, ct).ConfigureAwait(false);
-            }
-            catch { /* live queue must not block undo */ }
-            _live.RequestFlush();
+            await _live.EnqueueDeliveryDeleteAsync(matchId, undoneId, ct).ConfigureAwait(false);
         }
+        catch { /* live queue must not block undo */ }
+        _live.RequestFlush();
         return undone;
     }
 
@@ -1397,7 +1596,7 @@ public sealed class MatchService : IMatchService
             .ToListAsync(ct)
             .ConfigureAwait(false);
         var dismissed = dismissedIds.ToHashSet();
-        var availableBatters = squad.Batters.Where(p => !dismissed.Contains(p.Id)).ToList();
+        var availableBatters = squad.Batters.Where(p => !p.IsSubstitute && !dismissed.Contains(p.Id)).ToList();
 
         // Hide bowlers who have completed their max overs (like dismissed batters leave the list).
         IReadOnlyList<SquadPlayer> availableBowlers = squad.Bowlers;
@@ -1413,7 +1612,7 @@ public sealed class MatchService : IMatchService
                 .Where(x => x.LegalBalls / 6 >= match.BowlerMaxOvers)
                 .Select(x => x.BowlerId)
                 .ToHashSet();
-            availableBowlers = squad.Bowlers.Where(p => !exhausted.Contains(p.Id)).ToList();
+            availableBowlers = squad.Bowlers.Where(p => !p.IsSubstitute && !exhausted.Contains(p.Id)).ToList();
             if (exhausted.Count > 0)
                 hint += $" · Max {match.BowlerMaxOvers} ov/bowler";
         }
@@ -1484,7 +1683,7 @@ public sealed class MatchService : IMatchService
 
         return BuildInningsScorecard(
             deliveries, names, strikerId, nonStrikerId, battingCaptainId, bowlingCaptainId,
-            battingSquad, bowlingSquad);
+            battingSquad, bowlingSquad, squad.SubstituteIds());
     }
 
     private static Guid? CaptainOfTeam(MatchSquadSnapshot squad, Guid teamId)
@@ -1517,6 +1716,90 @@ public sealed class MatchService : IMatchService
         }
 
         return local;
+    }
+
+    public async Task<PlayerMatchReport?> GetPlayerMatchReportAsync(Guid matchId, Guid playerId, CancellationToken ct = default)
+    {
+        var local = await TryBuildLocalPlayerReportAsync(matchId, playerId, ct).ConfigureAwait(false);
+        if (local is not null)
+            return local;
+
+        try
+        {
+            var remote = await _api.GetPlayerMatchReportAsync(matchId, playerId, ct).ConfigureAwait(false);
+            if (remote is not null)
+                return remote;
+        }
+        catch
+        {
+            /* offline */
+        }
+
+        return local;
+    }
+
+    private async Task<PlayerMatchReport?> TryBuildLocalPlayerReportAsync(Guid matchId, Guid playerId, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var match = await db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct)
+            .ConfigureAwait(false);
+        if (match is null)
+            return null;
+
+        var innings = await db.Innings.AsNoTracking()
+            .Where(i => i.MatchId == matchId)
+            .OrderBy(i => i.InningsNumber)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var inningsIds = innings.Select(i => i.Id).ToList();
+        var deliveries = await db.Deliveries.AsNoTracking()
+            .Where(d => inningsIds.Contains(d.InningsId))
+            .OrderBy(d => d.Sequence)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (deliveries.Count == 0)
+            return null;
+
+        var roster = MatchRosterPayload.TryParse(match.SquadRosterJson);
+        var (playerNames, teamNames) = await LiveMasterNames.LoadAsync(_api, _dbFactory, ct)
+            .ConfigureAwait(false);
+        var names = new Dictionary<Guid, string>();
+        if (roster is not null)
+        {
+            foreach (var p in roster.AllNamedPlayers())
+                names[p.Id] = p.FullName;
+        }
+        foreach (var kv in playerNames)
+            names[kv.Key] = kv.Value;
+
+        var teamA = LiveMasterNames.Lookup(teamNames, match.TeamAId, roster?.TeamAName ?? "Team A");
+        var teamB = LiveMasterNames.Lookup(teamNames, match.TeamBId, roster?.TeamBName ?? "Team B");
+        var playerName = names.GetValueOrDefault(playerId, "Player");
+        var teamName = roster?.TeamAPlayers.Any(p => p.Id == playerId) == true
+                || roster?.TeamASubstitutes.Any(p => p.Id == playerId) == true
+            ? teamA
+            : roster?.TeamBPlayers.Any(p => p.Id == playerId) == true
+                || roster?.TeamBSubstitutes.Any(p => p.Id == playerId) == true
+                ? teamB
+                : string.Empty;
+
+        var byInn = deliveries.GroupBy(d => d.InningsId).ToDictionary(g => g.Key, g => g.ToList());
+        var rows = new List<(int Number, string BattingTeam, IReadOnlyList<Delivery> Balls)>();
+        foreach (var inn in innings)
+        {
+            byInn.TryGetValue(inn.Id, out var balls);
+            var batting = inn.BattingTeamId == match.TeamAId ? teamA : teamB;
+            rows.Add((inn.InningsNumber, batting, balls ?? new List<Delivery>()));
+        }
+
+        return PlayerMatchReportBuilder.Build(
+            playerId,
+            playerName,
+            teamName,
+            match.Title,
+            rows,
+            names);
     }
 
     public async Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default)
@@ -1572,7 +1855,7 @@ public sealed class MatchService : IMatchService
         var names = new Dictionary<Guid, string>();
         if (roster is not null)
         {
-            foreach (var p in roster.TeamAPlayers.Concat(roster.TeamBPlayers))
+            foreach (var p in roster.AllNamedPlayers())
                 names[p.Id] = p.FullName;
         }
         foreach (var kv in playerNames)
@@ -1636,7 +1919,7 @@ public sealed class MatchService : IMatchService
         var names = new Dictionary<Guid, string>();
         if (roster is not null)
         {
-            foreach (var p in roster.TeamAPlayers.Concat(roster.TeamBPlayers))
+            foreach (var p in roster.AllNamedPlayers())
                 names[p.Id] = p.FullName;
         }
 
@@ -1674,7 +1957,8 @@ public sealed class MatchService : IMatchService
                 CaptainOf(inn.BattingTeamId),
                 CaptainOf(inn.BowlingTeamId),
                 battingSquad,
-                bowlingSquad);
+                bowlingSquad,
+                SubstituteIdsOf(roster));
             var legal = balls.Count(d => d.IsLegalDelivery);
             sections.Add(new InningsScorecardSection
             {
@@ -1737,7 +2021,7 @@ public sealed class MatchService : IMatchService
             WinnerTeamId = winnerId,
             PlayerOfTheMatchPlayerId = match.PlayerOfTheMatchPlayerId,
             PlayerOfTheMatchName = match.PlayerOfTheMatchPlayerId is Guid potmId
-                ? roster?.TeamAPlayers.Concat(roster.TeamBPlayers).FirstOrDefault(p => p.Id == potmId)?.FullName
+                ? roster?.AllNamedPlayers().FirstOrDefault(p => p.Id == potmId)?.FullName
                   ?? names.GetValueOrDefault(potmId)
                 : null,
             LiveStreamUrl = match.LiveStreamUrl,
@@ -1963,6 +2247,16 @@ public sealed class MatchService : IMatchService
         return (runs, wickets);
     }
 
+    private static HashSet<Guid> SubstituteIdsOf(MatchRosterPayload? roster)
+    {
+        var ids = new HashSet<Guid>();
+        if (roster is null)
+            return ids;
+        foreach (var p in roster.TeamASubstitutes.Concat(roster.TeamBSubstitutes))
+            ids.Add(p.Id);
+        return ids;
+    }
+
     private static IReadOnlyList<SquadPlayer> SquadForTeam(MatchSquadSnapshot squad, Guid teamId)
     {
         if (teamId == squad.TeamAId)
@@ -2007,7 +2301,8 @@ public sealed class MatchService : IMatchService
         Guid? battingCaptainId = null,
         Guid? bowlingCaptainId = null,
         IReadOnlyList<SquadPlayer>? battingSquad = null,
-        IReadOnlyList<SquadPlayer>? bowlingSquad = null)
+        IReadOnlyList<SquadPlayer>? bowlingSquad = null,
+        IReadOnlySet<Guid>? substituteIds = null)
     {
         string RawName(Guid id) => names.GetValueOrDefault(id, "?");
         string NameOf(Guid id)
@@ -2015,6 +2310,13 @@ public sealed class MatchService : IMatchService
             var n = RawName(id);
             if (battingCaptainId == id || bowlingCaptainId == id)
                 return $"{n} (C)";
+            return n;
+        }
+        string FielderOf(Guid id)
+        {
+            var n = RawName(id);
+            if (substituteIds is not null && substituteIds.Contains(id))
+                n = $"{n} (Substitute)";
             return n;
         }
 
@@ -2043,7 +2345,7 @@ public sealed class MatchService : IMatchService
             var outDelivery = deliveries.LastOrDefault(d =>
                 d.IsWicket && d.DismissedPlayerId == pid);
             var isOut = outDelivery is not null;
-            var dismissal = isOut ? FormatDismissal(outDelivery!, NameOf) : string.Empty;
+            var dismissal = isOut ? FormatDismissal(outDelivery!, NameOf, FielderOf) : string.Empty;
 
             batting.Add(new BattingCardRow
             {
@@ -2085,6 +2387,10 @@ public sealed class MatchService : IMatchService
                 RunsConceded = runsConceded,
                 Wickets = wickets,
                 Maidens = maidens,
+                Wides = bowled.Where(d => d.ExtraType == ExtraType.Wide).Sum(d => d.ExtraRuns),
+                NoBalls = bowled.Where(d => d.ExtraType == ExtraType.NoBall).Sum(d => d.ExtraRuns),
+                Byes = bowled.Where(d => d.ExtraType == ExtraType.Bye).Sum(d => d.ExtraRuns),
+                LegByes = bowled.Where(d => d.ExtraType == ExtraType.LegBye).Sum(d => d.ExtraRuns),
                 IsCaptain = bowlingCaptainId == pid
             });
         }
@@ -2095,7 +2401,9 @@ public sealed class MatchService : IMatchService
         var didNotBat = FormatDidNotLine("Did not bat", battingSquad, battingOrder);
         var didNotBowl = FormatDidNotLine("Did not bowl", bowlingSquad, bowlingOrder);
 
-        return new InningsScorecard(batting, bowling, extras, totalRuns, totalWickets, didNotBat, didNotBowl);
+        return new InningsScorecard(
+            batting, bowling, extras, totalRuns, totalWickets, didNotBat, didNotBowl,
+            BuildThisOver(deliveries));
     }
 
     private static int CountMaidens(List<Delivery> bowled)
@@ -2119,15 +2427,16 @@ public sealed class MatchService : IMatchService
         return maidens;
     }
 
-    private static string FormatDismissal(Delivery d, Func<Guid, string> nameOf)
+    private static string FormatDismissal(Delivery d, Func<Guid, string> nameOf, Func<Guid, string>? fielderOf = null)
     {
+        var field = fielderOf ?? nameOf;
         var how = d.WicketType switch
         {
             WicketType.Bowled => "b",
-            WicketType.Caught => d.FielderId is Guid f ? $"c {nameOf(f)} b" : "c b",
+            WicketType.Caught => d.FielderId is Guid f ? $"c {field(f)} b" : "c b",
             WicketType.Lbw => "lbw b",
-            WicketType.RunOut => d.FielderId is Guid f ? $"run out ({nameOf(f)})" : "run out",
-            WicketType.Stumped => d.FielderId is Guid f ? $"st {nameOf(f)} b" : "st b",
+            WicketType.RunOut => d.FielderId is Guid f ? $"run out ({field(f)})" : "run out",
+            WicketType.Stumped => d.FielderId is Guid f ? $"st {field(f)} b" : "st b",
             WicketType.HitWicket => "hit wicket b",
             WicketType.Retired => "retired",
             _ => "out"
@@ -2185,7 +2494,7 @@ public sealed class MatchService : IMatchService
         var roster = MatchRosterPayload.TryParse(match.SquadRosterJson);
         var squadIds = roster is null
             ? null
-            : roster.TeamAPlayers.Concat(roster.TeamBPlayers).Select(p => p.Id).ToHashSet();
+            : roster.AllNamedPlayers().Select(p => p.Id).ToHashSet();
 
         var points = new Dictionary<Guid, double>();
         var runs = new Dictionary<Guid, int>();
@@ -2248,8 +2557,7 @@ public sealed class MatchService : IMatchService
             return null;
 
         var roster = MatchRosterPayload.TryParse(match.SquadRosterJson);
-        return roster?.TeamAPlayers.Concat(roster.TeamBPlayers)
-            .FirstOrDefault(p => p.Id == id)?.FullName;
+        return roster?.AllNamedPlayers().FirstOrDefault(p => p.Id == id)?.FullName;
     }
 
     public async Task<IReadOnlyList<SquadPlayer>> GetMatchSquadPlayersAsync(Guid matchId, CancellationToken ct = default)
@@ -2332,22 +2640,19 @@ public sealed class MatchService : IMatchService
         if (match.Status is MatchStatus.Abandoned)
             throw new InvalidOperationException("Abandoned matches cannot be deleted.");
 
-        // Local-only cancel — incomplete matches are never synced.
+        // The server holds a live backup of every match, so the cancel has to reach it too.
         match.IsDeleted = true;
         match.UpdatedAtUtc = DateTime.Now;
         match.Version++;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         _squadCache.Clear(matchId);
-        if (match.IsLiveTelecast)
+        try
         {
-            try
-            {
-                await _live.EnqueueMatchDeleteAsync(matchId, ct).ConfigureAwait(false);
-            }
-            catch { }
-            _live.RequestFlush();
+            await _live.EnqueueMatchDeleteAsync(matchId, ct).ConfigureAwait(false);
         }
+        catch { }
+        _live.RequestFlush();
     }
 
     /// <summary>
@@ -2594,16 +2899,19 @@ public sealed class MatchService : IMatchService
         d.WicketType,
         d.DismissedPlayerId,
         d.FielderId,
+        d.IsDroppedCatch,
         d.IsLegalDelivery,
         d.CreatedAtUtc,
         d.Version
     };
 
+    /// <summary>
+    /// Every match is cloud-backed as it is scored, telecast or not. IsLiveTelecast only
+    /// decides whether the match is advertised/streamed — without this the server has no
+    /// copy of a tournament match until the whole tournament syncs, so a reinstall loses it.
+    /// </summary>
     private async Task PublishLiveMatchAsync(Match match, Guid? inningsId, Guid? deliveryId, CancellationToken ct)
     {
-        if (!match.IsLiveTelecast)
-            return;
-
         try
         {
             await _live.EnqueueMatchAsync(match.Id, ct).ConfigureAwait(false);

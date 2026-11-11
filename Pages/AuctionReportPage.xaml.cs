@@ -11,7 +11,7 @@ public partial class AuctionReportPage : ContentPage
     {
         InitializeComponent();
         BindingContext = _vm = vm;
-        ScrollSync.FreezeHeader(AuctionTableScroll, AuctionNameHeaderHost, AuctionStatsHeaderHost);
+        ScrollSync.FreezeHeader(AuctionTableScroll, AuctionNameHeaderHost, AuctionStatsHeaderHost, DraftStatsHeaderHost);
     }
 
     protected override void OnAppearing()

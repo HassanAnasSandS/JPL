@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Controls.StatsColumnPickerView"
+             x:DataType="vm:StatsColumnVisibilityViewModel">
+    <VerticalStackLayout Spacing="4">
+        <Label Text="Columns"
+               FontSize="12"
+               Style="{StaticResource MutedLabel}" />
+        <Border Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+                StrokeThickness="1"
+                BackgroundColor="{AppThemeBinding Light=White, Dark=#152033}"
+                StrokeShape="RoundRectangle 8"
+                Padding="10,8">
+            <Border.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding ToggleDropdownCommand}" />
+            </Border.GestureRecognizers>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Label Text="{Binding SummaryText}"
+                       FontSize="13"
+                       LineBreakMode="TailTruncation"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource TextPrimary}" />
+                <Label Grid.Column="1"
+                       Text="▼"
+                       FontSize="10"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource TextSecondary}" />
+            </Grid>
+        </Border>
+        <Border IsVisible="{Binding IsDropdownOpen}"
+                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+                StrokeThickness="1"
+                BackgroundColor="{AppThemeBinding Light=White, Dark=#152033}"
+                StrokeShape="RoundRectangle 8"
+                Padding="8">
+            <VerticalStackLayout Spacing="6">
+                <Label Text="Show or hide columns for this tab"
+                       FontSize="11"
+                       Style="{StaticResource MutedLabel}" />
+                <ScrollView MaximumHeightRequest="240"
+                            VerticalScrollBarVisibility="Default">
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Options}" Spacing="2">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:StatsColumnOption">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Padding="2,1" jpl:ToggleOnTap.Enable="True">
+                                    <CheckBox IsChecked="{Binding IsVisible}"
+                                              VerticalOptions="Center"
+                                              Color="{StaticResource Primary}" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Title}"
+                                           FontSize="13"
+                                           VerticalOptions="Center"
+                                           LineBreakMode="TailTruncation"
+                                           TextColor="{StaticResource TextPrimary}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </ScrollView>
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <Button Text="Show all"
+                            Style="{StaticResource GhostButton}"
+                            Padding="10,6"
+                            FontSize="12"
+                            HorizontalOptions="Start"
+                            Command="{Binding ShowAllCommand}" />
+                    <Button Grid.Column="1"
+                            Text="Reset"
+                            Style="{StaticResource GhostButton}"
+                            Padding="10,6"
+                            FontSize="12"
+                            Command="{Binding ResetDefaultsCommand}" />
+                    <Button Grid.Column="2"
+                            Text="Done"
+                            Style="{StaticResource GhostButton}"
+                            Padding="10,6"
+                            FontSize="12"
+                            Command="{Binding CloseDropdownCommand}" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+    </VerticalStackLayout>
+</ContentView>

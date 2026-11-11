@@ -14,16 +14,25 @@ public partial class VenueParticipantEditor : ObservableObject
 
     [ObservableProperty] private bool isSelected;
     [ObservableProperty] private string status = VenueBookingPaymentStatus.Pending;
+    [ObservableProperty] private string amountText = "0";
 
     public bool IsPaid => string.Equals(Status, VenueBookingPaymentStatus.Paid, StringComparison.OrdinalIgnoreCase);
     public string StatusToggleLabel => IsPaid ? "Paid" : "Pending";
     public string DisplayName => PlayerName;
+    public string AmountDisplay => decimal.TryParse(AmountText, NumberStyles.Number, CultureInfo.InvariantCulture, out var inv)
+            ? inv.ToString("0.##", CultureInfo.InvariantCulture)
+            : decimal.TryParse(AmountText, NumberStyles.Number, CultureInfo.CurrentCulture, out var loc)
+                ? loc.ToString("0.##", CultureInfo.CurrentCulture)
+                : "0";
 
     partial void OnStatusChanged(string value)
     {
         OnPropertyChanged(nameof(IsPaid));
         OnPropertyChanged(nameof(StatusToggleLabel));
     }
+
+    partial void OnAmountTextChanged(string value)
+        => OnPropertyChanged(nameof(AmountDisplay));
 
     public void ToggleStatus()
         => Status = IsPaid ? VenueBookingPaymentStatus.Pending : VenueBookingPaymentStatus.Paid;
@@ -194,7 +203,8 @@ public partial class VenueBookingEditViewModel : ObservableObject
                 PlayerId = row.PlayerId,
                 PlayerName = row.PlayerName,
                 IsSelected = true,
-                Status = VenueBookingPaymentStatus.Normalize(row.Status)
+                Status = VenueBookingPaymentStatus.Normalize(row.Status),
+                AmountText = FormatAmount(row.Amount)
             });
         }
 
@@ -212,6 +222,7 @@ public partial class VenueBookingEditViewModel : ObservableObject
                 {
                     editor.IsSelected = true;
                     editor.Status = VenueBookingPaymentStatus.Normalize(row.Status);
+                    editor.AmountText = FormatAmount(row.Amount);
                 }
                 ParticipantCandidates.Add(editor);
             }
@@ -225,7 +236,8 @@ public partial class VenueBookingEditViewModel : ObservableObject
                     PlayerId = row.PlayerId,
                     PlayerName = row.PlayerName,
                     IsSelected = true,
-                    Status = VenueBookingPaymentStatus.Normalize(row.Status)
+                    Status = VenueBookingPaymentStatus.Normalize(row.Status),
+                    AmountText = FormatAmount(row.Amount)
                 });
                 if (BookedByOptions.All(p => p.Id != row.PlayerId))
                     BookedByOptions.Add(new PlayerOption { Id = row.PlayerId, FullName = row.PlayerName });
@@ -246,7 +258,10 @@ public partial class VenueBookingEditViewModel : ObservableObject
         if (!CanEdit || player is null) return;
         player.IsSelected = !player.IsSelected;
         if (!player.IsSelected)
+        {
             player.Status = VenueBookingPaymentStatus.Pending;
+            player.AmountText = "0";
+        }
     }
 
     [RelayCommand]
@@ -275,10 +290,14 @@ public partial class VenueBookingEditViewModel : ObservableObject
             if (SelectedBookedBy is null)
                 throw new ArgumentException("Select Booked By player.");
 
-            var participants = ParticipantCandidates
-                .Where(p => p.IsSelected)
-                .Select(p => new VenueBookingParticipantDraft(p.PlayerId, p.Status))
-                .ToList();
+            var participants = new List<VenueBookingParticipantDraft>();
+            foreach (var p in ParticipantCandidates.Where(x => x.IsSelected))
+            {
+                participants.Add(new VenueBookingParticipantDraft(
+                    p.PlayerId,
+                    p.Status,
+                    ParseAmount(p.AmountText, p.PlayerName)));
+            }
 
             var draft = new VenueBookingDraft(
                 SelectedVenue.Id,
@@ -302,5 +321,21 @@ public partial class VenueBookingEditViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private static string FormatAmount(decimal amount)
+        => amount.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static decimal ParseAmount(string? text, string playerName)
+    {
+        var raw = text?.Trim();
+        if (string.IsNullOrEmpty(raw))
+            return 0;
+        if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)
+            && !decimal.TryParse(raw, NumberStyles.Number, CultureInfo.CurrentCulture, out amount))
+            throw new ArgumentException($"Amount for {playerName} must be a number.");
+        if (amount < 0)
+            throw new ArgumentException($"Amount for {playerName} cannot be negative.");
+        return amount;
     }
 }

@@ -34,6 +34,21 @@ internal static class TeamRoster
     public static IReadOnlyList<Guid> PlayingListOnly(ApiTeamDto team)
         => PlayingListOnly(team.PlayerIds, team.PlayingPlayerIds);
 
+    /// <summary>Squad members who are not in the playing XI. Empty when no playing list was set.</summary>
+    public static IReadOnlyList<Guid> SubstitutePlayerIds(
+        IReadOnlyList<Guid>? squad,
+        IReadOnlyList<Guid>? playing)
+    {
+        var playingIds = PlayingListOnly(squad, playing);
+        if (playingIds.Count == 0)
+            return Array.Empty<Guid>();
+        var chosen = playingIds.ToHashSet();
+        return Distinct(squad).Where(id => !chosen.Contains(id)).ToList();
+    }
+
+    public static IReadOnlyList<Guid> SubstitutePlayerIds(ApiTeamDto team)
+        => SubstitutePlayerIds(team.PlayerIds, team.PlayingPlayerIds);
+
     public static List<Guid> Distinct(IReadOnlyList<Guid>? ids)
         => (ids ?? Array.Empty<Guid>()).Where(id => id != Guid.Empty).Distinct().ToList();
 }

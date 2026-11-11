@@ -84,7 +84,9 @@ public partial class GroundDetailViewModel : ObservableObject
 
     public string PlayingVideoTitle => PlayingVideo?.DisplayTitle ?? "Video";
 
-    public bool CanRequestBooking => _auth.Current?.CanBookGrounds == true;
+    // Show Book for browsers/guests too — GroundBookingGate prompts login when needed.
+    // Hide only for ground owners (they book from owner dashboard).
+    public bool CanRequestBooking => _auth.Current?.IsGroundOwner != true;
 
     public string RatingLine => Ground?.RatingLine ?? string.Empty;
 

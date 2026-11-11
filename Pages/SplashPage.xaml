@@ -28,15 +28,8 @@
                            HorizontalOptions="Center"
                            WidthRequest="320"
                            IntervalMs="2800" />
-        <ActivityIndicator x:Name="Spinner"
-                           IsRunning="True"
-                           Color="#B6FF3B"
-                           WidthRequest="44"
-                           HeightRequest="44"
-                           HorizontalOptions="Center"
-                           Margin="0,12,0,0" />
         <Label x:Name="StatusLabel"
-               Text="Loading…"
+               Text=""
                TextColor="#8899AA"
                FontSize="14"
                HorizontalTextAlignment="Center"

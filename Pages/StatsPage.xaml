@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
              xmlns:pages="clr-namespace:JPL.Pages"
@@ -95,178 +96,239 @@
             <Setter Property="BackgroundColor" Value="Transparent" />
         </Style>
         <DataTemplate x:Key="MatchRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="52,44,44,44">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="52,44,44,44,52"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Won}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Loss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Tied}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Won}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="Won" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Loss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="Loss" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Tied}" ctrl:StatsColumn.Key="Tied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding MatchWinPctText}" ctrl:StatsColumn.Key="MatchWinPct" ctrl:StatsColumn.Width="52" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="TournamentRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="52,44,44,44">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="52,44,44,44,52"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Tournaments}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding TournamentWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding TournamentLoss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding TournamentTied}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Tournaments}" ctrl:StatsColumn.Key="Tournaments" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding TournamentWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="TournamentWon" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding TournamentLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="TournamentLoss" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding TournamentTied}" ctrl:StatsColumn.Key="TournamentTied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding TournamentWinPctText}" ctrl:StatsColumn.Key="TournamentWinPct" ctrl:StatsColumn.Width="52" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="SeriesRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="52,44,44,44">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="52,44,44,44,52"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Series}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding SeriesWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding SeriesLoss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding SeriesTied}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Series}" ctrl:StatsColumn.Key="Series" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding SeriesWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="SeriesWon" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding SeriesLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="SeriesLoss" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding SeriesTied}" ctrl:StatsColumn.Key="SeriesTied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding SeriesWinPctText}" ctrl:StatsColumn.Key="SeriesWinPct" ctrl:StatsColumn.Width="52" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="BattingRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="40,40,80,32,32,32,32,32,32,32,36,36,36,36,36,36,56,44,44">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="48,40,40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,44,44,56"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding BallsFaced}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Runs}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding HighestScoreText}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Dots}" />
-                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding Ones}" />
-                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding Twos}" />
-                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding Threes}" />
-                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding Fours}" />
-                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding Fives}" />
-                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding Sixes}" />
-                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding Dismissals}" />
-                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding BowledOut}" />
-                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding CaughtOut}" />
-                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding LbwOut}" />
-                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding RunOut}" />
-                <Label Grid.Column="15" Style="{StaticResource StatCell}" Text="{Binding StumpedOut}" />
-                <Label Grid.Column="16" Style="{StaticResource StatCell}" Text="{Binding HitWicketOut}" />
-                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding BattingStrikeRateText}" />
-                <Label Grid.Column="18" Style="{StaticResource StatCell}" Text="{Binding BattingAverageText}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding InningsBatted}" ctrl:StatsColumn.Key="InningsBatted" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding BallsFaced}" ctrl:StatsColumn.Key="BallsFaced" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Runs}" ctrl:StatsColumn.Key="Runs" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding HighestScoreText}" ctrl:StatsColumn.Key="HighestScore" ctrl:StatsColumn.Width="80" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding Fifties}" ctrl:StatsColumn.Key="Fifties" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding Hundreds}" ctrl:StatsColumn.Key="Hundreds" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding Ducks}" ctrl:StatsColumn.Key="Ducks" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding GoldenDucks}" ctrl:StatsColumn.Key="GoldenDucks" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding Dots}" ctrl:StatsColumn.Key="Dots" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding Ones}" ctrl:StatsColumn.Key="Ones" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding Twos}" ctrl:StatsColumn.Key="Twos" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding Threes}" ctrl:StatsColumn.Key="Threes" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding Fours}" ctrl:StatsColumn.Key="Fours" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding Sixes}" ctrl:StatsColumn.Key="Sixes" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="15" Style="{StaticResource StatCell}" Text="{Binding Dismissals}" ctrl:StatsColumn.Key="Dismissals" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="16" Style="{StaticResource StatCell}" Text="{Binding NotOuts}" ctrl:StatsColumn.Key="NotOuts" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding BowledOut}" ctrl:StatsColumn.Key="BowledOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="18" Style="{StaticResource StatCell}" Text="{Binding CaughtOut}" ctrl:StatsColumn.Key="CaughtOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="19" Style="{StaticResource StatCell}" Text="{Binding LbwOut}" ctrl:StatsColumn.Key="LbwOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="20" Style="{StaticResource StatCell}" Text="{Binding RunOut}" ctrl:StatsColumn.Key="RunOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="21" Style="{StaticResource StatCell}" Text="{Binding PartnerRunOuts}" ctrl:StatsColumn.Key="PartnerRunOuts" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="22" Style="{StaticResource StatCell}" Text="{Binding StumpedOut}" ctrl:StatsColumn.Key="StumpedOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="23" Style="{StaticResource StatCell}" Text="{Binding HitWicketOut}" ctrl:StatsColumn.Key="HitWicketOut" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="24" Style="{StaticResource StatCell}" Text="{Binding BattingStrikeRateText}" ctrl:StatsColumn.Key="BattingStrikeRate" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="25" Style="{StaticResource StatCell}" Text="{Binding BattingAverageText}" ctrl:StatsColumn.Key="BattingAverage" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="26" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding BoundaryPctText}" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="NetsBattingRowTemplate" x:DataType="svc:PlayerCareerSummary">
             <Grid Style="{StaticResource StatsRowGrid}"
-                  WidthRequest="860"
-                  ColumnDefinitions="40,40,80,32,32,32,32,32,32,32,36,36,36,36,36,36,56,48,72,72">
+                  ColumnDefinitions="40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,48,72,72,56"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding BallsFaced}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Runs}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding HighestScoreText}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Dots}" />
-                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding Ones}" />
-                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding Twos}" />
-                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding Threes}" />
-                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding Fours}" />
-                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding Fives}" />
-                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding Sixes}" />
-                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding Dismissals}" />
-                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding BowledOut}" />
-                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding CaughtOut}" />
-                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding LbwOut}" />
-                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding RunOut}" />
-                <Label Grid.Column="15" Style="{StaticResource StatCell}" Text="{Binding StumpedOut}" />
-                <Label Grid.Column="16" Style="{StaticResource StatCell}" Text="{Binding HitWicketOut}" />
-                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding BattingStrikeRateText}" />
-                <Label Grid.Column="18" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AvgPerSessionText}" />
-                <Label Grid.Column="19" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AvgPerOutText}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding BallsFaced}" ctrl:StatsColumn.Key="BallsFaced" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Runs}" ctrl:StatsColumn.Key="Runs" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding HighestScoreText}" ctrl:StatsColumn.Key="HighestScore" ctrl:StatsColumn.Width="80" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Fifties}" ctrl:StatsColumn.Key="Fifties" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding Hundreds}" ctrl:StatsColumn.Key="Hundreds" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding Ducks}" ctrl:StatsColumn.Key="Ducks" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding GoldenDucks}" ctrl:StatsColumn.Key="GoldenDucks" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding Dots}" ctrl:StatsColumn.Key="Dots" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding Ones}" ctrl:StatsColumn.Key="Ones" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding Twos}" ctrl:StatsColumn.Key="Twos" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding Threes}" ctrl:StatsColumn.Key="Threes" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding Fours}" ctrl:StatsColumn.Key="Fours" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding Sixes}" ctrl:StatsColumn.Key="Sixes" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding Dismissals}" ctrl:StatsColumn.Key="Dismissals" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding NotOuts}" ctrl:StatsColumn.Key="NotOuts" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="15" Style="{StaticResource StatCell}" Text="{Binding BowledOut}" ctrl:StatsColumn.Key="BowledOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="16" Style="{StaticResource StatCell}" Text="{Binding CaughtOut}" ctrl:StatsColumn.Key="CaughtOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding LbwOut}" ctrl:StatsColumn.Key="LbwOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="18" Style="{StaticResource StatCell}" Text="{Binding RunOut}" ctrl:StatsColumn.Key="RunOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="19" Style="{StaticResource StatCell}" Text="{Binding PartnerRunOuts}" ctrl:StatsColumn.Key="PartnerRunOuts" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="20" Style="{StaticResource StatCell}" Text="{Binding StumpedOut}" ctrl:StatsColumn.Key="StumpedOut" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="21" Style="{StaticResource StatCell}" Text="{Binding HitWicketOut}" ctrl:StatsColumn.Key="HitWicketOut" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="22" Style="{StaticResource StatCell}" Text="{Binding BattingStrikeRateText}" ctrl:StatsColumn.Key="BattingStrikeRate" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="23" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AvgPerSessionText}" ctrl:StatsColumn.Key="AvgPerSession" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="24" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AvgPerOutText}" ctrl:StatsColumn.Key="AvgPerOut" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="25" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding BoundaryPctText}" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="BowlingRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="40,40,36,48,40,32,36,36,32,32,32,32,32,32,56,32,44,44">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="48,40,48,40,40,36,48,36,40,40,40,48,32,32,32,36,36,32,32,32,32,32,32,56,32,44,44,44"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding OversBowledBalls}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding RunsConceded}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Wickets}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding BestBowlingText}" />
-                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding HatTricks}" />
-                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding DotBallsBowled}" />
-                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding WidesBowled}" />
-                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding NoBallsBowled}" />
-                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding ByesConceded}" />
-                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding LegByesConceded}" />
-                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding BowledWkts}" />
-                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding CaughtWkts}" />
-                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding LbwWkts}" />
-                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding StumpedWkts}" />
-                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding HitWicketWkts}" />
-                <Label Grid.Column="15" Style="{StaticResource StatCell}" Text="{Binding RunOutWkts}" />
-                <Label Grid.Column="16" Style="{StaticResource StatCell}" Text="{Binding BowlingStrikeRateText}" />
-                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding BowlingEconomyText}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding InningsBowled}" ctrl:StatsColumn.Key="InningsBowled" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding OversBowledText}" ctrl:StatsColumn.Key="OversBowled" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding OversBowledBalls}" ctrl:StatsColumn.Key="OversBowledBalls" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding RunsConceded}" ctrl:StatsColumn.Key="RunsConceded" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Wickets}" ctrl:StatsColumn.Key="Wickets" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding BestBowlingText}" ctrl:StatsColumn.Key="BestBowling" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding FiveWicketHauls}" ctrl:StatsColumn.Key="FiveWicketHauls" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding Maidens}" ctrl:StatsColumn.Key="Maidens" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding HatTricks}" ctrl:StatsColumn.Key="HatTricks" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding DuckWkts}" ctrl:StatsColumn.Key="DuckWkts" ctrl:StatsColumn.Width="40" />
+                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding GoldenDuckWkts}" ctrl:StatsColumn.Key="GoldenDuckWkts" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding DotBallsBowled}" ctrl:StatsColumn.Key="DotBallsBowled" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding FoursConceded}" ctrl:StatsColumn.Key="FoursConceded" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding SixesConceded}" ctrl:StatsColumn.Key="SixesConceded" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="15" Style="{StaticResource StatCell}" Text="{Binding WidesBowled}" ctrl:StatsColumn.Key="WidesBowled" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="16" Style="{StaticResource StatCell}" Text="{Binding NoBallsBowled}" ctrl:StatsColumn.Key="NoBallsBowled" ctrl:StatsColumn.Width="36" />
+                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding ByesConceded}" ctrl:StatsColumn.Key="ByesConceded" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="18" Style="{StaticResource StatCell}" Text="{Binding LegByesConceded}" ctrl:StatsColumn.Key="LegByesConceded" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="19" Style="{StaticResource StatCell}" Text="{Binding BowledWkts}" ctrl:StatsColumn.Key="BowledWkts" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="20" Style="{StaticResource StatCell}" Text="{Binding CaughtWkts}" ctrl:StatsColumn.Key="CaughtWkts" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="21" Style="{StaticResource StatCell}" Text="{Binding LbwWkts}" ctrl:StatsColumn.Key="LbwWkts" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="22" Style="{StaticResource StatCell}" Text="{Binding StumpedWkts}" ctrl:StatsColumn.Key="StumpedWkts" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="23" Style="{StaticResource StatCell}" Text="{Binding HitWicketWkts}" ctrl:StatsColumn.Key="HitWicketWkts" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="24" Style="{StaticResource StatCell}" Text="{Binding RunOutWkts}" ctrl:StatsColumn.Key="RunOutWkts" ctrl:StatsColumn.Width="32" />
+                <Label Grid.Column="25" Style="{StaticResource StatCell}" Text="{Binding BowlingStrikeRateText}" ctrl:StatsColumn.Key="BowlingStrikeRate" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="26" Style="{StaticResource StatCell}" Text="{Binding BowlingAverageText}" ctrl:StatsColumn.Key="BowlingAverage" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="27" Style="{StaticResource StatCell}" Text="{Binding BowlingEconomyText}" ctrl:StatsColumn.Key="BowlingEconomy" ctrl:StatsColumn.Width="44" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="FieldingRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="64,72,72">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="48,64,72,72,52,64,56"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Catches}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding RunOutsEffected}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Stumpings}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Catches}" ctrl:StatsColumn.Key="Catches" ctrl:StatsColumn.Width="64" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding RunOutsEffected}" ctrl:StatsColumn.Key="RunOutsEffected" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Stumpings}" ctrl:StatsColumn.Key="Stumpings" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding FieldingTotal}" ctrl:StatsColumn.Key="FieldingTotal" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding FieldingPerMatchText}" ctrl:StatsColumn.Key="FieldingPerMatch" ctrl:StatsColumn.Width="64" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding DroppedCatches}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="DroppedCatches" ctrl:StatsColumn.Width="56" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="CaptaincyRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="44,44,44,44,52,44,44,44,52,44,44,44">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="44,44,44,44,52,52,44,44,44,52,52,44,44,44,52,44,56,48,48"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding CaptainMatches}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding CaptainWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding CaptainLoss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding CaptainTied}" />
-                <Label Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding CaptainTournaments}" />
-                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding CaptainTournamentWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding CaptainTournamentLoss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding CaptainTournamentTied}" />
-                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding CaptainSeries}" />
-                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding CaptainSeriesWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding CaptainSeriesLoss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding CaptainSeriesTied}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding CaptainMatches}" ctrl:StatsColumn.Key="CaptainMatches" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding CaptainWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="CaptainWon" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding CaptainLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="CaptainLoss" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding CaptainTied}" ctrl:StatsColumn.Key="CaptainTied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CaptainWinPctText}" ctrl:StatsColumn.Key="CaptainWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding CaptainTournaments}" ctrl:StatsColumn.Key="CaptainTournaments" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding CaptainTournamentWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="CaptainTournamentWon" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding CaptainTournamentLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="CaptainTournamentLoss" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding CaptainTournamentTied}" ctrl:StatsColumn.Key="CaptainTournamentTied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="9" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CaptainTournamentWinPctText}" ctrl:StatsColumn.Key="CaptainTournamentWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding CaptainSeries}" ctrl:StatsColumn.Key="CaptainSeries" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding CaptainSeriesWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="CaptainSeriesWon" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding CaptainSeriesLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="CaptainSeriesLoss" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding CaptainSeriesTied}" ctrl:StatsColumn.Key="CaptainSeriesTied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="14" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CaptainSeriesWinPctText}" ctrl:StatsColumn.Key="CaptainSeriesWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="15" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CaptainPoints}" ctrl:StatsColumn.Key="CaptainPoints" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="16" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CaptainNrrText}" ctrl:StatsColumn.Key="CaptainNrr" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding CaptainRunsFor}" ctrl:StatsColumn.Key="CaptainRunsFor" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="18" Style="{StaticResource StatCell}" Text="{Binding CaptainRunsAgainst}" ctrl:StatsColumn.Key="CaptainRunsAgainst" ctrl:StatsColumn.Width="48" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="AttendanceRowTemplate" x:DataType="svc:PlayerCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="56,64,64,56">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  ColumnDefinitions="56,64,64,56,72,72,72,56"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding AttendanceTotal}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding AttendancePresent}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding AttendanceAbsent}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AttendancePctText}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding AttendanceTotal}" ctrl:StatsColumn.Key="AttendanceTotal" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding AttendancePresent}" ctrl:StatsColumn.Key="AttendancePresent" ctrl:StatsColumn.Width="64" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding AttendanceAbsent}" ctrl:StatsColumn.Key="AttendanceAbsent" ctrl:StatsColumn.Width="64" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AttendancePctText}" ctrl:StatsColumn.Key="AttendancePct" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding PaymentTotalText}" ctrl:StatsColumn.Key="PaymentTotal" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding PaymentPaidText}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="PaymentPaid" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding PaymentRemainingText}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="PaymentRemaining" ctrl:StatsColumn.Width="72" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding PaymentPaidPctText}" ctrl:StatsColumn.Key="PaymentPaidPct" ctrl:StatsColumn.Width="56" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="TeamRowTemplate" x:DataType="svc:TeamCareerSummary">
-            <Grid Style="{StaticResource StatsRowGrid}" ColumnDefinitions="44,44,44,44,44,52,56,48,48,52,48,52,48,48,48">
+            <Grid Style="{StaticResource StatsRowGrid}"
+                  HeightRequest="48"
+                  ColumnDefinitions="44,44,44,44,52,52,48,48,48,52,52,48,48,48,52,44,56,48,48"
+                  ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
@@ -277,21 +339,25 @@
                         Command="{Binding BindingContext.OpenTeamCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                         CommandParameter="{Binding .}" />
                 </Grid.GestureRecognizers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Played}" />
-                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Won}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Lost}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Tied}" />
-                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Points}" />
-                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding WinPctText}" />
-                <Label Grid.Column="6" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding NrrText}" />
-                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding RunsFor}" />
-                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding RunsAgainst}" />
-                <Label Grid.Column="9" Style="{StaticResource StatCell}" Text="{Binding Tournaments}" />
-                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding TournamentWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding Series}" />
-                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding SeriesWon}" TextColor="{StaticResource Success}" />
-                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding SeriesLoss}" TextColor="{StaticResource Danger}" />
-                <Label Grid.Column="14" Style="{StaticResource StatCell}" Text="{Binding SeriesTied}" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding Played}" ctrl:StatsColumn.Key="Played" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Won}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="Won" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Lost}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="Lost" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Tied}" ctrl:StatsColumn.Key="Tied" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding WinPctText}" ctrl:StatsColumn.Key="WinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" Text="{Binding Tournaments}" ctrl:StatsColumn.Key="Tournaments" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding TournamentWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="TournamentWon" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" Text="{Binding TournamentLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="TournamentLoss" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" Text="{Binding TournamentTied}" ctrl:StatsColumn.Key="TournamentTied" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="9" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding TournamentWinPctText}" ctrl:StatsColumn.Key="TournamentWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="10" Style="{StaticResource StatCell}" Text="{Binding Series}" ctrl:StatsColumn.Key="Series" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="11" Style="{StaticResource StatCell}" Text="{Binding SeriesWon}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="SeriesWon" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="12" Style="{StaticResource StatCell}" Text="{Binding SeriesLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="SeriesLoss" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="13" Style="{StaticResource StatCell}" Text="{Binding SeriesTied}" ctrl:StatsColumn.Key="SeriesTied" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="14" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding SeriesWinPctText}" ctrl:StatsColumn.Key="SeriesWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="15" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Points}" ctrl:StatsColumn.Key="Points" ctrl:StatsColumn.Width="44" />
+                <Label Grid.Column="16" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding NrrText}" ctrl:StatsColumn.Key="Nrr" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="17" Style="{StaticResource StatCell}" Text="{Binding RunsFor}" ctrl:StatsColumn.Key="RunsFor" ctrl:StatsColumn.Width="48" />
+                <Label Grid.Column="18" Style="{StaticResource StatCell}" Text="{Binding RunsAgainst}" ctrl:StatsColumn.Key="RunsAgainst" ctrl:StatsColumn.Width="48" />
             </Grid>
         </DataTemplate>
         <pages:StatsTabTemplateSelector x:Key="StatsRowSelector"
@@ -308,14 +374,16 @@
 
     <Grid Padding="10" RowDefinitions="Auto,*,Auto" VerticalOptions="Fill"
           BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
-        <Label Text="{x:Static svc:BrandSlogans.Statistics}"
+        <Label Grid.Row="0"
+               Text="{x:Static svc:BrandSlogans.Statistics}"
                FontSize="13"
                FontAttributes="Bold"
                TextColor="{StaticResource Primary}"
                LineBreakMode="WordWrap"
-               Margin="4,0,4,6" />
+               Margin="4,0,4,6"
+               IsVisible="{Binding ShowTable}" />
         <Grid Grid.Row="1" IsVisible="{Binding ShowTable}"
-              RowDefinitions="Auto,Auto,Auto,Auto,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,*"
               RowSpacing="10"
               VerticalOptions="Fill">
 
@@ -433,18 +501,6 @@
                             </DataTrigger>
                         </Button.Triggers>
                     </ctrl:TabChipButton>
-                    <ctrl:TabChipButton Text="Attendance"
-                            Style="{StaticResource StatsChip}"
-                            Command="{Binding SelectCategoryCommand}"
-                            CommandParameter="attendance"
-                            IsVisible="{Binding ShowMatchCategories}">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsAttendanceStats}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
-                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </ctrl:TabChipButton>
                     <ctrl:TabChipButton Text="Teams"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
@@ -452,6 +508,18 @@
                             IsVisible="{Binding ShowMatchCategories}">
                         <Button.Triggers>
                             <DataTrigger TargetType="Button" Binding="{Binding IsTeamStats}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Attendance"
+                            Style="{StaticResource StatsChip}"
+                            Command="{Binding SelectCategoryCommand}"
+                            CommandParameter="attendance"
+                            IsVisible="{Binding ShowMatchCategories}">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsAttendanceStats}" Value="True">
                                 <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
                                 <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                             </DataTrigger>
@@ -469,22 +537,24 @@
                     <SearchBar Placeholder="{Binding SearchPlaceholder}"
                                Text="{Binding PlayerNameFilter}"
                                CancelButtonColor="{StaticResource Primary}" />
-                    <VerticalStackLayout IsVisible="{Binding ShowMatchCategories}">
+                    <ctrl:StatsColumnPickerView BindingContext="{Binding Columns}" />
+                    <VerticalStackLayout Spacing="8" IsVisible="{Binding ShowMatchCategories}">
                         <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                        <ctrl:EventScopeFilterView BindingContext="{Binding EventScope}" />
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                            <Label Text="Venue"
+                                   VerticalOptions="Center"
+                                   FontSize="12"
+                                   Style="{StaticResource MutedLabel}" />
+                            <Picker Grid.Column="1"
+                                    Title="All venues"
+                                    ItemsSource="{Binding VenueOptions}"
+                                    ItemDisplayBinding="{Binding Name}"
+                                    SelectedItem="{Binding SelectedVenue}" />
+                        </Grid>
                     </VerticalStackLayout>
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding ShowMatchCategories}">
-                        <Label Text="Venue"
-                               VerticalOptions="Center"
-                               FontSize="12"
-                               Style="{StaticResource MutedLabel}" />
-                        <Picker Grid.Column="1"
-                                Title="All venues"
-                                ItemsSource="{Binding VenueOptions}"
-                                ItemDisplayBinding="{Binding Name}"
-                                SelectedItem="{Binding SelectedVenue}" />
-                    </Grid>
                     <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="8">
-                        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                        <HorizontalStackLayout Spacing="4" VerticalOptions="Center" jpl:ToggleOnTap.Enable="True">
                             <CheckBox IsChecked="{Binding FilterByDate}" VerticalOptions="Center" />
                             <Label Text="Date"
                                    VerticalOptions="Center"
@@ -506,31 +576,36 @@
                 </VerticalStackLayout>
             </ctrl:FilterDrawer>
 
-            <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <VerticalStackLayout Spacing="1">
-                    <Label Text="{Binding TableScopeText}"
-                           FontAttributes="Bold"
-                           FontSize="16"
-                           TextColor="{StaticResource TextPrimary}" />
-                    <Label Text="{Binding CategoryHint}"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="12" />
-                    <Label Text="{Binding TableHint}"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="11" />
-                    <Label Text="{Binding CountLabel}"
-                           FontSize="12"
-                           TextColor="{StaticResource TextSecondary}" />
-                </VerticalStackLayout>
-                <Label Grid.Column="1"
-                       Text="{Binding SortedByText}"
-                       FontSize="11"
-                       VerticalOptions="End"
-                       HorizontalTextAlignment="End"
-                       TextColor="{StaticResource Primary}" />
-            </Grid>
+            <Border Grid.Row="3"
+                    IsVisible="{Binding IsAttendanceStats}"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource SurfaceMuted}"
+                    Padding="12,8"
+                    StrokeShape="RoundRectangle 10">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                        <Label Text="From each player's debut"
+                               FontAttributes="Bold"
+                               FontSize="13"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="Total / Absent counted from each player's first match date"
+                               FontSize="11"
+                               TextColor="{StaticResource TextSecondary}" />
+                    </VerticalStackLayout>
+                    <Switch Grid.Column="1"
+                            IsToggled="{Binding AttendanceFromDebut}"
+                            OnColor="{StaticResource Secondary}"
+                            VerticalOptions="Center" />
+                </Grid>
+            </Border>
 
-            <Border Grid.Row="4"
+            <Label Grid.Row="4"
+                   Text="{Binding SortedByText}"
+                   FontSize="11"
+                   HorizontalTextAlignment="End"
+                   TextColor="{StaticResource Primary}" />
+
+            <Border Grid.Row="5"
                     StrokeThickness="0"
                     StrokeShape="RoundRectangle 12"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
@@ -543,7 +618,8 @@
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="0" VerticalOptions="Start">
                         <Grid WidthRequest="{OnIdiom Phone=176, Default=220}">
                             <VerticalStackLayout Spacing="0">
-                            <BoxView HeightRequest="44" Color="Transparent" />
+                            <BoxView HeightRequest="44" Color="Transparent" IsVisible="{Binding HasFlatColumnHeader}" />
+                            <BoxView HeightRequest="71" Color="Transparent" IsVisible="{Binding HasGroupedColumnHeader}" />
                             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Leaderboard}"
                                                  Spacing="0"
                                                  IsVisible="{Binding ShowPlayerLeaderboard}">
@@ -605,7 +681,7 @@
                                 <BindableLayout.ItemTemplate>
                                     <DataTemplate x:DataType="svc:TeamCareerSummary">
                                         <Grid ColumnDefinitions="32,*"
-                                              HeightRequest="40"
+                                              HeightRequest="48"
                                               Padding="8,0,4,0">
                                             <Grid.Triggers>
                                                 <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
@@ -622,13 +698,19 @@
                                                    TextColor="{StaticResource TextSecondary}"
                                                    VerticalOptions="Center"
                                                    HorizontalTextAlignment="Center" />
-                                            <Label Grid.Column="1"
-                                                   Text="{Binding TeamName}"
-                                                   FontAttributes="Bold"
-                                                   FontSize="13"
-                                                   TextColor="{StaticResource Primary}"
-                                                   LineBreakMode="TailTruncation"
-                                                   VerticalOptions="Center" />
+                                            <VerticalStackLayout Grid.Column="1"
+                                                                 Spacing="0"
+                                                                 VerticalOptions="Center">
+                                                <Label Text="{Binding TeamName}"
+                                                       FontAttributes="Bold"
+                                                       FontSize="13"
+                                                       TextColor="{StaticResource Primary}"
+                                                       LineBreakMode="TailTruncation" />
+                                                <Label Text="{Binding CaptainLine}"
+                                                       FontSize="10"
+                                                       TextColor="{StaticResource TextSecondary}"
+                                                       LineBreakMode="TailTruncation" />
+                                            </VerticalStackLayout>
                                         </Grid>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
@@ -640,6 +722,9 @@
                                                  ZIndex="20"
                                                  Spacing="0"
                                                  BackgroundColor="{StaticResource Primary}">
+                                <BoxView HeightRequest="27"
+                                         Color="{StaticResource Primary}"
+                                         IsVisible="{Binding HasGroupedColumnHeader}" />
                                 <Grid ColumnDefinitions="32,*,Auto"
                                       HeightRequest="42"
                                       Padding="8,0,4,0"
@@ -674,7 +759,8 @@
                                     VerticalScrollBarVisibility="Never">
                             <Grid>
                             <VerticalStackLayout Spacing="0">
-                                <BoxView HeightRequest="44" Color="Transparent" />
+                                <BoxView HeightRequest="44" Color="Transparent" IsVisible="{Binding HasFlatColumnHeader}" />
+                                <BoxView HeightRequest="71" Color="Transparent" IsVisible="{Binding HasGroupedColumnHeader}" />
 
                                 <VerticalStackLayout BindingContext="{Binding .}"
                                                      BindableLayout.ItemsSource="{Binding Leaderboard}"
@@ -694,169 +780,295 @@
                                                  Spacing="0"
                                                  BackgroundColor="{StaticResource Primary}">
                                 <Grid IsVisible="{Binding IsMatchStats}"
-                                      ColumnDefinitions="52,44,44,44"
+                                      ColumnDefinitions="52,44,44,44,52"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Played" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" />
-                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Won" />
-                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Loss" />
-                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tied" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Played" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="52" />
+                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Won" ctrl:StatsColumn.Key="Won" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Loss" ctrl:StatsColumn.Key="Loss" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tied" ctrl:StatsColumn.Key="Tied" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="MatchWinPct" ctrl:StatsColumn.Key="MatchWinPct" ctrl:StatsColumn.Width="52" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsTournamentStats}"
-                                      ColumnDefinitions="52,44,44,44"
+                                      ColumnDefinitions="52,44,44,44,52"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Played" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tournaments" />
-                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWon" />
-                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentLoss" />
-                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentTied" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Played" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tournaments" ctrl:StatsColumn.Key="Tournaments" ctrl:StatsColumn.Width="52" />
+                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWon" ctrl:StatsColumn.Key="TournamentWon" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentLoss" ctrl:StatsColumn.Key="TournamentLoss" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentTied" ctrl:StatsColumn.Key="TournamentTied" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWinPct" ctrl:StatsColumn.Key="TournamentWinPct" ctrl:StatsColumn.Width="52" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsSeriesStats}"
-                                      ColumnDefinitions="52,44,44,44"
+                                      ColumnDefinitions="52,44,44,44,52"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Played" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Series" />
-                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWon" />
-                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesLoss" />
-                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Played" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Series" ctrl:StatsColumn.Key="Series" ctrl:StatsColumn.Width="52" />
+                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWon" ctrl:StatsColumn.Key="SeriesWon" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesLoss" ctrl:StatsColumn.Key="SeriesLoss" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" ctrl:StatsColumn.Key="SeriesTied" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWinPct" ctrl:StatsColumn.Key="SeriesWinPct" ctrl:StatsColumn.Width="52" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsMatchBattingStats}"
-                                      ColumnDefinitions="40,40,80,32,32,32,32,32,32,32,36,36,36,36,36,36,56,44,44"
+                                      ColumnDefinitions="48,40,40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,44,44,56"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BallsFaced" />
-                                    <Button Grid.Column="1" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Runs" />
-                                    <Button Grid.Column="2" Text="HS" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HighestScore" />
-                                    <Button Grid.Column="3" Text="0" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dots" />
-                                    <Button Grid.Column="4" Text="1" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Ones" />
-                                    <Button Grid.Column="5" Text="2" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Twos" />
-                                    <Button Grid.Column="6" Text="3" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Threes" />
-                                    <Button Grid.Column="7" Text="4" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fours" />
-                                    <Button Grid.Column="8" Text="5" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fives" />
-                                    <Button Grid.Column="9" Text="6" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Sixes" />
-                                    <Button Grid.Column="10" Text="Out" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dismissals" />
-                                    <Button Grid.Column="11" Text="Bld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowledOut" />
-                                    <Button Grid.Column="12" Text="Cgt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaughtOut" />
-                                    <Button Grid.Column="13" Text="LBW" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LbwOut" />
-                                    <Button Grid.Column="14" Text="RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOut" />
-                                    <Button Grid.Column="15" Text="St" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="StumpedOut" />
-                                    <Button Grid.Column="16" Text="Hit wkt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HitWicketOut" />
-                                    <Button Grid.Column="17" Text="SR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BattingStrikeRate" />
-                                    <Button Grid.Column="18" Text="Avg" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BattingAverage" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="1" Text="Inns" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="InningsBatted" ctrl:StatsColumn.Key="InningsBatted" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="2" Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BallsFaced" ctrl:StatsColumn.Key="BallsFaced" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="3" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Runs" ctrl:StatsColumn.Key="Runs" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="4" Text="HS" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HighestScore" ctrl:StatsColumn.Key="HighestScore" ctrl:StatsColumn.Width="80" />
+                                    <Button Grid.Column="5" Text="50" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fifties" ctrl:StatsColumn.Key="Fifties" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="6" Text="100" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Hundreds" ctrl:StatsColumn.Key="Hundreds" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="7" Text="Duck" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Ducks" ctrl:StatsColumn.Key="Ducks" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="8" Text="G.Duck" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="GoldenDucks" ctrl:StatsColumn.Key="GoldenDucks" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="9" Text="0" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dots" ctrl:StatsColumn.Key="Dots" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="10" Text="1" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Ones" ctrl:StatsColumn.Key="Ones" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="11" Text="2" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Twos" ctrl:StatsColumn.Key="Twos" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="12" Text="3" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Threes" ctrl:StatsColumn.Key="Threes" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="13" Text="4" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fours" ctrl:StatsColumn.Key="Fours" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="14" Text="6" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Sixes" ctrl:StatsColumn.Key="Sixes" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="15" Text="Out" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dismissals" ctrl:StatsColumn.Key="Dismissals" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="16" Text="N.O" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="NotOuts" ctrl:StatsColumn.Key="NotOuts" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="17" Text="Bld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowledOut" ctrl:StatsColumn.Key="BowledOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="18" Text="Cgt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaughtOut" ctrl:StatsColumn.Key="CaughtOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="19" Text="LBW" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LbwOut" ctrl:StatsColumn.Key="LbwOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="20" Text="RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOut" ctrl:StatsColumn.Key="RunOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="21" Text="P.RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="PartnerRunOuts" ctrl:StatsColumn.Key="PartnerRunOuts" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="22" Text="St" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="StumpedOut" ctrl:StatsColumn.Key="StumpedOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="23" Text="Hit wkt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HitWicketOut" ctrl:StatsColumn.Key="HitWicketOut" ctrl:StatsColumn.Width="56" />
+                                    <Button Grid.Column="24" Text="SR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BattingStrikeRate" ctrl:StatsColumn.Key="BattingStrikeRate" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="25" Text="Avg" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BattingAverage" ctrl:StatsColumn.Key="BattingAverage" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="26" Text="Bound%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BoundaryPct" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsNetsBattingStats}"
-                                      WidthRequest="860"
-                                      ColumnDefinitions="40,40,80,32,32,32,32,32,32,32,36,36,36,36,36,36,56,48,72,72"
+                                      ColumnDefinitions="40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,48,72,72,56"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BallsFaced" />
-                                    <Button Grid.Column="1" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Runs" />
-                                    <Button Grid.Column="2" Text="HS" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HighestScore" />
-                                    <Button Grid.Column="3" Text="0" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dots" />
-                                    <Button Grid.Column="4" Text="1" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Ones" />
-                                    <Button Grid.Column="5" Text="2" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Twos" />
-                                    <Button Grid.Column="6" Text="3" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Threes" />
-                                    <Button Grid.Column="7" Text="4" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fours" />
-                                    <Button Grid.Column="8" Text="5" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fives" />
-                                    <Button Grid.Column="9" Text="6" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Sixes" />
-                                    <Button Grid.Column="10" Text="Out" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dismissals" />
-                                    <Button Grid.Column="11" Text="Bld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowledOut" />
-                                    <Button Grid.Column="12" Text="Cgt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaughtOut" />
-                                    <Button Grid.Column="13" Text="LBW" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LbwOut" />
-                                    <Button Grid.Column="14" Text="RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOut" />
-                                    <Button Grid.Column="15" Text="St" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="StumpedOut" />
-                                    <Button Grid.Column="16" Text="Hit wkt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HitWicketOut" />
-                                    <Button Grid.Column="17" Text="SR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BattingStrikeRate" />
-                                    <Button Grid.Column="18" Text="Avg/Sess" FontSize="9" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AvgPerSession" />
-                                    <Button Grid.Column="19" Text="Avg/Out" FontSize="9" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AvgPerOut" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BallsFaced" ctrl:StatsColumn.Key="BallsFaced" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="1" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Runs" ctrl:StatsColumn.Key="Runs" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="2" Text="HS" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HighestScore" ctrl:StatsColumn.Key="HighestScore" ctrl:StatsColumn.Width="80" />
+                                    <Button Grid.Column="3" Text="50" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fifties" ctrl:StatsColumn.Key="Fifties" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="4" Text="100" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Hundreds" ctrl:StatsColumn.Key="Hundreds" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="5" Text="Duck" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Ducks" ctrl:StatsColumn.Key="Ducks" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="6" Text="G.Duck" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="GoldenDucks" ctrl:StatsColumn.Key="GoldenDucks" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="7" Text="0" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dots" ctrl:StatsColumn.Key="Dots" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="8" Text="1" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Ones" ctrl:StatsColumn.Key="Ones" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="9" Text="2" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Twos" ctrl:StatsColumn.Key="Twos" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="10" Text="3" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Threes" ctrl:StatsColumn.Key="Threes" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="11" Text="4" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Fours" ctrl:StatsColumn.Key="Fours" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="12" Text="6" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Sixes" ctrl:StatsColumn.Key="Sixes" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="13" Text="Out" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Dismissals" ctrl:StatsColumn.Key="Dismissals" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="14" Text="N.O" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="NotOuts" ctrl:StatsColumn.Key="NotOuts" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="15" Text="Bld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowledOut" ctrl:StatsColumn.Key="BowledOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="16" Text="Cgt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaughtOut" ctrl:StatsColumn.Key="CaughtOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="17" Text="LBW" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LbwOut" ctrl:StatsColumn.Key="LbwOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="18" Text="RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOut" ctrl:StatsColumn.Key="RunOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="19" Text="P.RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="PartnerRunOuts" ctrl:StatsColumn.Key="PartnerRunOuts" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="20" Text="St" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="StumpedOut" ctrl:StatsColumn.Key="StumpedOut" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="21" Text="Hit wkt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HitWicketOut" ctrl:StatsColumn.Key="HitWicketOut" ctrl:StatsColumn.Width="56" />
+                                    <Button Grid.Column="22" Text="SR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BattingStrikeRate" ctrl:StatsColumn.Key="BattingStrikeRate" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="23" Text="Avg/Sess" FontSize="9" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AvgPerSession" ctrl:StatsColumn.Key="AvgPerSession" ctrl:StatsColumn.Width="72" />
+                                    <Button Grid.Column="24" Text="Avg/Out" FontSize="9" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AvgPerOut" ctrl:StatsColumn.Key="AvgPerOut" ctrl:StatsColumn.Width="72" />
+                                    <Button Grid.Column="25" Text="Bound%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BoundaryPct" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsBowlingStats}"
-                                      ColumnDefinitions="40,40,36,48,40,32,36,36,32,32,32,32,32,32,56,32,44,44"
+                                      ColumnDefinitions="48,40,48,40,40,36,48,36,40,40,40,48,32,32,32,36,36,32,32,32,32,32,32,56,32,44,44,44"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="OversBowledBalls" />
-                                    <Button Grid.Column="1" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsConceded" />
-                                    <Button Grid.Column="2" Text="Wkts" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Wickets" />
-                                    <Button Grid.Column="3" Text="Best" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BestBowling" />
-                                    <Button Grid.Column="4" Text="Hat" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HatTricks" />
-                                    <Button Grid.Column="5" Text="Dot" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="DotBallsBowled" />
-                                    <Button Grid.Column="6" Text="Wd" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="WidesBowled" />
-                                    <Button Grid.Column="7" Text="NB" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="NoBallsBowled" />
-                                    <Button Grid.Column="8" Text="Bye" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="ByesConceded" />
-                                    <Button Grid.Column="9" Text="LB" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LegByesConceded" />
-                                    <Button Grid.Column="10" Text="Bld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowledWkts" />
-                                    <Button Grid.Column="11" Text="Cgt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaughtWkts" />
-                                    <Button Grid.Column="12" Text="LBW" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LbwWkts" />
-                                    <Button Grid.Column="13" Text="St" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="StumpedWkts" />
-                                    <Button Grid.Column="14" Text="Hit wkt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HitWicketWkts" />
-                                    <Button Grid.Column="15" Text="RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOutWkts" />
-                                    <Button Grid.Column="16" Text="SR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowlingStrikeRate" />
-                                    <Button Grid.Column="17" Text="Econ" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowlingEconomy" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="1" Text="Inns" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="InningsBowled" ctrl:StatsColumn.Key="InningsBowled" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="2" Text="Overs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="OversBowled" ctrl:StatsColumn.Key="OversBowled" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="3" Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="OversBowledBalls" ctrl:StatsColumn.Key="OversBowledBalls" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="4" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsConceded" ctrl:StatsColumn.Key="RunsConceded" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="5" Text="Wkts" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Wickets" ctrl:StatsColumn.Key="Wickets" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="6" Text="Best" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BestBowling" ctrl:StatsColumn.Key="BestBowling" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="7" Text="5W" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="FiveWicketHauls" ctrl:StatsColumn.Key="FiveWicketHauls" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="8" Text="Mdn" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Maidens" ctrl:StatsColumn.Key="Maidens" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="9" Text="Hat" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HatTricks" ctrl:StatsColumn.Key="HatTricks" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="10" Text="Duck" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="DuckWkts" ctrl:StatsColumn.Key="DuckWkts" ctrl:StatsColumn.Width="40" />
+                                    <Button Grid.Column="11" Text="G.Duck" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="GoldenDuckWkts" ctrl:StatsColumn.Key="GoldenDuckWkts" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="12" Text="Dot" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="DotBallsBowled" ctrl:StatsColumn.Key="DotBallsBowled" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="13" Text="4s" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="FoursConceded" ctrl:StatsColumn.Key="FoursConceded" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="14" Text="6s" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SixesConceded" ctrl:StatsColumn.Key="SixesConceded" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="15" Text="Wd" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="WidesBowled" ctrl:StatsColumn.Key="WidesBowled" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="16" Text="NB" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="NoBallsBowled" ctrl:StatsColumn.Key="NoBallsBowled" ctrl:StatsColumn.Width="36" />
+                                    <Button Grid.Column="17" Text="Bye" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="ByesConceded" ctrl:StatsColumn.Key="ByesConceded" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="18" Text="LB" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LegByesConceded" ctrl:StatsColumn.Key="LegByesConceded" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="19" Text="Bld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowledWkts" ctrl:StatsColumn.Key="BowledWkts" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="20" Text="Cgt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaughtWkts" ctrl:StatsColumn.Key="CaughtWkts" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="21" Text="LBW" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="LbwWkts" ctrl:StatsColumn.Key="LbwWkts" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="22" Text="St" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="StumpedWkts" ctrl:StatsColumn.Key="StumpedWkts" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="23" Text="Hit wkt" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="HitWicketWkts" ctrl:StatsColumn.Key="HitWicketWkts" ctrl:StatsColumn.Width="56" />
+                                    <Button Grid.Column="24" Text="RO" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOutWkts" ctrl:StatsColumn.Key="RunOutWkts" ctrl:StatsColumn.Width="32" />
+                                    <Button Grid.Column="25" Text="SR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowlingStrikeRate" ctrl:StatsColumn.Key="BowlingStrikeRate" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="26" Text="Avg" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowlingAverage" ctrl:StatsColumn.Key="BowlingAverage" ctrl:StatsColumn.Width="44" />
+                                    <Button Grid.Column="27" Text="Econ" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BowlingEconomy" ctrl:StatsColumn.Key="BowlingEconomy" ctrl:StatsColumn.Width="44" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsFieldingStats}"
-                                      ColumnDefinitions="64,72,72"
+                                      ColumnDefinitions="48,64,72,72,52,64,56"
                                       HeightRequest="42"
                                       Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Catches" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Catches" />
-                                    <Button Grid.Column="1" Text="Run outs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOutsEffected" />
-                                    <Button Grid.Column="2" Text="Stumpings" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Stumpings" />
+                                      BackgroundColor="{StaticResource Primary}"
+                                      ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                                    <Button Grid.Column="1" Text="Catches" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Catches" ctrl:StatsColumn.Key="Catches" ctrl:StatsColumn.Width="64" />
+                                    <Button Grid.Column="2" Text="Run outs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOutsEffected" ctrl:StatsColumn.Key="RunOutsEffected" ctrl:StatsColumn.Width="72" />
+                                    <Button Grid.Column="3" Text="Stumpings" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Stumpings" ctrl:StatsColumn.Key="Stumpings" ctrl:StatsColumn.Width="72" />
+                                    <Button Grid.Column="4" Text="Total" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="FieldingTotal" ctrl:StatsColumn.Key="FieldingTotal" ctrl:StatsColumn.Width="52" />
+                                    <Button Grid.Column="5" Text="Per Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="FieldingPerMatch" ctrl:StatsColumn.Key="FieldingPerMatch" ctrl:StatsColumn.Width="64" />
+                                    <Button Grid.Column="6" Text="Drops" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="DroppedCatches" ctrl:StatsColumn.Key="DroppedCatches" ctrl:StatsColumn.Width="56" />
                                 </Grid>
-                                <Grid IsVisible="{Binding IsCaptaincyStats}"
-                                      ColumnDefinitions="44,44,44,44,52,44,44,44,52,44,44,44"
-                                      HeightRequest="42"
-                                      Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Pld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainMatches" />
-                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainWon" />
-                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainLoss" />
-                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTied" />
-                                    <Button Grid.Column="4" Text="Tours" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournaments" />
-                                    <Button Grid.Column="5" Text="T.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentWon" />
-                                    <Button Grid.Column="6" Text="T.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentLoss" />
-                                    <Button Grid.Column="7" Text="T.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentTied" />
-                                    <Button Grid.Column="8" Text="Series" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeries" />
-                                    <Button Grid.Column="9" Text="S.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesWon" />
-                                    <Button Grid.Column="10" Text="S.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesLoss" />
-                                    <Button Grid.Column="11" Text="S.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesTied" />
-                                </Grid>
-                                <Grid IsVisible="{Binding IsAttendanceStats}"
-                                      ColumnDefinitions="56,64,64,56"
-                                      HeightRequest="42"
-                                      Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Total" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendanceTotal" />
-                                    <Button Grid.Column="1" Text="Present" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendancePresent" />
-                                    <Button Grid.Column="2" Text="Absent" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendanceAbsent" />
-                                    <Button Grid.Column="3" Text="Att %" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendancePct" />
-                                </Grid>
-                                <Grid IsVisible="{Binding IsTeamStats}"
-                                      ColumnDefinitions="44,44,44,44,44,52,56,48,48,52,48,52,48,48,48"
-                                      HeightRequest="42"
-                                      Padding="2,0"
-                                      BackgroundColor="{StaticResource Primary}">
-                                    <Button Text="Pld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Played" />
-                                    <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Won" />
-                                    <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Lost" />
-                                    <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tied" />
-                                    <Button Grid.Column="4" Text="Pts" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Points" />
-                                    <Button Grid.Column="5" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="WinPct" />
-                                    <Button Grid.Column="6" Text="NRR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Nrr" />
-                                    <Button Grid.Column="7" Text="RF" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsFor" />
-                                    <Button Grid.Column="8" Text="RA" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsAgainst" />
-                                    <Button Grid.Column="9" Text="Tours" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tournaments" />
-                                    <Button Grid.Column="10" Text="T.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWon" />
-                                    <Button Grid.Column="11" Text="Series" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Series" />
-                                    <Button Grid.Column="12" Text="S.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWon" />
-                                    <Button Grid.Column="13" Text="S.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesLoss" />
-                                    <Button Grid.Column="14" Text="S.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" />
-                                </Grid>
+                                <VerticalStackLayout IsVisible="{Binding IsCaptaincyStats}" Spacing="0">
+                                    <Grid ColumnDefinitions="44,44,44,44,52,52,44,44,44,52,52,44,44,44,52,44,56,48,48"
+                                          HeightRequest="26"
+                                          Padding="2,0"
+                                          BackgroundColor="{StaticResource Primary}">
+                                        <Label Text="Matches"
+                                               Grid.Column="0" Grid.ColumnSpan="5"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Tournaments"
+                                               Grid.Column="5" Grid.ColumnSpan="5"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Series"
+                                               Grid.Column="10" Grid.ColumnSpan="5"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Points"
+                                               Grid.Column="15" Grid.ColumnSpan="4"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Grid>
+                                    <BoxView HeightRequest="1" Color="{StaticResource Secondary}" Opacity="0.45" />
+                                    <Grid ColumnDefinitions="44,44,44,44,52,52,44,44,44,52,52,44,44,44,52,44,56,48,48"
+                                          HeightRequest="42"
+                                          Padding="2,0"
+                                          BackgroundColor="{StaticResource Primary}"
+                                          ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                        <Button Text="Pld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainMatches" ctrl:StatsColumn.Key="CaptainMatches" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainWon" ctrl:StatsColumn.Key="CaptainWon" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainLoss" ctrl:StatsColumn.Key="CaptainLoss" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTied" ctrl:StatsColumn.Key="CaptainTied" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainWinPct" ctrl:StatsColumn.Key="CaptainWinPct" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="5" Text="Tours" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournaments" ctrl:StatsColumn.Key="CaptainTournaments" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="6" Text="T.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentWon" ctrl:StatsColumn.Key="CaptainTournamentWon" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="7" Text="T.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentLoss" ctrl:StatsColumn.Key="CaptainTournamentLoss" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="8" Text="T.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentTied" ctrl:StatsColumn.Key="CaptainTournamentTied" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="9" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainTournamentWinPct" ctrl:StatsColumn.Key="CaptainTournamentWinPct" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="10" Text="Series" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeries" ctrl:StatsColumn.Key="CaptainSeries" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="11" Text="S.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesWon" ctrl:StatsColumn.Key="CaptainSeriesWon" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="12" Text="S.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesLoss" ctrl:StatsColumn.Key="CaptainSeriesLoss" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="13" Text="S.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesTied" ctrl:StatsColumn.Key="CaptainSeriesTied" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="14" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainSeriesWinPct" ctrl:StatsColumn.Key="CaptainSeriesWinPct" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="15" Text="Pts" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainPoints" ctrl:StatsColumn.Key="CaptainPoints" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="16" Text="NRR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainNrr" ctrl:StatsColumn.Key="CaptainNrr" ctrl:StatsColumn.Width="56" />
+                                        <Button Grid.Column="17" Text="RF" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainRunsFor" ctrl:StatsColumn.Key="CaptainRunsFor" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="18" Text="RA" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="CaptainRunsAgainst" ctrl:StatsColumn.Key="CaptainRunsAgainst" ctrl:StatsColumn.Width="48" />
+                                    </Grid>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout IsVisible="{Binding IsAttendanceStats}" Spacing="0">
+                                    <Grid ColumnDefinitions="56,64,64,56,72,72,72,56"
+                                          HeightRequest="26"
+                                          Padding="2,0"
+                                          BackgroundColor="{StaticResource Primary}">
+                                        <Label Text="Attendance"
+                                               Grid.Column="0" Grid.ColumnSpan="4"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Payment"
+                                               Grid.Column="4" Grid.ColumnSpan="4"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Grid>
+                                    <BoxView HeightRequest="1" Color="{StaticResource Secondary}" Opacity="0.45" />
+                                    <Grid ColumnDefinitions="56,64,64,56,72,72,72,56"
+                                          HeightRequest="42"
+                                          Padding="2,0"
+                                          BackgroundColor="{StaticResource Primary}"
+                                          ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                        <Button Text="Total" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendanceTotal" ctrl:StatsColumn.Key="AttendanceTotal" ctrl:StatsColumn.Width="56" />
+                                        <Button Grid.Column="1" Text="Present" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendancePresent" ctrl:StatsColumn.Key="AttendancePresent" ctrl:StatsColumn.Width="64" />
+                                        <Button Grid.Column="2" Text="Absent" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendanceAbsent" ctrl:StatsColumn.Key="AttendanceAbsent" ctrl:StatsColumn.Width="64" />
+                                        <Button Grid.Column="3" Text="Att %" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AttendancePct" ctrl:StatsColumn.Key="AttendancePct" ctrl:StatsColumn.Width="56" />
+                                        <Button Grid.Column="4" Text="Total" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="PaymentTotal" ctrl:StatsColumn.Key="PaymentTotal" ctrl:StatsColumn.Width="72" />
+                                        <Button Grid.Column="5" Text="Paid" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="PaymentPaid" ctrl:StatsColumn.Key="PaymentPaid" ctrl:StatsColumn.Width="72" />
+                                        <Button Grid.Column="6" Text="Remain" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="PaymentRemaining" ctrl:StatsColumn.Key="PaymentRemaining" ctrl:StatsColumn.Width="72" />
+                                        <Button Grid.Column="7" Text="Paid%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="PaymentPaidPct" ctrl:StatsColumn.Key="PaymentPaidPct" ctrl:StatsColumn.Width="56" />
+                                    </Grid>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout IsVisible="{Binding IsTeamStats}" Spacing="0">
+                                    <Grid ColumnDefinitions="44,44,44,44,52,52,48,48,48,52,52,48,48,48,52,44,56,48,48"
+                                          HeightRequest="26"
+                                          Padding="2,0"
+                                          BackgroundColor="{StaticResource Primary}">
+                                        <Label Text="Matches"
+                                               Grid.Column="0" Grid.ColumnSpan="5"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Tournaments"
+                                               Grid.Column="5" Grid.ColumnSpan="5"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Series"
+                                               Grid.Column="10" Grid.ColumnSpan="5"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label Text="Points"
+                                               Grid.Column="15" Grid.ColumnSpan="4"
+                                               FontAttributes="Bold" FontSize="10"
+                                               HorizontalTextAlignment="Center" VerticalOptions="Center"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Grid>
+                                    <BoxView HeightRequest="1" Color="{StaticResource Secondary}" Opacity="0.45" />
+                                    <Grid ColumnDefinitions="44,44,44,44,52,52,48,48,48,52,52,48,48,48,52,44,56,48,48"
+                                          HeightRequest="42"
+                                          Padding="2,0"
+                                          BackgroundColor="{StaticResource Primary}"
+                                          ctrl:StatsColumnGrid.Provider="{Binding Columns}">
+                                        <Button Text="Pld" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Played" ctrl:StatsColumn.Key="Played" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="1" Text="Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Won" ctrl:StatsColumn.Key="Won" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Lost" ctrl:StatsColumn.Key="Lost" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tied" ctrl:StatsColumn.Key="Tied" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="WinPct" ctrl:StatsColumn.Key="WinPct" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="5" Text="Tours" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tournaments" ctrl:StatsColumn.Key="Tournaments" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="6" Text="T.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWon" ctrl:StatsColumn.Key="TournamentWon" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="7" Text="T.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentLoss" ctrl:StatsColumn.Key="TournamentLoss" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="8" Text="T.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentTied" ctrl:StatsColumn.Key="TournamentTied" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="9" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWinPct" ctrl:StatsColumn.Key="TournamentWinPct" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="10" Text="Series" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Series" ctrl:StatsColumn.Key="Series" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="11" Text="S.Won" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWon" ctrl:StatsColumn.Key="SeriesWon" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="12" Text="S.Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesLoss" ctrl:StatsColumn.Key="SeriesLoss" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="13" Text="S.Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" ctrl:StatsColumn.Key="SeriesTied" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="14" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWinPct" ctrl:StatsColumn.Key="SeriesWinPct" ctrl:StatsColumn.Width="52" />
+                                        <Button Grid.Column="15" Text="Pts" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Points" ctrl:StatsColumn.Key="Points" ctrl:StatsColumn.Width="44" />
+                                        <Button Grid.Column="16" Text="NRR" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Nrr" ctrl:StatsColumn.Key="Nrr" ctrl:StatsColumn.Width="56" />
+                                        <Button Grid.Column="17" Text="RF" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsFor" ctrl:StatsColumn.Key="RunsFor" ctrl:StatsColumn.Width="48" />
+                                        <Button Grid.Column="18" Text="RA" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunsAgainst" ctrl:StatsColumn.Key="RunsAgainst" ctrl:StatsColumn.Width="48" />
+                                    </Grid>
+                                </VerticalStackLayout>
                                 <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
                             </VerticalStackLayout>
                         </Grid>
@@ -866,7 +1078,8 @@
             </Border>
         </Grid>
 
-        <ScrollView IsVisible="{Binding ShowDetail}"
+        <ScrollView Grid.Row="1"
+                    IsVisible="{Binding ShowDetail}"
                     VerticalOptions="Fill"
                     VerticalScrollBarVisibility="Default"
                     HorizontalScrollBarVisibility="Never">
@@ -923,7 +1136,7 @@
                 <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowMatchCategories}">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="Match record" Style="{StaticResource SectionLabel}" />
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                     <Label Text="Played" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -948,9 +1161,15 @@
                                     <Label Text="{Binding SelectedCareer.Tied}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
+                            <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Win %" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.MatchWinPctText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
                         </Grid>
                         <Label Text="As captain" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
                                 <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
                                     <Label Text="Played" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -975,6 +1194,39 @@
                                     <Label Text="{Binding SelectedCareer.CaptainTied}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" />
                                 </VerticalStackLayout>
                             </Border>
+                            <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="Win %" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainWinPctText}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </Grid>
+                        <Label Text="Captain points" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
+                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                            <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="Pts" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainPoints}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="NRR" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainNrrText}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="RF" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainRunsFor}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="RA" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainRunsAgainst}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" />
+                                </VerticalStackLayout>
+                            </Border>
                         </Grid>
                     </VerticalStackLayout>
                 </Border>
@@ -983,7 +1235,7 @@
                 <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowMatchCategories}">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="Tournament record" Style="{StaticResource SectionLabel}" />
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                     <Label Text="Played" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -1008,9 +1260,15 @@
                                     <Label Text="{Binding SelectedCareer.TournamentTied}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
+                            <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Win %" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.TournamentWinPctText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
                         </Grid>
                         <Label Text="As captain" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
                                 <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
                                     <Label Text="Played" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -1035,6 +1293,12 @@
                                     <Label Text="{Binding SelectedCareer.CaptainTournamentTied}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" />
                                 </VerticalStackLayout>
                             </Border>
+                            <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="Win %" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainTournamentWinPctText}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
                         </Grid>
                     </VerticalStackLayout>
                 </Border>
@@ -1043,7 +1307,7 @@
                 <Border Style="{StaticResource CardBorder}" Padding="14" IsVisible="{Binding ShowMatchCategories}">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="Series record" Style="{StaticResource SectionLabel}" />
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                     <Label Text="Played" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -1068,9 +1332,15 @@
                                     <Label Text="{Binding SelectedCareer.SeriesTied}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
+                            <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Win %" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.SeriesWinPctText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
                         </Grid>
                         <Label Text="As captain" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
-                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
                                 <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
                                     <Label Text="Played" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -1093,6 +1363,12 @@
                                 <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
                                     <Label Text="Tied" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding SelectedCareer.CaptainSeriesTied}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="8,6" StrokeShape="RoundRectangle 8">
+                                <VerticalStackLayout Spacing="1" HorizontalOptions="Center">
+                                    <Label Text="Win %" FontSize="9" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.CaptainSeriesWinPctText}" FontSize="14" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                         </Grid>
@@ -1160,20 +1436,13 @@
                             <Border Grid.Row="1" Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10"
                                     IsVisible="{Binding IsMatchesSource}">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="4s / 6s" FontSize="10" TextColor="{StaticResource TextSecondary}" />
-                                    <Label FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}">
-                                        <Label.Text>
-                                            <MultiBinding StringFormat="{}{0}/{1}">
-                                                <Binding Path="SelectedCareer.Fours" />
-                                                <Binding Path="SelectedCareer.Sixes" />
-                                            </MultiBinding>
-                                        </Label.Text>
-                                    </Label>
+                                    <Label Text="Bound %" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.BoundaryPctText}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                         </Grid>
 
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
                                     <Label Text="Highest" FontSize="10" TextColor="{StaticResource TextSecondary}" />
@@ -1210,18 +1479,38 @@
                                     <Label Text="{Binding SelectedCareer.NotOuts}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource SecondaryDarkText}" />
                                 </VerticalStackLayout>
                             </Border>
+                            <Border Grid.Row="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10"
+                                    IsVisible="{Binding IsMatchesSource}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="4s / 6s" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}">
+                                        <Label.Text>
+                                            <MultiBinding StringFormat="{}{0}/{1}">
+                                                <Binding Path="SelectedCareer.Fours" />
+                                                <Binding Path="SelectedCareer.Sixes" />
+                                            </MultiBinding>
+                                        </Label.Text>
+                                    </Label>
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Row="2" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10"
+                                    IsVisible="{Binding IsNetsSource}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Bound %" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.BoundaryPctText}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
                         </Grid>
 
                         <BoxView HeightRequest="1" Color="{StaticResource Gray200}" />
                         <Label Text="Scoring shots" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
-                        <Grid ColumnDefinitions="*,*,*,*,*,*,*" ColumnSpacing="4">
+                        <Grid ColumnDefinitions="*,*,*,*,*,*" ColumnSpacing="4">
                             <Label HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Dots, StringFormat='0:{0}'}" />
                             <Label Grid.Column="1" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Ones, StringFormat='1:{0}'}" />
                             <Label Grid.Column="2" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Twos, StringFormat='2:{0}'}" />
                             <Label Grid.Column="3" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Threes, StringFormat='3:{0}'}" />
                             <Label Grid.Column="4" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Fours, StringFormat='4:{0}'}" />
-                            <Label Grid.Column="5" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Fives, StringFormat='5:{0}'}" />
-                            <Label Grid.Column="6" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Sixes, StringFormat='6:{0}'}" />
+                            <Label Grid.Column="5" HorizontalTextAlignment="Center" FontSize="11" Text="{Binding SelectedCareer.Sixes, StringFormat='6:{0}'}" />
                         </Grid>
 
                         <Label Text="Dismissals" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
@@ -1236,6 +1525,8 @@
                                     <Span Text="{Binding SelectedCareer.LbwOut}" FontAttributes="Bold" />
                                     <Span Text="  ·  Run out " />
                                     <Span Text="{Binding SelectedCareer.RunOut}" FontAttributes="Bold" />
+                                    <Span Text="  ·  Partner RO " />
+                                    <Span Text="{Binding SelectedCareer.PartnerRunOuts}" FontAttributes="Bold" />
                                     <Span Text="  ·  Stumped " />
                                     <Span Text="{Binding SelectedCareer.StumpedOut}" FontAttributes="Bold" />
                                     <Span Text="  ·  Hit wicket " />
@@ -1260,23 +1551,29 @@
                 <Border Style="{StaticResource CardBorder}" Padding="14">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="Bowling" Style="{StaticResource SectionLabel}" />
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Wickets" FontSize="10" TextColor="{StaticResource TextSecondary}" />
-                                    <Label Text="{Binding SelectedCareer.Wickets}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                    <Label Text="Overs" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.OversBowledText}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                             <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Balls" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.OversBowledBalls}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
                                     <Label Text="Runs" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding SelectedCareer.RunsConceded}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
-                            <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                            <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Balls" FontSize="10" TextColor="{StaticResource TextSecondary}" />
-                                    <Label Text="{Binding SelectedCareer.OversBowledBalls}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                    <Label Text="Wickets" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.Wickets}" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                             <Border Grid.Row="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
@@ -1293,6 +1590,12 @@
                             </Border>
                             <Border Grid.Row="1" Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
+                                    <Label Text="Average" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.BowlingAverageText}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource SecondaryDarkText}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Row="1" Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2">
                                     <Label Text="Dots" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding SelectedCareer.DotBallsBowled}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
@@ -1307,8 +1610,8 @@
                             </Border>
                             <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Hat-tricks" FontSize="10" TextColor="{StaticResource TextSecondary}" />
-                                    <Label Text="{Binding SelectedCareer.HatTricks}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                    <Label Text="5 wickets" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.FiveWicketHauls}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                             <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
@@ -1319,8 +1622,36 @@
                             </Border>
                             <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2">
-                                    <Label Text="Average" FontSize="10" TextColor="{StaticResource TextSecondary}" />
-                                    <Label Text="{Binding SelectedCareer.BowlingAverageText}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource SecondaryDarkText}" />
+                                    <Label Text="Hat-tricks" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.HatTricks}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Duck wickets" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.DuckWkts}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Golden duck wickets" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.GoldenDuckWkts}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="4s conceded" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.FoursConceded}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="6s conceded" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.SixesConceded}" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                         </Grid>
@@ -1341,7 +1672,7 @@
                         <Label FontSize="12" Style="{StaticResource MutedLabel}">
                             <Label.FormattedText>
                                 <FormattedString>
-                                    <Span Text="Extras — Wides " />
+                                    <Span Text="Extras (runs) — Wides " />
                                     <Span Text="{Binding SelectedCareer.WidesBowled}" FontAttributes="Bold" />
                                     <Span Text="  ·  No-balls " />
                                     <Span Text="{Binding SelectedCareer.NoBallsBowled}" FontAttributes="Bold" />
@@ -1359,7 +1690,7 @@
                 <Border Style="{StaticResource CardBorder}" Padding="14">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="Fielding" Style="{StaticResource SectionLabel}" />
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
                             <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                 <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                     <Label Text="Catches" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -1376,6 +1707,26 @@
                                 <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                     <Label Text="Stumpings" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding SelectedCareer.Stumpings}" FontSize="20" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Drops" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.DroppedCatches}" FontSize="20" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Danger}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                            <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Total" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.FieldingTotal}" FontSize="20" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Per match" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.FieldingPerMatchText}" FontSize="20" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                 </VerticalStackLayout>
                             </Border>
                         </Grid>
@@ -1412,6 +1763,33 @@
                                 </VerticalStackLayout>
                             </Border>
                         </Grid>
+                        <Label Text="Payment" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
+                        <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                            <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Total" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.PaymentTotalText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Paid" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.PaymentPaidText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Success}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Remain" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.PaymentRemainingText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Danger}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                    <Label Text="Paid %" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedCareer.PaymentPaidPctText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </Grid>
                     </VerticalStackLayout>
                 </Border>
 
@@ -1436,6 +1814,16 @@
                                         Command="{Binding ShowBowlingCommand}">
                                     <Button.Triggers>
                                         <DataTrigger TargetType="Button" Binding="{Binding IsBowlingTab}" Value="True">
+                                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                        </DataTrigger>
+                                    </Button.Triggers>
+                                </Button>
+                                <Button Text="Fielding"
+                                        Style="{StaticResource StatsChip}"
+                                        Command="{Binding ShowFieldingVsCommand}">
+                                    <Button.Triggers>
+                                        <DataTrigger TargetType="Button" Binding="{Binding IsFieldingTab}" Value="True">
                                             <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
                                             <Setter Property="TextColor" Value="{StaticResource Secondary}" />
                                         </DataTrigger>
@@ -1538,6 +1926,94 @@
                                                     </FormattedString>
                                                 </Label.FormattedText>
                                             </Label>
+                                            <Label FontSize="11"
+                                                   Style="{StaticResource MutedLabel}"
+                                                   IsVisible="{Binding HasWicketTypes}">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="Wickets — Bowled " />
+                                                        <Span Text="{Binding Bowled}" FontAttributes="Bold" />
+                                                        <Span Text="  ·  Caught " />
+                                                        <Span Text="{Binding Caught}" FontAttributes="Bold" />
+                                                        <Span Text="  ·  LBW " />
+                                                        <Span Text="{Binding Lbw}" FontAttributes="Bold" />
+                                                        <Span Text="  ·  Run out " />
+                                                        <Span Text="{Binding RunOut}" FontAttributes="Bold" />
+                                                        <Span Text="  ·  Stumped " />
+                                                        <Span Text="{Binding Stumped}" FontAttributes="Bold" />
+                                                        <Span Text="  ·  Hit wicket " />
+                                                        <Span Text="{Binding HitWicket}" FontAttributes="Bold" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding FieldingVs}"
+                                             Spacing="10"
+                                             IsVisible="{Binding IsFieldingTab}">
+                            <BindableLayout.EmptyView>
+                                <Label Text="No fielding head-to-head yet"
+                                       Style="{StaticResource MutedLabel}"
+                                       Margin="4" />
+                            </BindableLayout.EmptyView>
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:FieldingVsStat">
+                                    <Border StrokeThickness="0"
+                                            BackgroundColor="{StaticResource SurfaceMuted}"
+                                            Padding="12"
+                                            StrokeShape="RoundRectangle 12">
+                                        <VerticalStackLayout Spacing="10">
+                                            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                                <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center">
+                                                    <Label Text="{Binding FielderName}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           TextColor="{StaticResource Primary}"
+                                                           HorizontalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="1"
+                                                       Text="VS"
+                                                       FontAttributes="Bold"
+                                                       FontSize="12"
+                                                       TextColor="{StaticResource Secondary}"
+                                                       VerticalOptions="Center"
+                                                       HorizontalTextAlignment="Center" />
+                                                <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center" VerticalOptions="Center">
+                                                    <Label Text="{Binding BatterName}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           TextColor="{StaticResource Primary}"
+                                                           HorizontalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
+                                                <VerticalStackLayout>
+                                                    <Label Text="Ct" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Catches}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="1">
+                                                    <Label Text="RO" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding RunOuts}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="2">
+                                                    <Label Text="St" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Stumpings}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="3">
+                                                    <Label Text="Drop" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding DroppedCatches}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Danger}" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="4">
+                                                    <Label Text="Total" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Total}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Primary}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
                                         </VerticalStackLayout>
                                     </Border>
                                 </DataTemplate>
@@ -1584,17 +2060,7 @@
                                                            LineBreakMode="TailTruncation" />
                                                 </VerticalStackLayout>
                                             </Grid>
-                                            <Label FontSize="13" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}">
-                                                <Label.FormattedText>
-                                                    <FormattedString>
-                                                        <Span Text="Record " />
-                                                        <Span Text="{Binding RecordText}" />
-                                                        <Span Text="  ·  Win% " />
-                                                        <Span Text="{Binding WinPctText}" />
-                                                    </FormattedString>
-                                                </Label.FormattedText>
-                                            </Label>
-                                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                            <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                                                 <VerticalStackLayout>
                                                     <Label Text="Pld" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                                     <Label Text="{Binding Played}" FontAttributes="Bold" FontSize="14" />
@@ -1611,20 +2077,44 @@
                                                     <Label Text="Tied" FontSize="10" TextColor="{StaticResource TextSecondary}" />
                                                     <Label Text="{Binding Tied}" FontAttributes="Bold" FontSize="14" />
                                                 </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="4">
+                                                    <Label Text="Win%" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding WinPctText}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Primary}" />
+                                                </VerticalStackLayout>
                                             </Grid>
-                                            <Label IsVisible="{Binding HasSeries}"
-                                                   FontSize="12"
-                                                   TextColor="{StaticResource TextSecondary}">
-                                                <Label.FormattedText>
-                                                    <FormattedString>
-                                                        <Span Text="Series " />
-                                                        <Span Text="{Binding Series}" />
-                                                        <Span Text="  ·  " />
-                                                        <Span Text="{Binding SeriesRecordText}" />
-                                                        <Span Text=" (W–L–T)" />
-                                                    </FormattedString>
-                                                </Label.FormattedText>
-                                            </Label>
+                                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                                <VerticalStackLayout>
+                                                    <Label Text="Pts" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding Points}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Primary}" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="1">
+                                                    <Label Text="NRR" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding NrrText}" FontAttributes="Bold" FontSize="14" TextColor="{StaticResource Primary}" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="2">
+                                                    <Label Text="RF" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding RunsFor}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="3">
+                                                    <Label Text="RA" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                    <Label Text="{Binding RunsAgainst}" FontAttributes="Bold" FontSize="14" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                            <VerticalStackLayout IsVisible="{Binding HasSeries}" Spacing="4">
+                                                <Label FontSize="12" TextColor="{StaticResource TextSecondary}">
+                                                    <Label.FormattedText>
+                                                        <FormattedString>
+                                                            <Span Text="Series " />
+                                                            <Span Text="{Binding Series}" />
+                                                            <Span Text="  ·  " />
+                                                            <Span Text="{Binding SeriesRecordText}" />
+                                                            <Span Text=" (W–L–T)" />
+                                                            <Span Text="  ·  Win% " />
+                                                            <Span Text="{Binding SeriesWinPctText}" />
+                                                        </FormattedString>
+                                                    </Label.FormattedText>
+                                                </Label>
+                                            </VerticalStackLayout>
                                         </VerticalStackLayout>
                                     </Border>
                                 </DataTemplate>
@@ -1637,8 +2127,44 @@
                 <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowTeamDetail}">
                     <Border Style="{StaticResource CardBorder}" Padding="14">
                         <VerticalStackLayout Spacing="10">
+                            <Label Text="Squad" Style="{StaticResource SectionLabel}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamSquad}" Spacing="6">
+                                <BindableLayout.EmptyView>
+                                    <Label Text="No squad players listed"
+                                           Style="{StaticResource MutedLabel}"
+                                           Margin="4" />
+                                </BindableLayout.EmptyView>
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:TeamSquadPlayerRow">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Padding="2,2">
+                                            <Label Text="{Binding PlayerName}"
+                                                   FontAttributes="Bold"
+                                                   FontSize="14"
+                                                   TextColor="{StaticResource Primary}"
+                                                   LineBreakMode="TailTruncation"
+                                                   VerticalOptions="Center" />
+                                            <Border Grid.Column="1"
+                                                    StrokeThickness="0"
+                                                    BackgroundColor="{StaticResource SurfaceMuted}"
+                                                    Padding="8,3"
+                                                    StrokeShape="RoundRectangle 8"
+                                                    VerticalOptions="Center">
+                                                <Label Text="{Binding RoleText}"
+                                                       FontSize="10"
+                                                       FontAttributes="Bold"
+                                                       TextColor="{StaticResource TextSecondary}" />
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="10">
                             <Label Text="Match record" Style="{StaticResource SectionLabel}" />
-                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                            <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
                                 <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                     <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                         <Label Text="Played" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
@@ -1663,12 +2189,19 @@
                                         <Label Text="{Binding SelectedTeam.Tied}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                     </VerticalStackLayout>
                                 </Border>
-                            </Grid>
-                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
-                                <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                <Border Grid.Column="4" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                     <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
                                         <Label Text="Win %" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
                                         <Label Text="{Binding SelectedTeam.WinPctText}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </Grid>
+                            <Label Text="Points" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource TextPrimary}" />
+                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                                <Border StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="Pts" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.Points}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                     </VerticalStackLayout>
                                 </Border>
                                 <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
@@ -1679,8 +2212,14 @@
                                 </Border>
                                 <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
                                     <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
-                                        <Label Text="Pts" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
-                                        <Label Text="{Binding SelectedTeam.Points}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                        <Label Text="RF" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.RunsFor}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Column="3" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceMuted}" Padding="10,8" StrokeShape="RoundRectangle 10">
+                                    <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                        <Label Text="RA" FontSize="10" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                        <Label Text="{Binding SelectedTeam.RunsAgainst}" FontSize="18" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
                                     </VerticalStackLayout>
                                 </Border>
                             </Grid>
@@ -1800,7 +2339,8 @@
         <Label Grid.Row="2" Text="{Binding ErrorMessage}" TextColor="#B00020" />
 
         <!-- Compact overlay so the table stays readable while sorting/loading -->
-        <Grid Grid.Row="1"
+        <Grid Grid.Row="0"
+              Grid.RowSpan="3"
               IsVisible="{Binding ShowLoading}"
               ZIndex="10"
               BackgroundColor="#220D1B2A">

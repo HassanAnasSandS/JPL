@@ -37,10 +37,18 @@ public sealed class SchedulerDetail
     public bool HasWinner => !string.IsNullOrWhiteSpace(WinnerLine);
     public bool CanEdit { get; init; }
     public bool GroupStageComplete { get; init; }
+    /// <summary>Custom type only — matches each team should play (inferred or stored).</summary>
+    public int? MatchesPerTeam { get; init; }
     public QualificationDecision Qualification { get; init; } = new();
     public IReadOnlyList<SchedulerTeam> Teams { get; init; } = Array.Empty<SchedulerTeam>();
     public IReadOnlyList<SchedulerStandingRow> Standings { get; init; } = Array.Empty<SchedulerStandingRow>();
     public IReadOnlyList<SchedulerMatchView> Matches { get; init; } = Array.Empty<SchedulerMatchView>();
+}
+
+public sealed class SchedulerCustomPairInput
+{
+    public Guid TeamAId { get; init; }
+    public Guid TeamBId { get; init; }
 }
 
 public sealed class SchedulerMatchView
@@ -58,11 +66,16 @@ public sealed class SchedulerMatchView
     public SchedulerMatchResult Result { get; init; }
     public string ResultText { get; init; } = string.Empty;
     public bool BothTeamsKnown { get; init; }
-    public bool CanRecord { get; init; }
+    public bool CanRecord { get; set; }
     public bool IsKnockout { get; init; }
     public bool HasResult => !string.IsNullOrWhiteSpace(ResultText);
     public string VsLine => $"{TeamAName}  vs  {TeamBName}";
     public string ActionLabel => HasResult ? "Change" : "Result";
+    /// <summary>Shown in View / completed mode when Result/Change is hidden.</summary>
+    public bool ShowStatusBadge => !CanRecord;
+    public string StatusBadge => HasResult
+        ? (string.IsNullOrWhiteSpace(ResultText) ? "Played" : ResultText)
+        : BothTeamsKnown ? "Upcoming" : "TBD";
 }
 
 public interface ITournamentSchedulerService
@@ -78,6 +91,8 @@ public interface ITournamentSchedulerService
         int qualifyPerGroup,
         SchedulerKnockoutFormat knockout,
         IReadOnlyList<SchedulerTeamInput> teams,
+        int? matchesPerTeam = null,
+        IReadOnlyList<SchedulerCustomPairInput>? customPairs = null,
         CancellationToken ct = default);
     Task DeleteAsync(Guid id, CancellationToken ct = default);
     Task SetMatchResultAsync(Guid tournamentId, Guid matchId, SchedulerMatchResult result, CancellationToken ct = default);
@@ -99,63 +114,95 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
     {
         EnsureCanUse();
         var rows = await _api.GetSchedulerListAsync(ct).ConfigureAwait(false);
-        return rows.Select(t => new SchedulerListItem
-        {
-            Id = t.Id,
-            Name = t.Name,
-            MetaLine = string.IsNullOrWhiteSpace(t.MetaLine)
-                ? SchedulerEngine.SetupHint(
-                    t.GroupCount,
-                    t.QualifyPerGroup,
-                    (SchedulerKnockoutFormat)t.KnockoutFormat,
-                    (SchedulerRoundRobinType)t.RoundRobinType,
-                    t.TeamCount)
-                : t.MetaLine,
-            StatusText = string.IsNullOrWhiteSpace(t.StatusText)
-                ? SchedulerEngine.StatusText((SchedulerStatus)t.Status)
-                : t.StatusText,
-            WinnerLine = t.WinnerLine,
-            Status = (SchedulerStatus)t.Status,
-            CanEdit = t.CanEdit,
-            CreatedByUserId = t.CreatedByUserId,
-            CreatedByUsername = t.CreatedByUsername ?? string.Empty
-        }).ToList();
+        return rows.Select(ToListItem).ToList();
     }
 
     public async Task<ApiPagedResult<SchedulerListItem>> GetPageAsync(int skip, string? q, Guid? createdBy = null, CancellationToken ct = default)
     {
         EnsureCanUse();
         var page = await _api.GetSchedulerPageAsync(skip, q, createdBy, ct).ConfigureAwait(false);
-        var items = (page.Items ?? []).Select(t => new SchedulerListItem
+        var items = new List<SchedulerListItem>();
+        foreach (var t in page.Items ?? [])
         {
-            Id = t.Id,
-            Name = t.Name,
-            MetaLine = string.IsNullOrWhiteSpace(t.MetaLine)
-                ? SchedulerEngine.SetupHint(
-                    t.GroupCount,
-                    t.QualifyPerGroup,
-                    (SchedulerKnockoutFormat)t.KnockoutFormat,
-                    (SchedulerRoundRobinType)t.RoundRobinType,
-                    t.TeamCount)
-                : t.MetaLine,
-            StatusText = string.IsNullOrWhiteSpace(t.StatusText)
-                ? SchedulerEngine.StatusText((SchedulerStatus)t.Status)
-                : t.StatusText,
-            WinnerLine = t.WinnerLine,
-            Status = (SchedulerStatus)t.Status,
-            CanEdit = t.CanEdit,
-            CreatedByUserId = t.CreatedByUserId,
-            CreatedByUsername = t.CreatedByUsername ?? string.Empty
-        }).ToList();
+            var item = ToListItem(t);
+            // Completed (or RR-done Knockout=No) rows with no Champion line — recompute + persist.
+            if (string.IsNullOrWhiteSpace(t.WinnerLine)
+                && ((SchedulerStatus)t.Status == SchedulerStatus.Completed
+                    || ((SchedulerKnockoutFormat)t.KnockoutFormat == SchedulerKnockoutFormat.None
+                        && (SchedulerStatus)t.Status == SchedulerStatus.GroupStage)))
+            {
+                try
+                {
+                    var detail = await GetAsync(t.Id, ct).ConfigureAwait(false);
+                    item = new SchedulerListItem
+                    {
+                        Id = detail.Id,
+                        Name = detail.Name,
+                        MetaLine = detail.MetaLine,
+                        StatusText = detail.StatusText,
+                        WinnerLine = detail.WinnerLine,
+                        Status = detail.Status,
+                        CanEdit = detail.CanEdit,
+                        CreatedByUserId = item.CreatedByUserId,
+                        CreatedByUsername = item.CreatedByUsername
+                    };
+                }
+                catch
+                {
+                    /* keep original list row */
+                }
+            }
+
+            items.Add(item);
+        }
+
         return page.WithItems(items);
     }
+
+    private static SchedulerListItem ToListItem(ApiSchedulerListDto t) => new()
+    {
+        Id = t.Id,
+        Name = t.Name,
+        MetaLine = string.IsNullOrWhiteSpace(t.MetaLine)
+            ? SchedulerEngine.SetupHint(
+                t.GroupCount,
+                t.QualifyPerGroup,
+                (SchedulerKnockoutFormat)t.KnockoutFormat,
+                (SchedulerRoundRobinType)t.RoundRobinType,
+                t.TeamCount)
+            : t.MetaLine,
+        StatusText = string.IsNullOrWhiteSpace(t.StatusText)
+            ? SchedulerEngine.StatusText((SchedulerStatus)t.Status)
+            : t.StatusText,
+        WinnerLine = t.WinnerLine,
+        Status = (SchedulerStatus)t.Status,
+        CanEdit = t.CanEdit,
+        CreatedByUserId = t.CreatedByUserId,
+        CreatedByUsername = t.CreatedByUsername ?? string.Empty
+    };
 
     public async Task<SchedulerDetail> GetAsync(Guid id, CancellationToken ct = default)
     {
         EnsureCanUse();
         var dto = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false)
                   ?? throw new InvalidOperationException("Scheduled tournament not found.");
-        return ToDetail(FromDto(dto));
+        var entity = FromDto(dto);
+        var dirty = TryReseatUnplayedKnockout(entity)
+                    || TryEnsureRoundRobinChampion(entity)
+                    || TryEnsureKnockoutChampion(entity);
+        if (dirty)
+        {
+            try
+            {
+                await _api.UpdateSchedulerAsync(entity.Id, ToUpsert(entity), ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Still return computed champion for display; list refresh will retry persist.
+            }
+        }
+
+        return ToDetail(entity);
     }
 
     public async Task<Guid> SaveAsync(
@@ -166,12 +213,28 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         int qualifyPerGroup,
         SchedulerKnockoutFormat knockout,
         IReadOnlyList<SchedulerTeamInput> teams,
+        int? matchesPerTeam = null,
+        IReadOnlyList<SchedulerCustomPairInput>? customPairs = null,
         CancellationToken ct = default)
     {
         EnsureCanUse();
         name = (name ?? string.Empty).Trim();
         if (name.Length == 0)
             throw new InvalidOperationException("Enter a tournament name.");
+
+        if (roundRobin == SchedulerRoundRobinType.Custom)
+        {
+            groupCount = 1;
+            // Custom is a single pool — fold every team into group 1 before validate/save.
+            teams = teams
+                .Select(t => new SchedulerTeamInput
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    GroupNumber = 1
+                })
+                .ToList();
+        }
 
         SchedulerEngine.ValidateSetup(
             groupCount,
@@ -180,14 +243,68 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             knockout,
             teams.Select(t => (t.Name.Trim(), t.GroupNumber)).ToList());
 
+        var isCustom = roundRobin == SchedulerRoundRobinType.Custom;
+        var pairList = (customPairs ?? Array.Empty<SchedulerCustomPairInput>())
+            .Select(p => (p.TeamAId, p.TeamBId))
+            .ToList();
+        var teamIdsForCustom = new List<Guid>();
+        var customComplete = false;
+        var customMpt = matchesPerTeam ?? 0;
+
+        if (isCustom)
+        {
+            // Resolve stable ids up front so pair validation matches persisted teams.
+            foreach (var input in teams)
+            {
+                teamIdsForCustom.Add(input.Id is Guid teamId && teamId != Guid.Empty
+                    ? teamId
+                    : Guid.NewGuid());
+            }
+
+            if (pairList.Count == 0)
+            {
+                customComplete = false;
+            }
+            else if (customMpt < 1)
+            {
+                throw new InvalidOperationException("Select matches per team for Custom.");
+            }
+            else if (SchedulerEngine.IsCustomPairingComplete(teamIdsForCustom, customMpt, pairList))
+            {
+                customComplete = true;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    SchedulerEngine.CustomPairingHint(teamIdsForCustom, customMpt, pairList));
+            }
+        }
+
         SchedulerTournament entity;
+        var previousMatches = new List<SchedulerMatch>();
+        var previousRoster = new HashSet<(Guid Id, int GroupNumber)>();
+        var prevKnockout = default(SchedulerKnockoutFormat);
+        var prevQualify = 0;
+        var prevRoundRobin = default(SchedulerRoundRobinType);
+        var prevGroupCount = 0;
+        string? prevPicks = null;
+        var isExisting = false;
+
         if (id is Guid existing)
         {
             var dto = await _api.GetSchedulerAsync(existing, ct).ConfigureAwait(false)
                       ?? throw new InvalidOperationException("Scheduled tournament not found.");
             entity = FromDto(dto);
-            if (entity.Matches.Any(m => m.Result != SchedulerMatchResult.None))
-                throw new InvalidOperationException("Cannot edit setup after results are recorded. Create a new scheduler instead.");
+            if (entity.Status == SchedulerStatus.Completed || entity.WinnerTeamId is not null)
+                throw new InvalidOperationException("Cannot edit a completed scheduler.");
+            isExisting = true;
+            previousMatches = entity.Matches.ToList();
+            previousRoster = entity.Teams.Select(t => (t.Id, t.GroupNumber)).ToHashSet();
+            prevKnockout = entity.KnockoutFormat;
+            prevQualify = entity.QualifyPerGroup;
+            prevRoundRobin = entity.RoundRobinType;
+            prevGroupCount = entity.GroupCount;
+            prevPicks = entity.QualificationPicksJson;
             entity.Teams.Clear();
             entity.Matches.Clear();
         }
@@ -205,17 +322,23 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         entity.RoundRobinType = roundRobin;
         entity.QualifyPerGroup = qualifyPerGroup;
         entity.KnockoutFormat = knockout;
-        entity.QualificationPicksJson = null;
         entity.WinnerTeamId = null;
         entity.UpdatedAtUtc = DateTime.UtcNow;
         entity.IsDeleted = false;
 
         var order = 0;
+        var customIdIndex = 0;
         foreach (var input in teams)
         {
+            Guid teamId;
+            if (isCustom)
+                teamId = teamIdsForCustom[customIdIndex++];
+            else
+                teamId = input.Id is Guid existingId && existingId != Guid.Empty ? existingId : Guid.NewGuid();
+
             entity.Teams.Add(new SchedulerTeam
             {
-                Id = input.Id is Guid teamId && teamId != Guid.Empty ? teamId : Guid.NewGuid(),
+                Id = teamId,
                 TournamentId = entity.Id,
                 Name = input.Name.Trim(),
                 GroupNumber = input.GroupNumber,
@@ -223,10 +346,55 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             });
         }
 
-        foreach (var match in SchedulerEngine.BuildMatches(entity))
+        var preserveKnockout = isExisting
+            && previousRoster.SetEquals(entity.Teams.Select(t => (t.Id, t.GroupNumber)))
+            && prevKnockout == knockout
+            && prevQualify == qualifyPerGroup
+            && prevRoundRobin == roundRobin
+            && prevGroupCount == groupCount
+            && (!isCustom || customComplete);
+
+        IReadOnlyList<(Guid A, Guid B)>? buildPairs = null;
+        if (isCustom)
+        {
+            if (customComplete)
+            {
+                buildPairs = pairList;
+                entity.QualificationPicksJson = preserveKnockout ? prevPicks : null;
+            }
+            else
+            {
+                // Draft — teams only; schedule starts after custom fixtures are complete.
+                buildPairs = Array.Empty<(Guid, Guid)>();
+                entity.QualificationPicksJson = customMpt > 0
+                    ? SchedulerEngine.WriteCustomMatchesPerTeam(customMpt)
+                    : null;
+                preserveKnockout = false;
+            }
+        }
+        else
+        {
+            entity.QualificationPicksJson = preserveKnockout ? prevPicks : null;
+        }
+
+        foreach (var match in SchedulerEngine.RebuildMatches(entity, previousMatches, preserveKnockout, buildPairs))
             entity.Matches.Add(match);
 
-        entity.Status = SchedulerStatus.GroupStage;
+        if (isCustom && !customComplete)
+        {
+            entity.Status = SchedulerStatus.Draft;
+        }
+        else if (isExisting)
+        {
+            if (isCustom && entity.Status == SchedulerStatus.Draft)
+                entity.Status = SchedulerStatus.GroupStage;
+            RefreshProgress(entity, reseatKnockout: !preserveKnockout);
+        }
+        else
+        {
+            entity.Status = SchedulerStatus.GroupStage;
+        }
+
         var saved = id is Guid
             ? await _api.UpdateSchedulerAsync(entity.Id, ToUpsert(entity), ct).ConfigureAwait(false)
             : await _api.CreateSchedulerAsync(ToUpsert(entity), ct).ConfigureAwait(false);
@@ -238,8 +406,8 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         EnsureCanUse();
         var dto = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false)
                   ?? throw new InvalidOperationException("Scheduled tournament not found.");
-        if (dto.Matches.Any(m => m.Result != 0))
-            throw new InvalidOperationException("Cannot delete this scheduler after a match result is recorded.");
+        if ((SchedulerStatus)dto.Status == SchedulerStatus.Completed || dto.WinnerTeamId is not null)
+            throw new InvalidOperationException("Cannot delete a completed scheduler.");
         await _api.DeleteSchedulerAsync(id, ct).ConfigureAwait(false);
     }
 
@@ -251,6 +419,10 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
     {
         EnsureCanUse();
         var t = await LoadOwnedAsync(tournamentId, ct).ConfigureAwait(false);
+        if (t.Status == SchedulerStatus.Draft)
+            throw new InvalidOperationException("Finish Custom fixtures in Edit before recording results.");
+        if (t.Status == SchedulerStatus.Completed || t.WinnerTeamId is not null)
+            throw new InvalidOperationException("Cannot change results on a completed scheduler.");
         var match = t.Matches.FirstOrDefault(m => m.Id == matchId)
             ?? throw new InvalidOperationException("Match not found.");
 
@@ -275,18 +447,25 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
     {
         EnsureCanUse();
         var t = await LoadOwnedAsync(tournamentId, ct).ConfigureAwait(false);
+        if (t.Status == SchedulerStatus.Completed || t.WinnerTeamId is not null)
+            throw new InvalidOperationException("Cannot change qualification on a completed scheduler.");
         if (!SchedulerEngine.GroupStageComplete(t.Matches.ToList()))
             throw new InvalidOperationException("Finish every round-robin match before picking knockout teams.");
 
         var standings = SchedulerEngine.BuildStandings(t.Teams.ToList(), t.Matches.ToList());
         var decision = SchedulerEngine.DecideQualification(t, t.Teams.ToList(), standings);
-        var need = SchedulerEngine.KnockoutTeamCount(t.KnockoutFormat);
+        var need = t.KnockoutFormat == SchedulerKnockoutFormat.None
+            ? 1
+            : SchedulerEngine.KnockoutTeamCount(t.KnockoutFormat);
+        if (need <= 0)
+            throw new InvalidOperationException("This scheduler has no teams to qualify.");
+        var qualify = t.KnockoutFormat == SchedulerKnockoutFormat.None ? 0 : t.QualifyPerGroup;
         SchedulerEngine.EnsurePicksValid(
             teamIds,
             decision.AutoQualifiedIds,
             decision.PickFrom,
             t.Teams.ToList(),
-            t.QualifyPerGroup,
+            qualify,
             t.GroupCount,
             need);
 
@@ -406,6 +585,23 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             return;
         }
 
+        // Round-robin only — table leader is champion (tie → manual pick).
+        if (t.KnockoutFormat == SchedulerKnockoutFormat.None)
+        {
+            SchedulerEngine.ClearKnockoutProgress(matches);
+            var championDecision = SchedulerEngine.DecideQualification(t, teams, standings);
+            if (championDecision.NeedsManualPick)
+                return;
+
+            t.WinnerTeamId = championDecision.QualifiedInSeedOrder.Count > 0
+                ? championDecision.QualifiedInSeedOrder[0]
+                : null;
+            t.Status = t.WinnerTeamId is not null
+                ? SchedulerStatus.Completed
+                : SchedulerStatus.GroupStage;
+            return;
+        }
+
         var decision = SchedulerEngine.DecideQualification(t, teams, standings);
         if (decision.NeedsManualPick)
         {
@@ -416,7 +612,7 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         if (reseatKnockout)
         {
             SchedulerEngine.ClearKnockoutProgress(matches);
-            SchedulerEngine.AssignOpeningKnockoutSeeds(matches, decision.QualifiedInSeedOrder);
+            SchedulerEngine.AssignOpeningKnockoutSeeds(matches, decision.QualifiedInSeedOrder, standings);
         }
 
         var final = matches.FirstOrDefault(m => m.Stage == SchedulerMatchStage.Final);
@@ -428,6 +624,73 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             : SchedulerStatus.Knockout;
     }
 
+    /// <summary>
+    /// Re-applies group-vs-group knockout pairing when the group stage is done
+    /// and no knockout result has been recorded yet.
+    /// </summary>
+    private bool TryReseatUnplayedKnockout(SchedulerTournament t)
+    {
+        if (t.KnockoutFormat == SchedulerKnockoutFormat.None)
+            return false;
+
+        var matches = t.Matches.ToList();
+        if (!SchedulerEngine.GroupStageComplete(matches))
+            return false;
+        if (matches.Any(m => m.Stage != SchedulerMatchStage.Group && m.Result != SchedulerMatchResult.None))
+            return false;
+
+        var before = matches
+            .Where(m => m.Stage != SchedulerMatchStage.Group)
+            .Select(m => (m.Id, m.TeamAId, m.TeamBId))
+            .ToList();
+        RefreshProgress(t, reseatKnockout: true);
+        return !before.SequenceEqual(
+            t.Matches
+                .Where(m => m.Stage != SchedulerMatchStage.Group)
+                .Select(m => (m.Id, m.TeamAId, m.TeamBId)));
+    }
+
+    /// <summary>
+    /// Knockout = No tournaments completed before champion logic had no WinnerTeamId.
+    /// Recompute table leader (or leave pending for tie modal) and persist when changed.
+    /// </summary>
+    private bool TryEnsureRoundRobinChampion(SchedulerTournament t)
+    {
+        if (t.KnockoutFormat != SchedulerKnockoutFormat.None)
+            return false;
+        if (t.WinnerTeamId is not null)
+            return false;
+        if (!SchedulerEngine.GroupStageComplete(t.Matches.ToList()))
+            return false;
+
+        var beforeWinner = t.WinnerTeamId;
+        var beforeStatus = t.Status;
+        var beforePicks = t.QualificationPicksJson;
+        RefreshProgress(t, reseatKnockout: true);
+        return t.WinnerTeamId != beforeWinner
+            || t.Status != beforeStatus
+            || !string.Equals(t.QualificationPicksJson, beforePicks, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Knockout completes that never stored WinnerTeamId — read Final result only (no reseat).
+    /// </summary>
+    private bool TryEnsureKnockoutChampion(SchedulerTournament t)
+    {
+        if (t.KnockoutFormat == SchedulerKnockoutFormat.None)
+            return false;
+        if (t.WinnerTeamId is not null)
+            return false;
+
+        var final = t.Matches.FirstOrDefault(m => m.Stage == SchedulerMatchStage.Final);
+        if (final?.Result is not (SchedulerMatchResult.TeamAWon or SchedulerMatchResult.TeamBWon))
+            return false;
+
+        t.WinnerTeamId = SchedulerEngine.WinnerOf(final);
+        t.Status = SchedulerStatus.Completed;
+        return t.WinnerTeamId is not null;
+    }
+
     private SchedulerDetail ToDetail(SchedulerTournament t)
     {
         var teams = t.Teams.ToList();
@@ -437,6 +700,8 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         var qualification = groupDone
             ? SchedulerEngine.DecideQualification(t, teams, standings)
             : new QualificationDecision();
+        SchedulerEngine.ApplyQualificationMarks(
+            standings, matches, t.QualifyPerGroup, groupDone, qualification);
         var names = teams.ToDictionary(x => x.Id, x => x.Name);
         string NameOf(Guid? id, string? slot)
         {
@@ -445,8 +710,11 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             return string.IsNullOrWhiteSpace(slot) ? "TBD" : slot!;
         }
 
-        var hasResults = matches.Any(m => m.Result != SchedulerMatchResult.None);
         var winnerName = t.WinnerTeamId is Guid wid && names.TryGetValue(wid, out var w) ? w : null;
+        var matchesPerTeam = t.RoundRobinType == SchedulerRoundRobinType.Custom
+            ? SchedulerEngine.InferMatchesPerTeam(matches, teams.Count)
+              ?? SchedulerEngine.TryReadCustomMatchesPerTeam(t.QualificationPicksJson)
+            : null;
 
         return new SchedulerDetail
         {
@@ -458,10 +726,12 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             KnockoutFormat = t.KnockoutFormat,
             Status = t.Status,
             StatusText = SchedulerEngine.StatusText(t.Status),
-            MetaLine = SchedulerEngine.SetupHint(t.GroupCount, t.QualifyPerGroup, t.KnockoutFormat, t.RoundRobinType, teams.Count),
+            MetaLine = SchedulerEngine.SetupHint(
+                t.GroupCount, t.QualifyPerGroup, t.KnockoutFormat, t.RoundRobinType, teams.Count, matchesPerTeam),
             WinnerLine = winnerName is null ? string.Empty : $"Champion: {winnerName}",
-            CanEdit = !hasResults,
+            CanEdit = t.Status != SchedulerStatus.Completed,
             GroupStageComplete = groupDone,
+            MatchesPerTeam = matchesPerTeam,
             Qualification = qualification,
             Teams = teams,
             Standings = standings,

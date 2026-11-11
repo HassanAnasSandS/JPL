@@ -16,7 +16,7 @@ public sealed class HealthController : ControllerBase
     {
         status = "ok",
         service = "JPL.Grounds.Api",
-        version = "1.0.3",
+        version = "1.0.5",
         time = DateTime.Now
     });
 }
@@ -124,7 +124,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         decimal? maxRate,
         string? amenities,
         string? cursor,
-        int take = 5,
+        int take = 15,
         CancellationToken ct = default)
     {
         take = Paging.ClampTake(take);
@@ -235,7 +235,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
 
     [HttpGet("{id:guid}/reviews")]
     public async Task<ActionResult<GroundReviewPage>> Reviews(
-        Guid id, string? cursor, int take = 5, CancellationToken ct = default)
+        Guid id, string? cursor, int take = 15, CancellationToken ct = default)
     {
         var exists = await _db.Grounds.AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == id && !g.IsDeleted, ct)

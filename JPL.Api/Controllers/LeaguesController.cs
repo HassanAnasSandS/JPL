@@ -39,7 +39,7 @@ public sealed class LeaguesController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<LeagueDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         await using var db = _dbs.CreateMaster();

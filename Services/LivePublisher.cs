@@ -455,6 +455,7 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
         d.WicketType,
         d.DismissedPlayerId,
         d.FielderId,
+        d.IsDroppedCatch,
         d.IsLegalDelivery,
         d.CreatedAtUtc,
         d.Version
@@ -490,6 +491,7 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
         d.WicketType,
         d.DismissedPlayerId,
         d.FielderId,
+        d.IsDroppedCatch,
         d.IsLegalDelivery,
         d.CreatedAtUtc,
         d.Version

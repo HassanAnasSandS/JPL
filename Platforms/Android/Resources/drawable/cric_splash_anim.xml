@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animation-list xmlns:android="http://schemas.microsoft.com/apk/res/android"
+    android:oneshot="false">
+    <item android:drawable="@drawable/cric_splash_00" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_01" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_02" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_03" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_04" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_05" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_06" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_07" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_08" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_09" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_10" android:duration="70" />
+    <item android:drawable="@drawable/cric_splash_11" android:duration="70" />
+</animation-list>

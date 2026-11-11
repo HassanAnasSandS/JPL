@@ -146,6 +146,7 @@
                            Text="{Binding NameFilter}"
                            CancelButtonColor="{StaticResource Primary}" />
                 <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                <ctrl:EventScopeFilterView BindingContext="{Binding EventScope}" />
                 <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="8">
                     <Label Text="From"
                            VerticalOptions="Center"
@@ -325,10 +326,6 @@
                                FontSize="22"
                                FontAttributes="Bold"
                                TextColor="{StaticResource Primary}" />
-                        <Label Text="{Binding Breakdown.Formula}"
-                               FontSize="11"
-                               LineBreakMode="WordWrap"
-                               TextColor="{StaticResource TextSecondary}" />
                     </VerticalStackLayout>
 
                     <ScrollView Grid.Row="1"
@@ -356,16 +353,11 @@
                                                     Padding="10,8"
                                                     StrokeShape="RoundRectangle 10">
                                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                    <VerticalStackLayout Spacing="1">
-                                                        <Label Text="{Binding Label}"
-                                                               FontSize="12"
-                                                               FontAttributes="Bold"
-                                                               TextColor="{StaticResource TextPrimary}" />
-                                                        <Label Text="{Binding Stat}"
-                                                               FontSize="11"
-                                                               LineBreakMode="WordWrap"
-                                                               TextColor="{StaticResource TextSecondary}" />
-                                                    </VerticalStackLayout>
+                                                    <Label Text="{Binding Label}"
+                                                           FontSize="12"
+                                                           FontAttributes="Bold"
+                                                           VerticalOptions="Center"
+                                                           TextColor="{StaticResource TextPrimary}" />
                                                     <Label Grid.Column="1"
                                                            Text="{Binding PointsText}"
                                                            FontSize="13"
@@ -401,16 +393,11 @@
                                                     Padding="10,8"
                                                     StrokeShape="RoundRectangle 10">
                                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                    <VerticalStackLayout Spacing="1">
-                                                        <Label Text="{Binding Label}"
-                                                               FontSize="12"
-                                                               FontAttributes="Bold"
-                                                               TextColor="{StaticResource TextPrimary}" />
-                                                        <Label Text="{Binding Stat}"
-                                                               FontSize="11"
-                                                               LineBreakMode="WordWrap"
-                                                               TextColor="{StaticResource TextSecondary}" />
-                                                    </VerticalStackLayout>
+                                                    <Label Text="{Binding Label}"
+                                                           FontSize="12"
+                                                           FontAttributes="Bold"
+                                                           VerticalOptions="Center"
+                                                           TextColor="{StaticResource TextPrimary}" />
                                                     <Label Grid.Column="1"
                                                            Text="{Binding PointsText}"
                                                            FontSize="13"
@@ -424,11 +411,6 @@
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
 
-                            <Label Text="{Binding Breakdown.Note}"
-                                   FontSize="11"
-                                   LineBreakMode="WordWrap"
-                                   IsVisible="{Binding HasBreakdownNote}"
-                                   TextColor="{StaticResource TextSecondary}" />
                         </VerticalStackLayout>
                     </ScrollView>
 

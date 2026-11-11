@@ -94,12 +94,96 @@
                         </DataTrigger>
                     </Button.Triggers>
                 </Button>
+                <Button Text="Player of Tournament"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="potour"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsPoTour}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Player of Series"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="poseries"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsPoSeries}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Best Batsman"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="bestbat"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBestBat}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Best Bowler"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="bestbowl"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBestBowl}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="Best Fielder"
+                        Command="{Binding SelectCategoryCommand}"
+                        CommandParameter="bestfield"
+                        Padding="14,8"
+                        FontSize="13"
+                        CornerRadius="18"
+                        MinimumHeightRequest="40"
+                        BackgroundColor="#E8EEF5"
+                        TextColor="{StaticResource Primary}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsBestField}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
             </HorizontalStackLayout>
         </ScrollView>
 
         <ctrl:FilterDrawer Grid.Row="2"
-                           HasActiveFilters="{Binding FormatFilter.HasSelection}">
-            <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                           HasActiveFilters="{Binding HasActiveFilters}"
+                           ClearCommand="{Binding ClearFiltersCommand}">
+            <VerticalStackLayout Spacing="8">
+                <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                <ctrl:EventScopeFilterView BindingContext="{Binding EventScope}" />
+            </VerticalStackLayout>
         </ctrl:FilterDrawer>
 
         <VerticalStackLayout Grid.Row="3" Spacing="2">
@@ -107,9 +191,6 @@
                    FontSize="16"
                    FontAttributes="Bold"
                    TextColor="{StaticResource Primary}" />
-            <Label Text="{Binding CategoryHint}"
-                   Style="{StaticResource MutedLabel}"
-                   FontSize="12" />
         </VerticalStackLayout>
 
         <Grid Grid.Row="4" RowDefinitions="Auto,*" VerticalOptions="Fill">

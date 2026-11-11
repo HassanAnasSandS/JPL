@@ -2,6 +2,7 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Controls.MatchScorecardInningsView"
              x:Name="Root">
     <VerticalStackLayout Spacing="14"
@@ -80,11 +81,17 @@
                                                             <Grid ColumnDefinitions="*,36,32,28,28,40"
                                                                   Padding="6,8"
                                                                   RowDefinitions="Auto,Auto">
+                                                                <Grid.GestureRecognizers>
+                                                                    <TapGestureRecognizer
+                                                                        Command="{Binding PlayerTappedCommand, Source={x:Reference Root}, x:DataType=ctrl:MatchScorecardInningsView}"
+                                                                        CommandParameter="{Binding PlayerId}" />
+                                                                </Grid.GestureRecognizers>
                                                                 <Label Text="{Binding DisplayName}"
                                                                        FontSize="13"
                                                                        FontAttributes="Bold"
                                                                        LineBreakMode="TailTruncation"
-                                                                       TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}">
+                                                                       TextDecorations="Underline"
+                                                                       TextColor="{StaticResource Secondary}">
                                                                     <Label.Triggers>
                                                                         <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
                                                                             <Setter Property="TextColor" Value="{StaticResource Secondary}" />
@@ -177,87 +184,135 @@
                                                        TextColor="{StaticResource Secondary}"
                                                        Margin="2,4,0,6" />
 
-                                                <Grid ColumnDefinitions="*,40,28,36,28,44"
-                                                      Padding="6,4"
-                                                      BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
-                                                    <Label Text="Bowler"
-                                                           FontSize="10"
-                                                           FontAttributes="Bold"
-                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                    <Label Grid.Column="1" Text="O" FontSize="10" FontAttributes="Bold"
-                                                           HorizontalTextAlignment="End"
-                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                    <Label Grid.Column="2" Text="M" FontSize="10" FontAttributes="Bold"
-                                                           HorizontalTextAlignment="End"
-                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                    <Label Grid.Column="3" Text="R" FontSize="10" FontAttributes="Bold"
-                                                           HorizontalTextAlignment="End"
-                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                    <Label Grid.Column="4" Text="W" FontSize="10" FontAttributes="Bold"
-                                                           HorizontalTextAlignment="End"
-                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                    <Label Grid.Column="5" Text="Econ" FontSize="10" FontAttributes="Bold"
-                                                           HorizontalTextAlignment="End"
-                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                </Grid>
+                                                <ScrollView Orientation="Horizontal"
+                                                            HorizontalScrollBarVisibility="Never"
+                                                            VerticalScrollBarVisibility="Never">
+                                                    <VerticalStackLayout Spacing="0">
+                                                        <Grid ColumnDefinitions="120,36,28,32,28,32,32,32,32,40"
+                                                              Padding="6,4"
+                                                              BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceMuted}, Dark={StaticResource SurfaceMutedDark}}">
+                                                            <Label Text="Bowler"
+                                                                   FontSize="10"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="1" Text="O" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="2" Text="M" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="3" Text="R" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="4" Text="W" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="5" Text="Wd" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="6" Text="NB" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="7" Text="Bye" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="8" Text="LB" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                            <Label Grid.Column="9" Text="Econ" FontSize="10" FontAttributes="Bold"
+                                                                   HorizontalTextAlignment="End"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                        </Grid>
 
-                                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Bowling}" Spacing="0">
-                                                    <BindableLayout.EmptyView>
-                                                        <Label Text="No bowling yet"
-                                                               Style="{StaticResource MutedLabel}"
-                                                               Margin="6,8" />
-                                                    </BindableLayout.EmptyView>
-                                                    <BindableLayout.ItemTemplate>
-                                                        <DataTemplate x:DataType="svc:BowlingCardRow">
-                                                            <Grid ColumnDefinitions="*,40,28,36,28,44"
-                                                                  Padding="6,8">
-                                                                <Label Text="{Binding DisplayName}"
-                                                                       FontSize="13"
-                                                                       FontAttributes="Bold"
-                                                                       LineBreakMode="TailTruncation"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}">
-                                                                    <Label.Triggers>
-                                                                        <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
-                                                                            <Setter Property="TextColor" Value="{StaticResource Secondary}" />
-                                                                        </DataTrigger>
-                                                                    </Label.Triggers>
-                                                                </Label>
-                                                                <Label Grid.Column="1"
-                                                                       Text="{Binding OversText}"
-                                                                       FontSize="13"
-                                                                       HorizontalTextAlignment="End"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
-                                                                <Label Grid.Column="2"
-                                                                       Text="{Binding Maidens}"
-                                                                       FontSize="13"
-                                                                       HorizontalTextAlignment="End"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
-                                                                <Label Grid.Column="3"
-                                                                       Text="{Binding RunsConceded}"
-                                                                       FontSize="13"
-                                                                       HorizontalTextAlignment="End"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
-                                                                <Label Grid.Column="4"
-                                                                       Text="{Binding Wickets}"
-                                                                       FontSize="14"
-                                                                       FontAttributes="Bold"
-                                                                       HorizontalTextAlignment="End"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{StaticResource Primary}" />
-                                                                <Label Grid.Column="5"
-                                                                       Text="{Binding EconomyText}"
-                                                                       FontSize="12"
-                                                                       HorizontalTextAlignment="End"
-                                                                       VerticalOptions="Center"
-                                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
-                                                            </Grid>
-                                                        </DataTemplate>
-                                                    </BindableLayout.ItemTemplate>
-                                                </VerticalStackLayout>
+                                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Bowling}" Spacing="0">
+                                                            <BindableLayout.EmptyView>
+                                                                <Label Text="No bowling yet"
+                                                                       Style="{StaticResource MutedLabel}"
+                                                                       Margin="6,8" />
+                                                            </BindableLayout.EmptyView>
+                                                            <BindableLayout.ItemTemplate>
+                                                                <DataTemplate x:DataType="svc:BowlingCardRow">
+                                                                    <Grid ColumnDefinitions="120,36,28,32,28,32,32,32,32,40"
+                                                                          Padding="6,8">
+                                                                        <Grid.GestureRecognizers>
+                                                                            <TapGestureRecognizer
+                                                                                Command="{Binding PlayerTappedCommand, Source={x:Reference Root}, x:DataType=ctrl:MatchScorecardInningsView}"
+                                                                                CommandParameter="{Binding PlayerId}" />
+                                                                        </Grid.GestureRecognizers>
+                                                                        <Label Text="{Binding DisplayName}"
+                                                                               FontSize="13"
+                                                                               FontAttributes="Bold"
+                                                                               LineBreakMode="TailTruncation"
+                                                                               VerticalOptions="Center"
+                                                                               TextDecorations="Underline"
+                                                                               TextColor="{StaticResource Secondary}">
+                                                                            <Label.Triggers>
+                                                                                <DataTrigger TargetType="Label" Binding="{Binding IsCaptain}" Value="True">
+                                                                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                                                                </DataTrigger>
+                                                                            </Label.Triggers>
+                                                                        </Label>
+                                                                        <Label Grid.Column="1"
+                                                                               Text="{Binding OversText}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="2"
+                                                                               Text="{Binding Maidens}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="3"
+                                                                               Text="{Binding RunsConceded}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="4"
+                                                                               Text="{Binding Wickets}"
+                                                                               FontSize="14"
+                                                                               FontAttributes="Bold"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{StaticResource Primary}" />
+                                                                        <Label Grid.Column="5"
+                                                                               Text="{Binding Wides}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="6"
+                                                                               Text="{Binding NoBalls}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="7"
+                                                                               Text="{Binding Byes}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="8"
+                                                                               Text="{Binding LegByes}"
+                                                                               FontSize="13"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                                                        <Label Grid.Column="9"
+                                                                               Text="{Binding EconomyText}"
+                                                                               FontSize="12"
+                                                                               HorizontalTextAlignment="End"
+                                                                               VerticalOptions="Center"
+                                                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </BindableLayout.ItemTemplate>
+                                                        </VerticalStackLayout>
+                                                    </VerticalStackLayout>
+                                                </ScrollView>
                                                 <Label Text="{Binding DidNotBowlText}"
                                                        FontSize="12"
                                                        LineBreakMode="WordWrap"

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:ctrl="clr-namespace:JPL.Controls"
              xmlns:svc="clr-namespace:JPL.Services"
@@ -94,9 +95,11 @@
                     </HorizontalStackLayout>
                 </Grid>
 
-                <ctrl:FilterDrawer HasActiveFilters="{Binding FormatFilter.HasSelection}">
+                <ctrl:FilterDrawer HasActiveFilters="{Binding HasActiveFilters}"
+                                   ClearCommand="{Binding ClearFiltersCommand}">
                     <VerticalStackLayout Spacing="6">
                         <ctrl:FormatMultiSelectView BindingContext="{Binding FormatFilter}" />
+                        <ctrl:EventScopeFilterView BindingContext="{Binding EventScope}" />
                         <SearchBar Placeholder="Find a player"
                                    FontSize="12"
                                    Text="{Binding PlayerFilter}"
@@ -110,26 +113,81 @@
                        FontSize="11"
                        IsVisible="{Binding HasError}" />
 
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="6" IsVisible="{Binding IsTeamMode}">
-                    <VerticalStackLayout Spacing="2">
-                        <Label Text="Team A" FontSize="11" FontAttributes="Bold" TextColor="#1565C0" />
-                        <Picker Title="Select team A"
-                                FontSize="12"
-                                ItemsSource="{Binding TeamOptions}"
-                                ItemDisplayBinding="{Binding Name, x:DataType=svc:TeamListItem}"
-                                SelectedItem="{Binding TeamA}" />
-                    </VerticalStackLayout>
-                    <VerticalStackLayout Grid.Column="1" Spacing="2">
-                        <Label Text="Team B" FontSize="11" FontAttributes="Bold" TextColor="#C62828" />
-                        <Picker Title="Select team B"
-                                FontSize="12"
-                                ItemsSource="{Binding TeamOptions}"
-                                ItemDisplayBinding="{Binding Name, x:DataType=svc:TeamListItem}"
-                                SelectedItem="{Binding TeamB}" />
-                    </VerticalStackLayout>
-                </Grid>
+                <!-- Teams: multi-select -->
+                <VerticalStackLayout Spacing="4" IsVisible="{Binding IsTeamMode}">
+                    <Label Text="{Binding SelectedTeamsSummary}"
+                           FontSize="11"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Primary}" />
+                    <Label Text="Tick 2 or more teams to compare"
+                           FontSize="10"
+                           TextColor="{StaticResource TextSecondary}" />
+                    <Border Stroke="{StaticResource Gray200}"
+                            StrokeThickness="1"
+                            Padding="8"
+                            StrokeShape="RoundRectangle 8">
+                        <ScrollView MaximumHeightRequest="220" VerticalScrollBarVisibility="Default">
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamPicks}" Spacing="2">
+                                <BindableLayout.EmptyView>
+                                    <Label Text="No teams in this league yet"
+                                           FontSize="11"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                </BindableLayout.EmptyView>
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:StrengthTeamPick">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Padding="2,1" jpl:ToggleOnTap.Enable="True">
+                                            <CheckBox IsChecked="{Binding IsSelected}"
+                                                      VerticalOptions="Center"
+                                                      Color="{StaticResource Primary}" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding Name}"
+                                                   FontSize="13"
+                                                   VerticalOptions="Center"
+                                                   LineBreakMode="TailTruncation"
+                                                   TextColor="{StaticResource TextPrimary}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </ScrollView>
+                    </Border>
+                </VerticalStackLayout>
 
+                <!-- Players mode -->
                 <VerticalStackLayout Spacing="6" IsVisible="{Binding IsPlayersMode}">
+                    <HorizontalStackLayout Spacing="6">
+                        <Button Text="Sides A vs B"
+                                Command="{Binding UsePlayerSidesCommand}"
+                                Padding="10,4"
+                                FontSize="11"
+                                CornerRadius="12"
+                                MinimumHeightRequest="28"
+                                BackgroundColor="#E8EEF5"
+                                TextColor="{StaticResource Primary}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsPlayerSides}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Text="Players"
+                                Command="{Binding UsePlayerIndividualsCommand}"
+                                Padding="10,4"
+                                FontSize="11"
+                                CornerRadius="12"
+                                MinimumHeightRequest="28"
+                                BackgroundColor="#E8EEF5"
+                                TextColor="{StaticResource Primary}">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsPlayerIndividuals}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                    </HorizontalStackLayout>
+
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerCandidates}" Spacing="1">
                         <BindableLayout.EmptyView>
                             <Label Text="No players left to add" FontSize="11" TextColor="{StaticResource TextSecondary}" />
@@ -141,6 +199,7 @@
                                            FontSize="12"
                                            VerticalOptions="Center"
                                            LineBreakMode="TailTruncation" />
+                                    <!-- Sides: A / B -->
                                     <Button Grid.Column="1"
                                             Text="A"
                                             Padding="8,2"
@@ -148,6 +207,7 @@
                                             FontAttributes="Bold"
                                             MinimumHeightRequest="28"
                                             MinimumWidthRequest="36"
+                                            IsVisible="{Binding BindingContext.IsPlayerSides, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                             IsEnabled="{Binding CanAddToA}"
                                             Command="{Binding BindingContext.AddToListACommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                             CommandParameter="{Binding .}" />
@@ -158,15 +218,30 @@
                                             FontAttributes="Bold"
                                             MinimumHeightRequest="28"
                                             MinimumWidthRequest="36"
+                                            IsVisible="{Binding BindingContext.IsPlayerSides, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                             IsEnabled="{Binding CanAddToB}"
                                             Command="{Binding BindingContext.AddToListBCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            CommandParameter="{Binding .}" />
+                                    <!-- Individuals: + -->
+                                    <Button Grid.Column="1"
+                                            Grid.ColumnSpan="2"
+                                            Text="Add"
+                                            Padding="10,2"
+                                            FontSize="11"
+                                            FontAttributes="Bold"
+                                            MinimumHeightRequest="28"
+                                            HorizontalOptions="End"
+                                            IsVisible="{Binding BindingContext.IsPlayerIndividuals, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                            IsEnabled="{Binding CanAddToCompare}"
+                                            Command="{Binding BindingContext.AddToCompareCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                             CommandParameter="{Binding .}" />
                                 </Grid>
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
 
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                    <!-- Sides A vs B (unchanged) -->
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6" IsVisible="{Binding IsPlayerSides}">
                         <Border Stroke="{StaticResource Gray200}" StrokeThickness="1" Padding="6" StrokeShape="RoundRectangle 8">
                             <VerticalStackLayout Spacing="3">
                                 <Label Text="List A" FontSize="11" FontAttributes="Bold" TextColor="#1565C0" />
@@ -262,6 +337,44 @@
                             </VerticalStackLayout>
                         </Border>
                     </Grid>
+
+                    <!-- Individual players compare list -->
+                    <Border Stroke="{StaticResource Gray200}"
+                            StrokeThickness="1"
+                            Padding="6"
+                            StrokeShape="RoundRectangle 8"
+                            IsVisible="{Binding IsPlayerIndividuals}">
+                        <VerticalStackLayout Spacing="3">
+                            <Label Text="Players to compare (2+)"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Primary}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding ComparePlayers}" Spacing="2">
+                                <BindableLayout.EmptyView>
+                                    <Label Text="Add players above" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                </BindableLayout.EmptyView>
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:StrengthPlayerPick">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                            <Label Text="{Binding FullName}"
+                                                   FontSize="12"
+                                                   VerticalOptions="Center"
+                                                   LineBreakMode="TailTruncation" />
+                                            <Button Grid.Column="1"
+                                                    Text="✕"
+                                                    Padding="6,2"
+                                                    FontSize="11"
+                                                    MinimumHeightRequest="26"
+                                                    MinimumWidthRequest="28"
+                                                    Style="{StaticResource GhostButton}"
+                                                    Command="{Binding BindingContext.RemoveFromCompareCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
                 </VerticalStackLayout>
 
                 <Button Text="Compare"
@@ -283,81 +396,59 @@
                                Text="{Binding ResultDetail}"
                                FontSize="{OnIdiom Phone=10, Default=11}"
                                VerticalOptions="Center"
+                               LineBreakMode="WordWrap"
                                TextColor="{StaticResource TextSecondary}" />
                     </Grid>
 
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
-                        <VerticalStackLayout Spacing="{OnIdiom Phone=3, Default=4}">
-                            <Label Text="{Binding SideATitle}"
-                                   FontSize="{OnIdiom Phone=11, Default=12}"
-                                   FontAttributes="Bold"
-                                   TextColor="#1565C0" />
-                            <Border Stroke="{Binding ResultA.CardStroke}"
-                                    StrokeThickness="2"
-                                    BackgroundColor="{Binding ResultA.CardBackground}"
-                                    StrokeShape="RoundRectangle 6"
-                                    Padding="{OnIdiom Phone=4, Default=6}">
-                                <VerticalStackLayout Spacing="0">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="3">
-                                        <Label Text="{Binding ResultA.Title}"
+                    <ScrollView Orientation="Horizontal"
+                                HorizontalScrollBarVisibility="Default"
+                                VerticalScrollBarVisibility="Never">
+                        <HorizontalStackLayout BindableLayout.ItemsSource="{Binding CompareSides}"
+                                               Spacing="8"
+                                               Padding="0,0,0,4">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:StrengthCompareSide">
+                                    <VerticalStackLayout Spacing="{OnIdiom Phone=3, Default=4}"
+                                                         WidthRequest="{OnIdiom Phone=168, Default=200}">
+                                        <Label Text="{Binding Title}"
+                                               FontSize="{OnIdiom Phone=11, Default=12}"
                                                FontAttributes="Bold"
-                                               FontSize="{OnIdiom Phone=10, Default=11}"
-                                               LineBreakMode="TailTruncation"
-                                               TextColor="{StaticResource Primary}" />
-                                        <Label Grid.Column="1"
-                                               Text="{Binding ResultA.OverallText}"
-                                               FontAttributes="Bold"
-                                               FontSize="{OnIdiom Phone=9, Default=10}"
-                                               TextColor="{Binding ResultA.OverallColor}" />
-                                    </Grid>
-                                    <Label Text="{Binding ResultA.Subtitle}"
-                                           FontSize="{OnIdiom Phone=8, Default=9}"
-                                           TextColor="{StaticResource TextSecondary}"
-                                           LineBreakMode="TailTruncation" />
-                                    <ctrl:StrengthBarChartView Bars="{Binding ResultA.Bars}"
-                                                               HeightRequest="{Binding ResultA.ChartHeight}" />
-                                </VerticalStackLayout>
-                            </Border>
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SideACharts}"
-                                                 BindableLayout.ItemTemplate="{StaticResource ChartCardTemplate}"
-                                                 Spacing="{OnIdiom Phone=3, Default=4}" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="1" Spacing="{OnIdiom Phone=3, Default=4}">
-                            <Label Text="{Binding SideBTitle}"
-                                   FontSize="{OnIdiom Phone=11, Default=12}"
-                                   FontAttributes="Bold"
-                                   TextColor="#C62828" />
-                            <Border Stroke="{Binding ResultB.CardStroke}"
-                                    StrokeThickness="2"
-                                    BackgroundColor="{Binding ResultB.CardBackground}"
-                                    StrokeShape="RoundRectangle 6"
-                                    Padding="{OnIdiom Phone=4, Default=6}">
-                                <VerticalStackLayout Spacing="0">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="3">
-                                        <Label Text="{Binding ResultB.Title}"
-                                               FontAttributes="Bold"
-                                               FontSize="{OnIdiom Phone=10, Default=11}"
-                                               LineBreakMode="TailTruncation"
-                                               TextColor="{StaticResource Primary}" />
-                                        <Label Grid.Column="1"
-                                               Text="{Binding ResultB.OverallText}"
-                                               FontAttributes="Bold"
-                                               FontSize="{OnIdiom Phone=9, Default=10}"
-                                               TextColor="{Binding ResultB.OverallColor}" />
-                                    </Grid>
-                                    <Label Text="{Binding ResultB.Subtitle}"
-                                           FontSize="{OnIdiom Phone=8, Default=9}"
-                                           TextColor="{StaticResource TextSecondary}"
-                                           LineBreakMode="TailTruncation" />
-                                    <ctrl:StrengthBarChartView Bars="{Binding ResultB.Bars}"
-                                                               HeightRequest="{Binding ResultB.ChartHeight}" />
-                                </VerticalStackLayout>
-                            </Border>
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding SideBCharts}"
-                                                 BindableLayout.ItemTemplate="{StaticResource ChartCardTemplate}"
-                                                 Spacing="{OnIdiom Phone=3, Default=4}" />
-                        </VerticalStackLayout>
-                    </Grid>
+                                               TextColor="{Binding Accent}"
+                                               LineBreakMode="TailTruncation" />
+                                        <Border Stroke="{Binding Summary.CardStroke}"
+                                                StrokeThickness="2"
+                                                BackgroundColor="{Binding Summary.CardBackground}"
+                                                StrokeShape="RoundRectangle 6"
+                                                Padding="{OnIdiom Phone=4, Default=6}">
+                                            <VerticalStackLayout Spacing="0">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="3">
+                                                    <Label Text="{Binding Summary.Title}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="{OnIdiom Phone=10, Default=11}"
+                                                           LineBreakMode="TailTruncation"
+                                                           TextColor="{StaticResource Primary}" />
+                                                    <Label Grid.Column="1"
+                                                           Text="{Binding Summary.OverallText}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="{OnIdiom Phone=9, Default=10}"
+                                                           TextColor="{Binding Summary.OverallColor}" />
+                                                </Grid>
+                                                <Label Text="{Binding Summary.Subtitle}"
+                                                       FontSize="{OnIdiom Phone=8, Default=9}"
+                                                       TextColor="{StaticResource TextSecondary}"
+                                                       LineBreakMode="TailTruncation" />
+                                                <ctrl:StrengthBarChartView Bars="{Binding Summary.Bars}"
+                                                                           HeightRequest="{Binding Summary.ChartHeight}" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Charts}"
+                                                             BindableLayout.ItemTemplate="{StaticResource ChartCardTemplate}"
+                                                             Spacing="{OnIdiom Phone=3, Default=4}" />
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </HorizontalStackLayout>
+                    </ScrollView>
                 </VerticalStackLayout>
             </VerticalStackLayout>
         </ScrollView>

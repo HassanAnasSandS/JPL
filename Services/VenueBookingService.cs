@@ -2,7 +2,7 @@ using JPL.Domain;
 
 namespace JPL.Services;
 
-public sealed record VenueBookingParticipantDraft(Guid PlayerId, string Status);
+public sealed record VenueBookingParticipantDraft(Guid PlayerId, string Status, decimal Amount);
 
 public sealed record VenueBookingDraft(
     Guid VenueId,
@@ -22,6 +22,8 @@ public sealed class VenueBookingListItem
     public Guid BookedByPlayerId { get; init; }
     public string BookedByPlayerName { get; init; } = string.Empty;
     public decimal BookingCost { get; init; }
+    public decimal PaidAmount { get; init; }
+    public decimal OutstandingAmount { get; init; }
     public int ParticipantCount { get; init; }
     public int PaidCount { get; init; }
     public int PendingCount { get; init; }
@@ -29,6 +31,8 @@ public sealed class VenueBookingListItem
 
     public string DateText => BookingDateUtc.ToString("dd MMM yyyy");
     public string CostText => BookingCost.ToString("N0");
+    public string PaidAmountText => PaidAmount.ToString("N0");
+    public string OutstandingAmountText => OutstandingAmount.ToString("N0");
     public string ParticipantsLine => $"Players {ParticipantCount} · Paid {PaidCount} · Pending {PendingCount}";
     public string OwnerLine => $"Created by {CreatedByUsername}";
     public string BookedByLine => $"Booked by {BookedByPlayerName}";
@@ -55,6 +59,7 @@ public sealed class VenueBookingParticipantItem
     public Guid PlayerId { get; init; }
     public string PlayerName { get; init; } = string.Empty;
     public string Status { get; init; } = VenueBookingPaymentStatus.Pending;
+    public decimal Amount { get; init; }
 }
 
 public interface IVenueBookingService
@@ -129,7 +134,8 @@ public sealed class VenueBookingService : IVenueBookingService
             participants = draft.Participants.Select(p => new
             {
                 playerId = p.PlayerId,
-                status = VenueBookingPaymentStatus.Normalize(p.Status)
+                status = VenueBookingPaymentStatus.Normalize(p.Status),
+                amount = p.Amount
             }).ToList()
         }, ct).ConfigureAwait(false);
 
@@ -156,7 +162,8 @@ public sealed class VenueBookingService : IVenueBookingService
             participants = draft.Participants.Select(p => new
             {
                 playerId = p.PlayerId,
-                status = VenueBookingPaymentStatus.Normalize(p.Status)
+                status = VenueBookingPaymentStatus.Normalize(p.Status),
+                amount = p.Amount
             }).ToList()
         }, ct).ConfigureAwait(false);
 
@@ -192,13 +199,20 @@ public sealed class VenueBookingService : IVenueBookingService
                 throw new ArgumentException("Duplicate participant player.");
             if (!VenueBookingPaymentStatus.IsValid(p.Status))
                 throw new ArgumentException("Participant status must be Pending or Paid.");
+            if (p.Amount < 0)
+                throw new ArgumentException("Participant amount cannot be negative.");
         }
     }
 
     private static VenueBookingListItem ToListItem(ApiVenueBookingDto dto, bool canEdit)
     {
-        var paid = dto.Participants.Count(p =>
-            string.Equals(p.Status, VenueBookingPaymentStatus.Paid, StringComparison.OrdinalIgnoreCase));
+        var paidRows = dto.Participants
+            .Where(p => string.Equals(p.Status, VenueBookingPaymentStatus.Paid, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var paidAmount = paidRows.Sum(p => p.Amount);
+        var outstandingAmount = dto.Participants
+            .Where(p => !string.Equals(p.Status, VenueBookingPaymentStatus.Paid, StringComparison.OrdinalIgnoreCase))
+            .Sum(p => p.Amount);
         return new VenueBookingListItem
         {
             Id = dto.Id,
@@ -210,9 +224,11 @@ public sealed class VenueBookingService : IVenueBookingService
             BookedByPlayerId = dto.BookedByPlayerId,
             BookedByPlayerName = dto.BookedByPlayerName,
             BookingCost = dto.BookingCost,
+            PaidAmount = paidAmount,
+            OutstandingAmount = outstandingAmount,
             ParticipantCount = dto.Participants.Count,
-            PaidCount = paid,
-            PendingCount = dto.Participants.Count - paid,
+            PaidCount = paidRows.Count,
+            PendingCount = dto.Participants.Count - paidRows.Count,
             CanEdit = canEdit
         };
     }
@@ -234,7 +250,8 @@ public sealed class VenueBookingService : IVenueBookingService
             {
                 PlayerId = p.PlayerId,
                 PlayerName = p.PlayerName,
-                Status = VenueBookingPaymentStatus.Normalize(p.Status)
+                Status = VenueBookingPaymentStatus.Normalize(p.Status),
+                Amount = p.Amount
             }).ToList()
         };
 }

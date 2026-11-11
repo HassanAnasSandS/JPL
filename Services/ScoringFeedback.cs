@@ -33,7 +33,12 @@ public sealed class ScoringFeedback : IScoringFeedback, IDisposable
             // 1104 = keyboard "Tock"
             new AudioToolbox.SystemSound(1104).PlaySystemSound();
 #elif WINDOWS
-            Console.Beep(880, 50);
+            // Console.Beep blocks for the full duration — never on the scoring thread.
+            _ = Task.Run(static () =>
+            {
+                try { Console.Beep(880, 50); }
+                catch { /* no audio device */ }
+            });
 #endif
         }
         catch

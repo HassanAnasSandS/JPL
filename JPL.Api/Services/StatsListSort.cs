@@ -54,26 +54,48 @@ internal static class StatsListSort
         "Won" => r.Won,
         "Loss" => r.Loss,
         "Tied" => r.Tied,
+        "MatchWinPct" => r.Matches == 0 ? double.MinValue : (r.Won + r.Tied * 0.5) / r.Matches,
         "CaptainMatches" => r.CaptainMatches,
         "CaptainWon" => r.CaptainWon,
         "CaptainLoss" => r.CaptainLoss,
         "CaptainTied" => r.CaptainTied,
+        "CaptainWinPct" => r.CaptainMatches == 0
+            ? double.MinValue
+            : (r.CaptainWon + r.CaptainTied * 0.5) / r.CaptainMatches,
+        "CaptainPoints" => r.CaptainPoints,
+        "CaptainNrr" => r.CaptainMatches == 0 ? double.MinValue : r.CaptainNrr,
+        "CaptainRunsFor" => r.CaptainRunsFor,
+        "CaptainRunsAgainst" => r.CaptainRunsAgainst,
         "Tournaments" => r.Tournaments,
         "TournamentWon" => r.TournamentWon,
         "TournamentLoss" => r.TournamentLoss,
         "TournamentTied" => r.TournamentTied,
+        "TournamentWinPct" => r.Tournaments == 0
+            ? double.MinValue
+            : (r.TournamentWon + r.TournamentTied * 0.5) / r.Tournaments,
         "CaptainTournaments" => r.CaptainTournaments,
         "CaptainTournamentWon" => r.CaptainTournamentWon,
         "CaptainTournamentLoss" => r.CaptainTournamentLoss,
         "CaptainTournamentTied" => r.CaptainTournamentTied,
+        "CaptainTournamentWinPct" => r.CaptainTournaments == 0
+            ? double.MinValue
+            : (r.CaptainTournamentWon + r.CaptainTournamentTied * 0.5) / r.CaptainTournaments,
         "Series" => r.Series,
         "SeriesWon" => r.SeriesWon,
         "SeriesLoss" => r.SeriesLoss,
         "SeriesTied" => r.SeriesTied,
+        "SeriesWinPct" => r.Series == 0
+            ? double.MinValue
+            : (r.SeriesWon + r.SeriesTied * 0.5) / r.Series,
         "CaptainSeries" => r.CaptainSeries,
         "CaptainSeriesWon" => r.CaptainSeriesWon,
         "CaptainSeriesLoss" => r.CaptainSeriesLoss,
         "CaptainSeriesTied" => r.CaptainSeriesTied,
+        "CaptainSeriesWinPct" => r.CaptainSeries == 0
+            ? double.MinValue
+            : (r.CaptainSeriesWon + r.CaptainSeriesTied * 0.5) / r.CaptainSeries,
+        "InningsBatted" => r.InningsBatted,
+        "InningsBowled" => r.InningsBowled,
         "BallsFaced" => r.BallsFaced,
         "Runs" => r.Runs,
         "Dots" => r.Dots,
@@ -86,10 +108,15 @@ internal static class StatsListSort
         "WidesFaced" => r.WidesFaced,
         "NoBallsFaced" => r.NoBallsFaced,
         "Dismissals" => r.Dismissals,
+        "NotOuts" => r.NotOuts,
+        "Fifties" => r.Fifties,
+        "Hundreds" => r.Hundreds,
+        "BoundaryPct" => r.Runs <= 0 ? double.MinValue : (r.Fours * 4.0 + r.Sixes * 6.0) / r.Runs,
         "BowledOut" => r.BowledOut,
         "CaughtOut" => r.CaughtOut,
         "LbwOut" => r.LbwOut,
         "RunOut" => r.RunOut,
+        "PartnerRunOuts" => r.PartnerRunOuts,
         "StumpedOut" => r.StumpedOut,
         "HitWicketOut" => r.HitWicketOut,
         "BattingStrikeRate" => r.BallsFaced == 0 ? double.MinValue : r.Runs * 100.0 / r.BallsFaced,
@@ -99,14 +126,23 @@ internal static class StatsListSort
         "HighestScore" => r.InningsBatted <= 0
             ? (int.MinValue, 0)
             : (r.HighestScore, r.HighestScoreNotOut ? 1 : 0),
+        "Ducks" => r.Ducks,
+        "GoldenDucks" => r.GoldenDucks,
+        "OversBowled" => r.OversBowledBalls,
         "OversBowledBalls" => r.OversBowledBalls,
         "RunsConceded" => r.RunsConceded,
         "Wickets" => r.Wickets,
         "BestBowling" => r.BestBowlingText == "-"
             ? (int.MinValue, 0)
             : (r.BestBowlingWickets, -r.BestBowlingRuns),
+        "FiveWicketHauls" => r.FiveWicketHauls,
+        "Maidens" => r.Maidens,
         "HatTricks" => r.HatTricks,
+        "DuckWkts" => r.DuckWkts,
+        "GoldenDuckWkts" => r.GoldenDuckWkts,
         "DotBallsBowled" => r.DotBallsBowled,
+        "FoursConceded" => r.FoursConceded,
+        "SixesConceded" => r.SixesConceded,
         "WidesBowled" => r.WidesBowled,
         "NoBallsBowled" => r.NoBallsBowled,
         "ByesConceded" => r.ByesConceded,
@@ -118,14 +154,26 @@ internal static class StatsListSort
         "HitWicketWkts" => r.HitWicketWkts,
         "RunOutWkts" => r.RunOutWkts,
         "BowlingStrikeRate" => r.Wickets == 0 ? double.MaxValue : r.OversBowledBalls / (double)r.Wickets,
+        "BowlingAverage" => r.Wickets == 0 ? double.MaxValue : r.RunsConceded / (double)r.Wickets,
         "BowlingEconomy" => r.OversBowledBalls == 0 ? double.MaxValue : r.RunsConceded * 6.0 / r.OversBowledBalls,
         "Catches" => r.Catches,
         "RunOutsEffected" => r.RunOutsEffected,
         "Stumpings" => r.Stumpings,
+        "FieldingTotal" => r.Catches + r.RunOutsEffected + r.Stumpings,
+        "FieldingPerMatch" => r.Matches == 0
+            ? double.MinValue
+            : (r.Catches + r.RunOutsEffected + r.Stumpings) / (double)r.Matches,
+        "DroppedCatches" => r.DroppedCatches,
         "AttendanceTotal" => r.AttendanceTotal,
         "AttendancePresent" => r.AttendancePresent,
         "AttendanceAbsent" => r.AttendanceAbsent,
         "AttendancePct" => r.AttendanceTotal == 0 ? double.MinValue : r.AttendancePresent * 100.0 / r.AttendanceTotal,
+        "PaymentTotal" => r.PaymentTotal,
+        "PaymentPaid" => r.PaymentPaid,
+        "PaymentRemaining" => r.PaymentRemaining,
+        "PaymentPaidPct" => r.PaymentTotal <= 0
+            ? double.MinValue
+            : (double)(r.PaymentPaid / r.PaymentTotal) * 100,
         _ => r.PlayerName
     };
 
@@ -144,10 +192,17 @@ internal static class StatsListSort
         "Tournaments" => r.Tournaments,
         "TournamentWon" => r.TournamentWon,
         "TournamentLoss" => r.TournamentLoss,
+        "TournamentTied" => r.TournamentTied,
+        "TournamentWinPct" => r.Tournaments == 0
+            ? double.MinValue
+            : (r.TournamentWon + r.TournamentTied * 0.5) / r.Tournaments,
         "Series" => r.Series,
         "SeriesWon" => r.SeriesWon,
         "SeriesLoss" => r.SeriesLoss,
         "SeriesTied" => r.SeriesTied,
+        "SeriesWinPct" => r.Series == 0
+            ? double.MinValue
+            : (r.SeriesWon + r.SeriesTied * 0.5) / r.Series,
         _ => r.TeamName
     };
 }

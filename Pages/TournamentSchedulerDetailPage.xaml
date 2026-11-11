@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:svc="clr-namespace:JPL.Services"
              x:Class="JPL.Pages.TournamentSchedulerDetailPage"
@@ -38,6 +39,16 @@
                                FontAttributes="Bold"
                                FontSize="14"
                                TextColor="{StaticResource Secondary}" />
+                        <Border IsVisible="{Binding ShowViewOnlyBanner}"
+                                StrokeThickness="0"
+                                BackgroundColor="{StaticResource SurfaceMuted}"
+                                Padding="12,10"
+                                StrokeShape="RoundRectangle 10">
+                            <Label Text="{Binding ViewOnlyBanner}"
+                                   FontSize="12"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Primary}" />
+                        </Border>
                         <Button Text="Edit setup"
                                 IsVisible="{Binding CanEdit}"
                                 Padding="12,8"
@@ -53,6 +64,14 @@
                                Style="{StaticResource MutedLabel}"
                                FontSize="11"
                                Margin="0,-6,0,0" />
+                        <Label Text="Q = Qualified · E = Eliminated (shown when certain)"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="11"
+                               Margin="0,-4,0,0" />
+                        <Label Text="Tap a team to see their schedule and results"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="11"
+                               Margin="0,-4,0,0" />
 
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding StandingGroups}" Spacing="14">
                             <BindableLayout.ItemTemplate>
@@ -83,11 +102,45 @@
                                                           ColumnSpacing="2"
                                                           Padding="6,5"
                                                           BackgroundColor="{StaticResource SurfaceMuted}">
+                                                        <Grid.GestureRecognizers>
+                                                            <TapGestureRecognizer
+                                                                Command="{Binding BindingContext.OpenTeamScheduleCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                                CommandParameter="{Binding .}" />
+                                                        </Grid.GestureRecognizers>
                                                         <Label Text="{Binding Rank}" FontSize="12" FontAttributes="Bold"
                                                                HorizontalTextAlignment="Center" VerticalOptions="Center"
                                                                TextColor="{StaticResource Secondary}" />
-                                                        <Label Grid.Column="1" Text="{Binding TeamName}" FontSize="13" FontAttributes="Bold"
-                                                               LineBreakMode="TailTruncation" VerticalOptions="Center" />
+                                                        <HorizontalStackLayout Grid.Column="1"
+                                                                               Spacing="6"
+                                                                               VerticalOptions="Center">
+                                                            <Label Text="{Binding TeamName}"
+                                                                   FontSize="13"
+                                                                   FontAttributes="Bold"
+                                                                   LineBreakMode="TailTruncation"
+                                                                   VerticalOptions="Center" />
+                                                            <Border IsVisible="{Binding IsQualified}"
+                                                                    StrokeThickness="0"
+                                                                    BackgroundColor="#D1FAE5"
+                                                                    Padding="6,2"
+                                                                    StrokeShape="RoundRectangle 6"
+                                                                    VerticalOptions="Center">
+                                                                <Label Text="Q"
+                                                                       FontSize="10"
+                                                                       FontAttributes="Bold"
+                                                                       TextColor="{StaticResource Success}" />
+                                                            </Border>
+                                                            <Border IsVisible="{Binding IsEliminated}"
+                                                                    StrokeThickness="0"
+                                                                    BackgroundColor="#FFE8EC"
+                                                                    Padding="6,2"
+                                                                    StrokeShape="RoundRectangle 6"
+                                                                    VerticalOptions="Center">
+                                                                <Label Text="E"
+                                                                       FontSize="10"
+                                                                       FontAttributes="Bold"
+                                                                       TextColor="{StaticResource Danger}" />
+                                                            </Border>
+                                                        </HorizontalStackLayout>
                                                         <Label Grid.Column="2" Text="{Binding Played}" FontSize="12" HorizontalTextAlignment="Center" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
                                                         <Label Grid.Column="3" Text="{Binding Won}" FontSize="12" HorizontalTextAlignment="Center" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
                                                         <Label Grid.Column="4" Text="{Binding Lost}" FontSize="12" HorizontalTextAlignment="Center" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
@@ -108,9 +161,29 @@
                     <VerticalStackLayout Spacing="8">
                         <Label Text="Fixtures" Style="{StaticResource SectionLabel}" />
                         <Label Text="Tap Result to mark the winner. Knockouts cannot be tied."
+                               IsVisible="{Binding ShowResultHint}"
                                Style="{StaticResource MutedLabel}"
                                FontSize="11"
                                Margin="0,-6,0,0" />
+                        <Label Text="Fixtures and results are display-only in this view."
+                               IsVisible="{Binding ShowViewOnlyBanner}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="11"
+                               Margin="0,-6,0,0" />
+                        <VerticalStackLayout Spacing="2"
+                                             IsVisible="{Binding HasMatches}"
+                                             Margin="0,0,0,2">
+                            <Label Text="{Binding TournamentMatchesLine}"
+                                   FontSize="12"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Primary}" />
+                            <Label Text="{Binding GroupRoundMatchesLine}"
+                                   FontSize="12"
+                                   Style="{StaticResource MutedLabel}" />
+                            <Label Text="{Binding GroupMatchesLine}"
+                                   FontSize="12"
+                                   Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
                         <Label Text="No fixtures yet."
                                IsVisible="{Binding ShowNoMatches}"
                                Style="{StaticResource MutedLabel}" />
@@ -160,7 +233,7 @@
                                                                     MinimumWidthRequest="72"
                                                                     CornerRadius="8"
                                                                     VerticalOptions="Center"
-                                                                    IsVisible="{Binding BothTeamsKnown}"
+                                                                    IsVisible="{Binding CanRecord}"
                                                                     Clicked="OnResultClicked"
                                                                     CommandParameter="{Binding .}">
                                                                 <Button.Triggers>
@@ -174,6 +247,21 @@
                                                                     </DataTrigger>
                                                                 </Button.Triggers>
                                                             </Button>
+                                                            <Border Grid.Column="1"
+                                                                    IsVisible="{Binding ShowStatusBadge}"
+                                                                    StrokeThickness="0"
+                                                                    BackgroundColor="{StaticResource SurfaceMuted}"
+                                                                    Padding="10,6"
+                                                                    StrokeShape="RoundRectangle 8"
+                                                                    VerticalOptions="Center"
+                                                                    MaximumWidthRequest="140">
+                                                                <Label Text="{Binding StatusBadge}"
+                                                                       FontSize="11"
+                                                                       FontAttributes="Bold"
+                                                                       LineBreakMode="TailTruncation"
+                                                                       HorizontalTextAlignment="Center"
+                                                                       TextColor="{StaticResource Primary}" />
+                                                            </Border>
                                                         </Grid>
                                                     </Border>
                                                 </DataTemplate>
@@ -197,7 +285,7 @@
                     VerticalOptions="Center"
                     MaximumWidthRequest="480">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Tied on points"
+                    <Label Text="{Binding TieBreakTitle}"
                            FontAttributes="Bold"
                            FontSize="18"
                            TextColor="{StaticResource Primary}" />
@@ -211,7 +299,7 @@
                                             BackgroundColor="{StaticResource SurfaceMuted}"
                                             Padding="10,8"
                                             StrokeShape="RoundRectangle 10">
-                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" jpl:ToggleOnTap.Enable="True">
                                             <CheckBox IsChecked="{Binding IsSelected}"
                                                       IsEnabled="{Binding CanToggle}"
                                                       VerticalOptions="Center" />
@@ -225,12 +313,114 @@
                             </BindableLayout.ItemTemplate>
                         </VerticalStackLayout>
                     </ScrollView>
-                    <Button Text="Confirm knockout teams"
+                    <Button Text="{Binding TieBreakConfirmText}"
                             Style="{StaticResource GoldButton}"
                             HeightRequest="44"
                             IsEnabled="{Binding CanConfirmTieBreak}"
                             Command="{Binding ConfirmTieBreakCommand}" />
                 </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+        <Grid IsVisible="{Binding ShowTeamScheduleModal}"
+              InputTransparent="False"
+              ZIndex="30">
+            <BoxView Color="#990D1B2A"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding CloseTeamScheduleCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border Style="{StaticResource CardBorder}"
+                    Padding="16"
+                    Margin="18"
+                    VerticalOptions="Center"
+                    MaximumWidthRequest="480"
+                    MaximumHeightRequest="560"
+                    HorizontalOptions="Center">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="{Binding TeamScheduleTitle}"
+                               FontAttributes="Bold"
+                               FontSize="18"
+                               LineBreakMode="TailTruncation"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding TeamScheduleSubtitle}"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
+                    <ScrollView Grid.Row="1" MaximumHeightRequest="400">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="No fixtures for this team."
+                                   IsVisible="{Binding TeamScheduleEmpty}"
+                                   Style="{StaticResource MutedLabel}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamScheduleMatches}"
+                                                 Spacing="6">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TeamScheduleMatchItem">
+                                        <Border Stroke="{StaticResource Gray200}"
+                                                StrokeThickness="1"
+                                                BackgroundColor="{StaticResource CardBackground}"
+                                                StrokeShape="RoundRectangle 10"
+                                                Padding="10,8">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                                    <Label Text="{Binding StageLabel}"
+                                                           FontSize="11"
+                                                           Style="{StaticResource MutedLabel}" />
+                                                    <Label Text="{Binding OpponentLine}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           LineBreakMode="TailTruncation"
+                                                           TextColor="{StaticResource Primary}" />
+                                                    <Label Text="{Binding StatusText}"
+                                                           IsVisible="{Binding ShowStatus}"
+                                                           FontSize="11"
+                                                           Style="{StaticResource MutedLabel}" />
+                                                    <Label Text="{Binding ResultText}"
+                                                           IsVisible="{Binding HasResult}"
+                                                           FontSize="12"
+                                                           FontAttributes="Bold"
+                                                           TextColor="{StaticResource Success}" />
+                                                </VerticalStackLayout>
+                                                <Button Grid.Column="1"
+                                                        Text="{Binding ResultActionLabel}"
+                                                        FontSize="12"
+                                                        FontAttributes="Bold"
+                                                        Padding="12,0"
+                                                        HeightRequest="32"
+                                                        MinimumHeightRequest="32"
+                                                        MinimumWidthRequest="72"
+                                                        CornerRadius="8"
+                                                        VerticalOptions="Center"
+                                                        IsVisible="{Binding ShowResultAction}"
+                                                        Clicked="OnResultClicked"
+                                                        CommandParameter="{Binding SchedulerMatch}">
+                                                    <Button.Triggers>
+                                                        <DataTrigger TargetType="Button" Binding="{Binding HasResult}" Value="True">
+                                                            <Setter Property="BackgroundColor" Value="{StaticResource SurfaceMuted}" />
+                                                            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger TargetType="Button" Binding="{Binding HasResult}" Value="False">
+                                                            <Setter Property="BackgroundColor" Value="{StaticResource Secondary}" />
+                                                            <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                                                        </DataTrigger>
+                                                    </Button.Triggers>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                    <Button Grid.Row="2"
+                            Text="Close"
+                            Style="{StaticResource GhostButton}"
+                            HeightRequest="40"
+                            Command="{Binding CloseTeamScheduleCommand}" />
+                </Grid>
             </Border>
         </Grid>
     </Grid>

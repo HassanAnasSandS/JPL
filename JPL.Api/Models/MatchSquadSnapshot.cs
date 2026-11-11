@@ -5,6 +5,7 @@ namespace JPL.Api.Models;
 internal sealed class MatchSquadPlayerSnap
 {
     public Guid Id { get; set; }
+    public bool IsSubstitute { get; set; }
 }
 
 /// <summary>
@@ -19,6 +20,8 @@ internal sealed class MatchSquadSnapshot
     public List<Guid> TeamBPlayerIds { get; set; } = [];
     public List<MatchSquadPlayerSnap> TeamAPlayers { get; set; } = [];
     public List<MatchSquadPlayerSnap> TeamBPlayers { get; set; } = [];
+    public List<MatchSquadPlayerSnap> TeamASubstitutes { get; set; } = [];
+    public List<MatchSquadPlayerSnap> TeamBSubstitutes { get; set; } = [];
 
     public IReadOnlyList<Guid> PlayersOfTeamA() => Combine(TeamAPlayerIds, TeamAPlayers);
 
@@ -31,6 +34,29 @@ internal sealed class MatchSquadSnapshot
         if (teamId != Guid.Empty && teamId == TeamBId)
             return PlayersOfTeamB();
         return [];
+    }
+
+    public IReadOnlySet<Guid> SubstituteIds()
+    {
+        var ids = new HashSet<Guid>();
+        void Add(IEnumerable<MatchSquadPlayerSnap>? list, bool requireFlag)
+        {
+            if (list is null)
+                return;
+            foreach (var p in list)
+            {
+                if (p.Id == Guid.Empty)
+                    continue;
+                if (!requireFlag || p.IsSubstitute)
+                    ids.Add(p.Id);
+            }
+        }
+
+        Add(TeamASubstitutes, requireFlag: false);
+        Add(TeamBSubstitutes, requireFlag: false);
+        Add(TeamAPlayers, requireFlag: true);
+        Add(TeamBPlayers, requireFlag: true);
+        return ids;
     }
 
     public int CountOf(Guid teamId, bool isTeamA)

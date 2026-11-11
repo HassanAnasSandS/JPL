@@ -42,9 +42,19 @@ public partial class ModeChooserViewModel : ObservableObject
     [RelayCommand]
     private async Task ChooseGroundsAsync()
     {
-        if (!await SchedulerGate.EnsureCanOpenAsync(_auth, _navigator, "Grounds").ConfigureAwait(true))
+        // Ground owners need a real account for their dashboard.
+        if (_auth.Current?.IsGroundOwner == true)
+        {
+            if (!await SchedulerGate.EnsureCanOpenAsync(_auth, _navigator, "My Grounds").ConfigureAwait(true))
+                return;
+            _workspace.Set(AppWorkspace.GroundOwner);
+            await _navigator.ShowMainAsync().ConfigureAwait(true);
             return;
-        _workspace.Set(_auth.Current?.IsGroundOwner == true ? AppWorkspace.GroundOwner : AppWorkspace.Grounds);
+        }
+
+        // Browse published grounds is open — guests and anonymous can look around.
+        // Booking still requires a signed-in account (GroundBookingGate).
+        _workspace.Set(AppWorkspace.Grounds);
         await _navigator.ShowMainAsync().ConfigureAwait(true);
     }
 

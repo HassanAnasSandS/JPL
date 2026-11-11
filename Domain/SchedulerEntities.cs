@@ -4,7 +4,9 @@ namespace JPL.Domain;
 public enum SchedulerRoundRobinType : byte
 {
     Single = 0,
-    Double = 1
+    Double = 1,
+    /// <summary>One group; creator picks matches-per-team and exact pairings.</summary>
+    Custom = 2
 }
 
 public enum SchedulerKnockoutFormat : byte
@@ -12,7 +14,9 @@ public enum SchedulerKnockoutFormat : byte
     QuarterFinals = 0,
     Playoff = 1,
     SemiFinals = 2,
-    FinalOnly = 3
+    FinalOnly = 3,
+    /// <summary>Round-robin fixtures only — no knockout stage.</summary>
+    None = 4
 }
 
 public enum SchedulerStatus : byte

@@ -31,6 +31,15 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
     [ObservableProperty] private string scoreLine = string.Empty;
     [ObservableProperty] private string winnerLine = string.Empty;
     [ObservableProperty] private bool hasWinner;
+    [ObservableProperty] private bool hasAwards;
+    [ObservableProperty] private bool hasPlayerOfSeries;
+    [ObservableProperty] private bool hasBestBatsman;
+    [ObservableProperty] private bool hasBestBowler;
+    [ObservableProperty] private bool hasBestFielder;
+    [ObservableProperty] private string playerOfSeriesLine = string.Empty;
+    [ObservableProperty] private string bestBatsmanLine = string.Empty;
+    [ObservableProperty] private string bestBowlerLine = string.Empty;
+    [ObservableProperty] private string bestFielderLine = string.Empty;
     [ObservableProperty] private bool isDraft;
     [ObservableProperty] private bool canSave;
     [ObservableProperty] private bool hasStandings;
@@ -92,10 +101,27 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
         ScoreLine = string.IsNullOrWhiteSpace(detail.ScoreLine)
             ? $"{detail.TeamAName} vs {detail.TeamBName}"
             : detail.ScoreLine;
-        HasWinner = !string.IsNullOrWhiteSpace(detail.WinnerTeamName);
+        HasWinner = !string.IsNullOrWhiteSpace(detail.WinnerTeamName) || detail.IsTied;
         WinnerLine = detail.IsTied
             ? "Series tied"
             : HasWinner ? $"Winner — {detail.WinnerTeamName}" : string.Empty;
+        HasPlayerOfSeries = !string.IsNullOrWhiteSpace(detail.PlayerOfTheSeriesName);
+        PlayerOfSeriesLine = HasPlayerOfSeries
+            ? $"Player of the Series — {detail.PlayerOfTheSeriesName}"
+            : string.Empty;
+        HasBestBatsman = !string.IsNullOrWhiteSpace(detail.BestBatsmanName);
+        BestBatsmanLine = HasBestBatsman
+            ? $"Best Batsman — {detail.BestBatsmanName}"
+            : string.Empty;
+        HasBestBowler = !string.IsNullOrWhiteSpace(detail.BestBowlerName);
+        BestBowlerLine = HasBestBowler
+            ? $"Best Bowler — {detail.BestBowlerName}"
+            : string.Empty;
+        HasBestFielder = !string.IsNullOrWhiteSpace(detail.BestFielderName);
+        BestFielderLine = HasBestFielder
+            ? $"Best Fielder — {detail.BestFielderName}"
+            : string.Empty;
+        HasAwards = HasPlayerOfSeries || HasBestBatsman || HasBestBowler || HasBestFielder;
         IsDraft = detail.Status == 0;
         CanSave = CanWrite && IsDraft;
 
@@ -172,17 +198,6 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null)
         {
-            if (!active.IsScoringOwner)
-            {
-                await Shell.Current.DisplayAlert(
-                    "View only",
-                    ScoringOwnership.OtherAccountMessage,
-                    "OK").ConfigureAwait(true);
-                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}")
-                    .ConfigureAwait(true);
-                return;
-            }
-
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time on this device. Finish \"{active.Title}\" first.",
@@ -209,6 +224,10 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
     {
         if (fixture?.MatchId is not Guid matchId) return;
 
+        // After a reinstall SQLite is empty — pull the match back down before deciding
+        // whether this device can score it.
+        await _matches.EnsureLocalMatchAsync(matchId).ConfigureAwait(true);
+
         if (!await _matches.IsScoredOnThisDeviceAsync(matchId).ConfigureAwait(true))
         {
             await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={matchId}")
@@ -219,17 +238,6 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
         if (active is not null && active.Id != matchId)
         {
-            if (!active.IsScoringOwner)
-            {
-                await Shell.Current.DisplayAlert(
-                    "View only",
-                    ScoringOwnership.OtherAccountMessage,
-                    "OK").ConfigureAwait(true);
-                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={active.Id}")
-                    .ConfigureAwait(true);
-                return;
-            }
-
             await Shell.Current.DisplayAlert(
                 "Match in progress",
                 $"Only one match can run at a time on this device. Finish \"{active.Title}\" first.",
@@ -247,6 +255,7 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
     private async Task OpenScorecardAsync(SeriesFixtureItem? fixture)
     {
         if (fixture?.MatchId is not Guid matchId) return;
+        await _matches.EnsureLocalMatchAsync(matchId, reclaimDeviceIfOwner: false).ConfigureAwait(true);
         await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={matchId}")
             .ConfigureAwait(true);
     }

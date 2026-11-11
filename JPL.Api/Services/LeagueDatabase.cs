@@ -203,16 +203,21 @@ public sealed class LeagueDatabaseManager
         await EnsureMatchSquadColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureTeamPlayerPlayingColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureOversModeColumnsAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureTournamentRoundRobinColumnsAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureEventAwardColumnsAsync(dbName, ct).ConfigureAwait(false);
+        await BackfillEventAwardsAsync(leagueId, dbName, ct).ConfigureAwait(false);
         await EnsureLiveStreamUrlColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureIsLiveTelecastColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureScoringOwnerColumnsAsync(dbName, ct).ConfigureAwait(false);
         await EnsureShotZoneColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureNetSessionTablesAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureDroppedCatchColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureSeriesTablesAsync(dbName, ct).ConfigureAwait(false);
         await EnsureFormatsAsync(dbName, ct).ConfigureAwait(false);
         await EnsurePlayerImagePathColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsurePlayerIdentityColumnsAsync(dbName, ct).ConfigureAwait(false);
         await EnsureTeamImagePathColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureVenueBookingParticipantAmountColumnAsync(dbName, ct).ConfigureAwait(false);
         await DropSportsLeagueIdColumnsAsync(dbName, ct).ConfigureAwait(false);
         await DropLeagueDirectoryTablesAsync(dbName, ct).ConfigureAwait(false);
     }
@@ -244,6 +249,54 @@ public sealed class LeagueDatabaseManager
         catch
         {
             /* already exists */
+        }
+    }
+
+    private async Task EnsureDroppedCatchColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.Deliveries', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Deliveries', N'IsDroppedCatch') IS NULL
+                    ALTER TABLE dbo.Deliveries ADD IsDroppedCatch bit NOT NULL
+                        CONSTRAINT DF_Deliveries_IsDroppedCatch DEFAULT 0;
+                IF OBJECT_ID(N'dbo.NetDeliveries', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.NetDeliveries', N'IsDroppedCatch') IS NULL
+                    ALTER TABLE dbo.NetDeliveries ADD IsDroppedCatch bit NOT NULL
+                        CONSTRAINT DF_NetDeliveries_IsDroppedCatch DEFAULT 0;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                        """ALTER TABLE "Deliveries" ADD COLUMN "IsDroppedCatch" INTEGER NOT NULL DEFAULT 0;""", ct)
+                    .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                        """ALTER TABLE "NetDeliveries" ADD COLUMN "IsDroppedCatch" INTEGER NOT NULL DEFAULT 0;""", ct)
+                    .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+        }
+        catch
+        {
+            /* table missing */
         }
     }
 
@@ -342,6 +395,38 @@ public sealed class LeagueDatabaseManager
             await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
             await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Teams" ADD COLUMN "ImagePath" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already exists */
+        }
+    }
+
+    private async Task EnsureVenueBookingParticipantAmountColumnAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.VenueBookingParticipants', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.VenueBookingParticipants', N'Amount') IS NULL
+                    ALTER TABLE dbo.VenueBookingParticipants ADD Amount decimal(18,2) NOT NULL
+                        CONSTRAINT DF_VenueBookingParticipants_Amount DEFAULT 0;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "VenueBookingParticipants" ADD COLUMN "Amount" TEXT NOT NULL DEFAULT '0';""", ct)
                 .ConfigureAwait(false);
         }
         catch
@@ -561,6 +646,172 @@ public sealed class LeagueDatabaseManager
         }
     }
 
+    private async Task EnsureTournamentRoundRobinColumnsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            // ALTER + UPDATE on a new column cannot share one SQL Server batch —
+            // the parser rejects KnockoutFormat until the ADD batch finishes.
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'RoundRobinType') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD RoundRobinType tinyint NOT NULL CONSTRAINT DF_Tournaments_RoundRobinType DEFAULT 0;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'MatchesPerTeam') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD MatchesPerTeam int NOT NULL CONSTRAINT DF_Tournaments_MatchesPerTeam DEFAULT 0;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'CustomPairsJson') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD CustomPairsJson nvarchar(max) NULL;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'KnockoutFormat') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD KnockoutFormat tinyint NOT NULL CONSTRAINT DF_Tournaments_KnockoutFormat DEFAULT 2;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'KnockoutFormat') IS NOT NULL
+                BEGIN
+                    UPDATE dbo.Tournaments SET KnockoutFormat = 4 WHERE GroupCount = 1 AND QualifyPerGroup = 1 AND KnockoutFormat = 2;
+                    UPDATE dbo.Tournaments SET KnockoutFormat = 3 WHERE GroupCount = 1 AND QualifyPerGroup = 2 AND KnockoutFormat = 2;
+                    UPDATE dbo.Tournaments SET KnockoutFormat = 3 WHERE GroupCount = 2 AND QualifyPerGroup = 1 AND KnockoutFormat = 2;
+                END
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var sql in new[]
+                 {
+                     """ALTER TABLE "Tournaments" ADD COLUMN "RoundRobinType" INTEGER NOT NULL DEFAULT 0;""",
+                     """ALTER TABLE "Tournaments" ADD COLUMN "MatchesPerTeam" INTEGER NOT NULL DEFAULT 0;""",
+                     """ALTER TABLE "Tournaments" ADD COLUMN "CustomPairsJson" TEXT NULL;""",
+                     """ALTER TABLE "Tournaments" ADD COLUMN "KnockoutFormat" INTEGER NOT NULL DEFAULT 2;"""
+                 })
+        {
+            try
+            {
+                await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+                await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                /* already exists */
+            }
+        }
+    }
+
+    private async Task EnsureEventAwardColumnsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'PlayerOfTheTournamentPlayerId') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD PlayerOfTheTournamentPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'BestBatsmanPlayerId') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD BestBatsmanPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'BestBowlerPlayerId') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD BestBowlerPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Tournaments', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Tournaments', N'BestFielderPlayerId') IS NULL
+                    ALTER TABLE dbo.Tournaments ADD BestFielderPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Series', N'PlayerOfTheSeriesPlayerId') IS NULL
+                    ALTER TABLE dbo.Series ADD PlayerOfTheSeriesPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Series', N'BestBatsmanPlayerId') IS NULL
+                    ALTER TABLE dbo.Series ADD BestBatsmanPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Series', N'BestBowlerPlayerId') IS NULL
+                    ALTER TABLE dbo.Series ADD BestBowlerPlayerId uniqueidentifier NULL;
+                IF OBJECT_ID(N'dbo.Series', 'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.Series', N'BestFielderPlayerId') IS NULL
+                    ALTER TABLE dbo.Series ADD BestFielderPlayerId uniqueidentifier NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var sql in new[]
+                 {
+                     """ALTER TABLE "Tournaments" ADD COLUMN "PlayerOfTheTournamentPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Tournaments" ADD COLUMN "BestBatsmanPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Tournaments" ADD COLUMN "BestBowlerPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Tournaments" ADD COLUMN "BestFielderPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Series" ADD COLUMN "PlayerOfTheSeriesPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Series" ADD COLUMN "BestBatsmanPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Series" ADD COLUMN "BestBowlerPlayerId" TEXT NULL;""",
+                     """ALTER TABLE "Series" ADD COLUMN "BestFielderPlayerId" TEXT NULL;"""
+                 })
+        {
+            try
+            {
+                await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+                await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                /* already exists */
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fill awards on already-completed tournaments/series that pre-date the award columns.
+    /// Safe to re-run: skips rows that already have Player of the event set.
+    /// </summary>
+    private async Task BackfillEventAwardsAsync(Guid leagueId, string dbName, CancellationToken ct)
+    {
+        try
+        {
+            await using var db = CreateContext(ToConnection(dbName), leagueId);
+            var tours = await db.Tournaments
+                .Include(t => t.Fixtures)
+                .Where(t => !t.IsDeleted
+                            && t.Status == TournamentStatus.Completed
+                            && t.PlayerOfTheTournamentPlayerId == null)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            foreach (var t in tours)
+            {
+                var (_, changed) = await TournamentEngine.ResolveProgressAsync(db, t, ct).ConfigureAwait(false);
+                if (changed)
+                    await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+
+            var seriesList = await db.Series
+                .Include(s => s.Fixtures)
+                .Where(s => !s.IsDeleted
+                            && s.Status == SeriesStatus.Completed
+                            && s.PlayerOfTheSeriesPlayerId == null)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            foreach (var s in seriesList)
+            {
+                var (_, changed) = await SeriesEngine.ResolveProgressAsync(db, s, ct).ConfigureAwait(false);
+                if (changed)
+                    await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            /* best-effort — awards also fill on next Get via ResolveProgress */
+        }
+    }
+
     /// <summary>EnsureCreated does not add tables to existing league catalogs.</summary>
     private async Task EnsureNetSessionTablesAsync(string dbName, CancellationToken ct)
     {
@@ -606,6 +857,7 @@ public sealed class LeagueDatabaseManager
                         WicketType tinyint NOT NULL,
                         DismissedPlayerId uniqueidentifier NULL,
                         FielderId uniqueidentifier NULL,
+                        IsDroppedCatch bit NOT NULL CONSTRAINT DF_NetDeliveries_IsDroppedCatch DEFAULT 0,
                         IsLegalDelivery bit NOT NULL,
                         CreatedAtUtc datetimeoffset NOT NULL,
                         Version bigint NOT NULL,
@@ -653,6 +905,7 @@ public sealed class LeagueDatabaseManager
                     "WicketType" INTEGER NOT NULL,
                     "DismissedPlayerId" TEXT NULL,
                     "FielderId" TEXT NULL,
+                    "IsDroppedCatch" INTEGER NOT NULL DEFAULT 0,
                     "IsLegalDelivery" INTEGER NOT NULL,
                     "CreatedAtUtc" TEXT NOT NULL,
                     "Version" INTEGER NOT NULL,

@@ -21,6 +21,12 @@ public partial class MatchScorecardPage : ContentPage
 
     protected override bool OnBackButtonPressed()
     {
+        if (_vm.IsPlayerReportOpen)
+        {
+            _vm.ClosePlayerReportCommand.Execute(null);
+            return true;
+        }
+
         if (_vm.ShowDetailScorecardModal)
         {
             _vm.CloseDetailScorecardModalCommand.Execute(null);

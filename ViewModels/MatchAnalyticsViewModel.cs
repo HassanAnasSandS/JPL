@@ -36,7 +36,6 @@ public partial class MatchAnalyticsViewModel : ObservableObject
     public IReadOnlyList<ChartSeriesData> RunRateSeries => Report?.RunRateSeries ?? [];
     public IReadOnlyList<BarPoint> Manhattan => SelectedInnings?.Manhattan ?? Report?.Innings.FirstOrDefault()?.Manhattan ?? [];
     public IReadOnlyList<BarPoint> Momentum => SelectedInnings?.Momentum ?? Report?.Innings.FirstOrDefault()?.Momentum ?? [];
-    public IReadOnlyList<WagonSector> Wagon => SelectedInnings?.Wagon ?? Report?.Innings.FirstOrDefault()?.Wagon ?? [];
     public IReadOnlyList<PhaseRow> Phases => SelectedInnings?.Phases ?? [];
     public IReadOnlyList<PartnershipRow> Partnerships => SelectedInnings?.Partnerships ?? [];
     public IReadOnlyList<string> Insights => Report?.Insights ?? [];
@@ -45,8 +44,6 @@ public partial class MatchAnalyticsViewModel : ObservableObject
     public bool HasChase => Report?.IsChase == true && !string.IsNullOrWhiteSpace(Report.ChaseText);
     public bool HasResultText => !string.IsNullOrWhiteSpace(ResultText);
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
-    public bool HasWagonHint => Wagon.Count > 0 && Wagon.All(s => s.Runs == 0);
-    public string WagonHint => "On each four or six, pick the shot zone — wagon fills automatically. CricHeroes needs this enabled + PRO for detail; here it is built in.";
     public string InningsSummary => SelectedInnings is null
         ? ""
         : $"{SelectedInnings.TeamName} {SelectedInnings.Runs}/{SelectedInnings.Wickets}  RR {SelectedInnings.RunRate}  4s {SelectedInnings.Fours}  6s {SelectedInnings.Sixes}  dots {SelectedInnings.Dots}";
@@ -71,7 +68,6 @@ public partial class MatchAnalyticsViewModel : ObservableObject
         OnPropertyChanged(nameof(RunRateSeries));
         OnPropertyChanged(nameof(Manhattan));
         OnPropertyChanged(nameof(Momentum));
-        OnPropertyChanged(nameof(Wagon));
         OnPropertyChanged(nameof(Phases));
         OnPropertyChanged(nameof(Partnerships));
         OnPropertyChanged(nameof(Insights));
@@ -80,7 +76,6 @@ public partial class MatchAnalyticsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasChase));
         OnPropertyChanged(nameof(HasResultText));
         OnPropertyChanged(nameof(HasError));
-        OnPropertyChanged(nameof(HasWagonHint));
         OnPropertyChanged(nameof(InningsSummary));
     }
 
@@ -113,6 +108,16 @@ public partial class MatchAnalyticsViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task OpenScorecardAsync()
+    {
+        if (!Guid.TryParse(MatchId, out var id))
+            return;
+        await Shell.Current
+            .GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={id:D}")
+            .ConfigureAwait(true);
     }
 
     [RelayCommand]

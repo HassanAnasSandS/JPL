@@ -41,7 +41,7 @@ public sealed class SchedulerController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<SchedulerListDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, Guid? createdBy = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, Guid? createdBy = null, CancellationToken ct = default)
     {
         if (!TryGetOwner(out var userId, out var isPlatformAdmin, out var error))
             return error;
@@ -121,22 +121,30 @@ public sealed class SchedulerController : ControllerBase
             return BadRequest("Enter a tournament name.");
 
         await using var db = _dbs.CreateMaster();
-        var exists = await db.SchedulerTournaments.AsNoTracking()
-            .AnyAsync(t => t.Id == id && (isPlatformAdmin || t.CreatedByUserId == userId), ct)
+        var current = await db.SchedulerTournaments.AsNoTracking()
+            .Where(t => t.Id == id && (isPlatformAdmin || t.CreatedByUserId == userId))
+            .Select(t => new { t.Id, t.Status, t.WinnerTeamId, t.KnockoutFormat })
+            .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
-        if (!exists)
+        if (current is null)
             return NotFound();
+        // Completed but missing WinnerTeamId (e.g. Knockout=No before champion logic) — allow champion backfill.
+        var allowMissingChampionFix = current.Status == 3 && current.WinnerTeamId is null;
+        if (current.Status == 3 && !allowMissingChampionFix)
+            return BadRequest("Cannot update a completed scheduler.");
 
         await db.SchedulerMatches.Where(m => m.TournamentId == id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
         await db.SchedulerTeams.Where(t => t.TournamentId == id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
 
         var name = request.Name.Trim();
         var updatedAt = DateTime.Now;
+        var isCustom = request.RoundRobinType == 2;
+        var groupCount = isCustom ? 1 : request.GroupCount;
         var affected = await db.SchedulerTournaments.IgnoreQueryFilters()
             .Where(t => t.Id == id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(t => t.Name, name)
-                .SetProperty(t => t.GroupCount, request.GroupCount)
+                .SetProperty(t => t.GroupCount, groupCount)
                 .SetProperty(t => t.RoundRobinType, request.RoundRobinType)
                 .SetProperty(t => t.QualifyPerGroup, request.QualifyPerGroup)
                 .SetProperty(t => t.KnockoutFormat, request.KnockoutFormat)
@@ -156,7 +164,7 @@ public sealed class SchedulerController : ControllerBase
                 Id = team.Id == Guid.Empty ? Guid.NewGuid() : team.Id,
                 TournamentId = id,
                 Name = (team.Name ?? string.Empty).Trim(),
-                GroupNumber = team.GroupNumber,
+                GroupNumber = isCustom ? 1 : team.GroupNumber,
                 SortOrder = team.SortOrder
             });
         }
@@ -196,17 +204,15 @@ public sealed class SchedulerController : ControllerBase
             return error;
 
         await using var db = _dbs.CreateMaster();
-        var canDelete = await db.SchedulerTournaments.AsNoTracking()
-            .AnyAsync(t => t.Id == id && (isPlatformAdmin || t.CreatedByUserId == userId), ct)
+        var row = await db.SchedulerTournaments.AsNoTracking()
+            .Where(t => t.Id == id && (isPlatformAdmin || t.CreatedByUserId == userId))
+            .Select(t => new { t.Id, t.Status, t.WinnerTeamId })
+            .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
-        if (!canDelete)
+        if (row is null)
             return NotFound();
-
-        var hasResult = await db.SchedulerMatches.AsNoTracking()
-            .AnyAsync(m => m.TournamentId == id && m.Result != 0, ct)
-            .ConfigureAwait(false);
-        if (hasResult)
-            return BadRequest("Cannot delete this scheduler after a match result is recorded.");
+        if (row.Status == 3 || row.WinnerTeamId is not null)
+            return BadRequest("Cannot delete a completed scheduler.");
 
         var affected = await db.SchedulerTournaments.IgnoreQueryFilters()
             .Where(t => t.Id == id)
@@ -284,7 +290,9 @@ public sealed class SchedulerController : ControllerBase
     private static void Apply(SchedulerTournament entity, SchedulerUpsertRequest request)
     {
         entity.Name = request.Name.Trim();
-        entity.GroupCount = request.GroupCount;
+        // Custom (RoundRobinType = 2) is always a single group.
+        var isCustom = request.RoundRobinType == 2;
+        entity.GroupCount = isCustom ? 1 : request.GroupCount;
         entity.RoundRobinType = request.RoundRobinType;
         entity.QualifyPerGroup = request.QualifyPerGroup;
         entity.KnockoutFormat = request.KnockoutFormat;
@@ -293,10 +301,10 @@ public sealed class SchedulerController : ControllerBase
         entity.QualificationPicksJson = request.QualificationPicksJson;
         entity.UpdatedAtUtc = DateTime.Now;
         entity.IsDeleted = false;
-        AddChildren(entity, request);
+        AddChildren(entity, request, isCustom);
     }
 
-    private static void AddChildren(SchedulerTournament entity, SchedulerUpsertRequest request)
+    private static void AddChildren(SchedulerTournament entity, SchedulerUpsertRequest request, bool isCustom)
     {
         foreach (var team in request.Teams ?? [])
         {
@@ -305,7 +313,7 @@ public sealed class SchedulerController : ControllerBase
                 Id = team.Id == Guid.Empty ? Guid.NewGuid() : team.Id,
                 TournamentId = entity.Id,
                 Name = (team.Name ?? string.Empty).Trim(),
-                GroupNumber = team.GroupNumber,
+                GroupNumber = isCustom ? 1 : team.GroupNumber,
                 SortOrder = team.SortOrder
             });
         }
@@ -350,7 +358,7 @@ public sealed class SchedulerController : ControllerBase
             StatusText = StatusText(t.Status),
             MetaLine = SetupHint(t),
             WinnerLine = winner is null ? string.Empty : $"Champion: {winner}",
-            CanEdit = t.Matches.All(m => m.Result == 0),
+            CanEdit = t.Status != 3,
             CreatedByUserId = t.CreatedByUserId,
             CreatedByUsername = userNames.GetValueOrDefault(t.CreatedByUserId, "Unknown user"),
             UpdatedAtUtc = t.UpdatedAtUtc
@@ -406,17 +414,25 @@ public sealed class SchedulerController : ControllerBase
 
     private static string SetupHint(SchedulerTournament t)
     {
-        var rr = t.RoundRobinType == 1 ? "Double Round Robin" : "Single Round Robin";
+        var rr = t.RoundRobinType switch
+        {
+            1 => "Double Round Robin",
+            2 => "Custom",
+            _ => "Single Round Robin"
+        };
         var ko = t.KnockoutFormat switch
         {
             0 => "Quarter Finals → Semi Finals → Final",
             1 => "Playoff → Semi Final → Final",
             2 => "Semi Finals → Final",
+            4 => "No (round matches only)",
             _ => "Final"
         };
         var teams = t.Teams?.Count ?? 0;
         var groups = t.GroupCount == 1 ? "1 group" : $"{t.GroupCount} groups";
         var teamLabel = teams == 1 ? "1 team" : $"{teams} teams";
-        return $"{rr} · {groups} {teamLabel} · top {t.QualifyPerGroup}/group · {ko}";
+        return t.KnockoutFormat == 4
+            ? $"{rr} · {groups} {teamLabel} · round matches only — no knockout"
+            : $"{rr} · {groups} {teamLabel} · top {t.QualifyPerGroup}/group · {ko}";
     }
 }

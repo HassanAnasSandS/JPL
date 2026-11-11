@@ -37,4 +37,6 @@ public sealed class VenueBookingParticipant
     public Guid PlayerId { get; set; }
     /// <summary>"Pending" or "Paid".</summary>
     public string Status { get; set; } = VenueBookingPaymentStatus.Pending;
+    /// <summary>This player's share of the booking. Zero is allowed.</summary>
+    public decimal Amount { get; set; }
 }

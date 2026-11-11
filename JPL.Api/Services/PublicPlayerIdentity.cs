@@ -16,9 +16,58 @@ public sealed class PublicPlayerCard
     public string ProfileUrl { get; set; } = "";
     public string? TeamName { get; set; }
     public int Matches { get; set; }
+    public int Won { get; set; }
+    public int Loss { get; set; }
+    public int Tied { get; set; }
     public int Runs { get; set; }
     public int Wickets { get; set; }
+    public int Fours { get; set; }
+    public int Sixes { get; set; }
+    public int Catches { get; set; }
+    public int RunOutsEffected { get; set; }
+    public int Stumpings { get; set; }
+    public int FieldTotal { get; set; }
+    public int BallsFaced { get; set; }
+    public int Dismissals { get; set; }
+    public int NotOuts { get; set; }
+    public int InningsBatted { get; set; }
+    public int InningsBowled { get; set; }
+    public int OversBowledBalls { get; set; }
+    public int RunsConceded { get; set; }
+    public int Maidens { get; set; }
+    public int HatTricks { get; set; }
+    public int FiveWicketHauls { get; set; }
+    public int Fifties { get; set; }
+    public int Hundreds { get; set; }
+    public int Ducks { get; set; }
+    public int Potm { get; set; }
+    public string HighestScoreText { get; set; } = "-";
+    public string BestBowlingText { get; set; } = "-";
+    public string AvgText { get; set; } = "-";
+    public string SrText { get; set; } = "-";
+    public string EconText { get; set; } = "-";
+    public string BowlAvgText { get; set; } = "-";
+    public int? BatRank { get; set; }
+    public int? BowlRank { get; set; }
+    public int? AllRounderRank { get; set; }
+    public int? FieldRank { get; set; }
+    public int? CaptainRank { get; set; }
     public string Headline { get; set; } = "";
+}
+
+public sealed class PublicLeaderRow
+{
+    public int Rank { get; set; }
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public string ProfileUrl { get; set; } = "";
+    public string Primary { get; set; } = "";
+    public string Secondary { get; set; } = "";
+    public string Detail { get; set; } = "";
+    public double SortScore { get; set; }
+    public double BarRatio { get; set; }
+    public string BarColor { get; set; } = "#F5B400";
+    public string Pts { get; set; } = "";
 }
 
 public sealed class PublicPlayerDirectory
@@ -26,6 +75,14 @@ public sealed class PublicPlayerDirectory
     public Guid LeagueId { get; set; }
     public string LeagueName { get; set; } = "";
     public int PlayerCount { get; set; }
+    public int CompletedMatches { get; set; }
+    public int TotalRuns { get; set; }
+    public int TotalWickets { get; set; }
+    public List<PublicLeaderRow> TopBatting { get; set; } = new();
+    public List<PublicLeaderRow> TopBowling { get; set; } = new();
+    public List<PublicLeaderRow> TopAllRounder { get; set; } = new();
+    public List<PublicLeaderRow> TopFielding { get; set; } = new();
+    public List<PublicLeaderRow> TopCaptain { get; set; } = new();
     public List<PublicPlayerCard> Players { get; set; } = new();
 }
 
@@ -40,6 +97,10 @@ public sealed class PublicRankBadge
     public string Category { get; set; } = "";
     public int Rank { get; set; }
     public string Detail { get; set; } = "";
+    public string Primary { get; set; } = "";
+    public double SortScore { get; set; }
+    public double BarRatio { get; set; }
+    public string BarColor { get; set; } = "#F5B400";
 }
 
 public sealed class PublicStrength
@@ -63,6 +124,22 @@ public sealed class PublicDuel
     public int Balls { get; set; }
     public int Runs { get; set; }
     public int Outs { get; set; }
+    public int Dots { get; set; }
+    public int Ones { get; set; }
+    public int Twos { get; set; }
+    public int Threes { get; set; }
+    public int Fours { get; set; }
+    public int Sixes { get; set; }
+    public int Bowled { get; set; }
+    public int Caught { get; set; }
+    public int Lbw { get; set; }
+    public int RunOut { get; set; }
+    public int Stumped { get; set; }
+    public int HitWicket { get; set; }
+    public int ExtrasConceded { get; set; }
+    public double StrikeRate => Balls <= 0 ? 0 : Math.Round(Runs * 100.0 / Balls, 1);
+    public string AverageText => Outs <= 0 ? "-" : Math.Round((double)Runs / Outs, 2).ToString("0.##");
+    public double Economy => Balls <= 0 ? 0 : Math.Round((Runs + ExtrasConceded) * 6.0 / Balls, 2);
     public string Line { get; set; } = "";
 }
 
@@ -115,11 +192,35 @@ public static class PublicPlayerIdentity
 
         var board = await StatsCalculator.BuildLeaderboardAsync(db, ct: ct).ConfigureAwait(false);
         var byId = board.ToDictionary(p => p.PlayerId);
+        var ranks = StatsCalculator.BuildRankingsFromBoard(board);
         var teams = await db.Teams.AsNoTracking()
             .Where(t => !t.IsDeleted)
             .Include(t => t.TeamPlayers)
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        var potmMap = await db.Matches.AsNoTracking()
+            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed && m.PlayerOfTheMatchPlayerId != null)
+            .GroupBy(m => m.PlayerOfTheMatchPlayerId!.Value)
+            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.PlayerId, x => x.Count, ct)
+            .ConfigureAwait(false);
+        var completedMatches = await db.Matches.AsNoTracking()
+            .CountAsync(m => !m.IsDeleted && m.Status == MatchStatus.Completed, ct)
+            .ConfigureAwait(false);
+
+        static string AvgText(PlayerCareerDto? c)
+        {
+            if (c is null || (c.InningsBatted <= 0 && c.Runs <= 0)) return "-";
+            return c.Dismissals <= 0 ? c.Runs.ToString("0.#") : (c.Runs / (double)c.Dismissals).ToString("0.#");
+        }
+        static string SrText(PlayerCareerDto? c)
+            => c is null || c.BallsFaced <= 0 ? "-" : (c.Runs * 100.0 / c.BallsFaced).ToString("0.#");
+        static string EconText(PlayerCareerDto? c)
+            => c is null || c.OversBowledBalls <= 0 ? "-" : (c.RunsConceded * 6.0 / c.OversBowledBalls).ToString("0.##");
+        static string BowlAvgText(PlayerCareerDto? c)
+            => c is null || c.Wickets <= 0 ? "-" : (c.RunsConceded / (double)c.Wickets).ToString("0.#");
+        static int? RankOf(IReadOnlyList<RankingRowDto> rows, Guid id)
+            => rows.FirstOrDefault(r => r.PlayerId == id)?.Rank;
 
         var cards = new List<PublicPlayerCard>();
         foreach (var p in players)
@@ -128,6 +229,8 @@ public static class PublicPlayerIdentity
             var team = teams.FirstOrDefault(t => t.TeamPlayers.Any(tp => tp.PlayerId == p.Id));
             var runs = career?.Runs ?? 0;
             var wkts = career?.Wickets ?? 0;
+            var field = (career?.Catches ?? 0) + (career?.RunOutsEffected ?? 0) + (career?.Stumpings ?? 0);
+            potmMap.TryGetValue(p.Id, out var potm);
             cards.Add(new PublicPlayerCard
             {
                 PlayerId = p.Id,
@@ -142,19 +245,64 @@ public static class PublicPlayerIdentity
                 ProfileUrl = ProfilePath(leagueId, p.Id),
                 TeamName = team?.Name,
                 Matches = career?.Matches ?? 0,
+                Won = career?.Won ?? 0,
+                Loss = career?.Loss ?? 0,
+                Tied = career?.Tied ?? 0,
                 Runs = runs,
                 Wickets = wkts,
+                Fours = career?.Fours ?? 0,
+                Sixes = career?.Sixes ?? 0,
+                Catches = career?.Catches ?? 0,
+                RunOutsEffected = career?.RunOutsEffected ?? 0,
+                Stumpings = career?.Stumpings ?? 0,
+                FieldTotal = field,
+                BallsFaced = career?.BallsFaced ?? 0,
+                Dismissals = career?.Dismissals ?? 0,
+                NotOuts = career?.NotOuts ?? 0,
+                InningsBatted = career?.InningsBatted ?? 0,
+                InningsBowled = career?.InningsBowled ?? 0,
+                OversBowledBalls = career?.OversBowledBalls ?? 0,
+                RunsConceded = career?.RunsConceded ?? 0,
+                Maidens = career?.Maidens ?? 0,
+                HatTricks = career?.HatTricks ?? 0,
+                FiveWicketHauls = career?.FiveWicketHauls ?? 0,
+                Fifties = career?.Fifties ?? 0,
+                Hundreds = career?.Hundreds ?? 0,
+                Ducks = career?.Ducks ?? 0,
+                Potm = potm,
+                HighestScoreText = career?.HighestScoreText ?? "-",
+                BestBowlingText = string.IsNullOrWhiteSpace(career?.BestBowlingText) ? "-" : career!.BestBowlingText,
+                AvgText = AvgText(career),
+                SrText = SrText(career),
+                EconText = EconText(career),
+                BowlAvgText = BowlAvgText(career),
+                BatRank = RankOf(ranks.Batting, p.Id),
+                BowlRank = RankOf(ranks.Bowling, p.Id),
+                AllRounderRank = RankOf(ranks.AllRounder, p.Id),
+                FieldRank = RankOf(ranks.Fielder, p.Id),
+                CaptainRank = RankOf(ranks.Captain, p.Id),
                 Headline = runs + wkts == 0
                     ? (BlankToNull(p.PlayingRole) ?? "Cric360 player")
                     : $"{runs} runs · {wkts} wkts"
             });
         }
 
+        List<PublicLeaderRow> Leaders(IReadOnlyList<RankingRowDto> rows)
+            => WithBarRatios(rows, leagueId);
+
         return new PublicPlayerDirectory
         {
             LeagueId = leagueId,
             LeagueName = leagueName,
             PlayerCount = cards.Count,
+            CompletedMatches = completedMatches,
+            TotalRuns = board.Sum(x => x.Runs),
+            TotalWickets = board.Sum(x => x.Wickets),
+            TopBatting = Leaders(ranks.Batting),
+            TopBowling = Leaders(ranks.Bowling),
+            TopAllRounder = Leaders(ranks.AllRounder),
+            TopFielding = Leaders(ranks.Fielder),
+            TopCaptain = Leaders(ranks.Captain),
             Players = cards
         };
     }
@@ -211,25 +359,46 @@ public static class PublicPlayerIdentity
             Honours = await HonoursAsync(db, playerId, ct).ConfigureAwait(false),
             Strength = Strength(career, board),
             RecentForm = await FormAsync(db, playerId, ct).ConfigureAwait(false),
-            VsBowlers = vsBowl.OrderByDescending(d => d.Balls).Take(5).Select(d => new PublicDuel
-            {
-                Opponent = d.BowlerName,
-                Balls = d.Balls,
-                Runs = d.Runs,
-                Outs = d.Outs,
-                Line = $"{d.Runs} ({d.Balls})" + (d.Outs > 0 ? $" · {d.Outs} out" : "")
-            }).ToList(),
-            VsBatters = vsBat.OrderByDescending(d => d.Outs).ThenByDescending(d => d.Balls).Take(5).Select(d => new PublicDuel
-            {
-                Opponent = d.BatterName,
-                Balls = d.Balls,
-                Runs = d.Runs,
-                Outs = d.Outs,
-                Line = $"{d.Outs} wkts · {d.Runs} runs ({d.Balls}b)"
-            }).ToList()
+            VsBowlers = vsBowl.OrderByDescending(d => d.Balls).Select(d => ToDuel(d, d.BowlerName)).ToList(),
+            VsBatters = vsBat.OrderByDescending(d => d.Outs).ThenByDescending(d => d.Balls)
+                .Select(d => ToDuel(d, d.BatterName)).ToList()
         };
         profile.Insights = Insights(profile);
         return profile;
+    }
+
+    private static readonly string[] RankBarPalette =
+    [
+        "#F5B400", "#FF7043", "#42A5F5", "#66BB6A", "#AB47BC", "#26C6DA",
+        "#EC407A", "#7E57C2", "#FFA726", "#26A69A", "#5C6BC0", "#EF5350"
+    ];
+
+    private static List<PublicLeaderRow> WithBarRatios(IReadOnlyList<RankingRowDto> rows, Guid leagueId)
+    {
+        var max = rows.Select(r => Math.Abs(r.SortScore)).DefaultIfEmpty(1).Max();
+        if (max <= 0) max = 1;
+        return rows.Select((r, i) =>
+        {
+            var ratio = r.SortScore == 0 ? 0 : Math.Clamp(Math.Abs(r.SortScore) / max, 0.06, 1);
+            return new PublicLeaderRow
+            {
+                Rank = r.Rank,
+                PlayerId = r.PlayerId,
+                PlayerName = r.PlayerName,
+                ProfileUrl = ProfilePath(leagueId, r.PlayerId),
+                Primary = string.IsNullOrWhiteSpace(r.PrimaryValue)
+                    ? r.Detail
+                    : $"{r.PrimaryLabel} {r.PrimaryValue}".Trim(),
+                Secondary = string.IsNullOrWhiteSpace(r.SecondaryValue)
+                    ? ""
+                    : $"{r.SecondaryLabel} {r.SecondaryValue}".Trim(),
+                Detail = r.Detail,
+                SortScore = r.SortScore,
+                BarRatio = ratio,
+                BarColor = r.SortScore < 0 ? "#C62828" : RankBarPalette[i % RankBarPalette.Length],
+                Pts = string.IsNullOrWhiteSpace(r.PrimaryValue) ? r.Detail : r.PrimaryValue
+            };
+        }).ToList();
     }
 
     private static List<PublicRankBadge> Badges(Guid playerId, RankingsDto ranks)
@@ -238,8 +407,23 @@ public static class PublicPlayerIdentity
         void Add(string cat, IReadOnlyList<RankingRowDto> rows)
         {
             var row = rows.FirstOrDefault(r => r.PlayerId == playerId);
-            if (row is not null)
-                list.Add(new PublicRankBadge { Category = cat, Rank = row.Rank, Detail = row.Detail });
+            if (row is null) return;
+            var max = rows.Select(r => Math.Abs(r.SortScore)).DefaultIfEmpty(1).Max();
+            if (max <= 0) max = 1;
+            var idx = Math.Max(0, rows.ToList().FindIndex(r => r.PlayerId == playerId));
+            var ratio = row.SortScore == 0 ? 0 : Math.Clamp(Math.Abs(row.SortScore) / max, 0.06, 1);
+            list.Add(new PublicRankBadge
+            {
+                Category = cat,
+                Rank = row.Rank,
+                Detail = row.Detail,
+                Primary = string.IsNullOrWhiteSpace(row.PrimaryValue)
+                    ? row.Detail
+                    : $"{row.PrimaryLabel} {row.PrimaryValue}".Trim(),
+                SortScore = row.SortScore,
+                BarRatio = ratio,
+                BarColor = row.SortScore < 0 ? "#C62828" : RankBarPalette[idx % RankBarPalette.Length]
+            });
         }
         Add("Batting", ranks.Batting);
         Add("Bowling", ranks.Bowling);
@@ -344,23 +528,45 @@ public static class PublicPlayerIdentity
         var m = p.Matches;
         var batRank = p.Ranks.FirstOrDefault(r => r.Category == "Batting");
         if (batRank is not null)
-            list.Add($"#{batRank.Rank} batter in {p.LeagueName} — open ranking, no PRO paywall.");
+            list.Add($"#{batRank.Rank} batter in {p.LeagueName}.");
         var bowlRank = p.Ranks.FirstOrDefault(r => r.Category == "Bowling");
         if (bowlRank is not null)
-            list.Add($"#{bowlRank.Rank} bowler in this league.");
+            list.Add($"#{bowlRank.Rank} bowler in {p.LeagueName}.");
         if (m.InningsBatted > 0 && m.BallsFaced > 0)
             list.Add($"Strike rate {(m.Runs * 100.0 / m.BallsFaced):0.0} from {m.InningsBatted} innings. HS {m.HighestScoreText}.");
         if (m.Wickets > 0)
-            list.Add($"Best bowling {m.BestBowlingText} · {m.Wickets} wickets.");
+            list.Add($"Best bowling {m.BestBowlingText} · {m.Wickets} wickets" + (m.HatTricks > 0 ? $" · {m.HatTricks} hat-trick(s)." : "."));
         var potm = p.Honours.FirstOrDefault(h => h.Label.Contains("Player of the Match"));
         if (potm is not null)
             list.Add($"{potm.Count}× Player of the Match.");
         if (p.Nets is { Sessions: > 0 })
-            list.Add($"Nets: {p.Nets.Runs} runs and {p.Nets.Wickets} wickets across {p.Nets.Sessions} sessions — CricHeroes has no nets identity.");
+            list.Add($"Nets: {p.Nets.Runs} runs and {p.Nets.Wickets} wickets across {p.Nets.Sessions} sessions.");
         if (list.Count == 0)
             list.Add("Career is just getting started. Stats unlock as matches are scored.");
         return list.Take(5).ToList();
     }
+
+    private static PublicDuel ToDuel(ConfrontationDto d, string opponent) => new()
+    {
+        Opponent = opponent,
+        Balls = d.Balls,
+        Runs = d.Runs,
+        Outs = d.Outs,
+        Dots = d.Dots,
+        Ones = d.Ones,
+        Twos = d.Twos,
+        Threes = d.Threes,
+        Fours = d.Fours,
+        Sixes = d.Sixes,
+        Bowled = d.Bowled,
+        Caught = d.Caught,
+        Lbw = d.Lbw,
+        RunOut = d.RunOut,
+        Stumped = d.Stumped,
+        HitWicket = d.HitWicket,
+        ExtrasConceded = d.ExtrasConceded,
+        Line = $"{d.Runs} ({d.Balls})" + (d.Outs > 0 ? $" · {d.Outs} out" : "")
+    };
 
     private static string? BlankToNull(string? s)
         => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

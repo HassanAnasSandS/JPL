@@ -29,6 +29,7 @@ public partial class ScoringViewModel : ObservableObject
     public ObservableCollection<SquadPlayer> PlayerPickOptions { get; } = new();
     public ObservableCollection<BattingCardRow> BattingCard { get; } = new();
     public ObservableCollection<BowlingCardRow> BowlingCard { get; } = new();
+    public ObservableCollection<OverBallChip> ThisOverBalls { get; } = new();
     public ObservableCollection<SelectOption<ExtraType>> ExtraOptions { get; } = new();
     public ObservableCollection<SelectOption<WicketType>> WicketOptions { get; } = new();
 
@@ -47,6 +48,9 @@ public partial class ScoringViewModel : ObservableObject
     [ObservableProperty] private string sidesText = string.Empty;
     [ObservableProperty] private string squadHint = string.Empty;
     [ObservableProperty] private string duelText = "Select striker & bowler";
+    [ObservableProperty] private string thisOverLabel = "This over";
+    [ObservableProperty] private bool hasThisOverBalls;
+    [ObservableProperty] private bool showThisOverEmpty = true;
     [ObservableProperty] private string extrasText = "Extras 0";
     [ObservableProperty] private string scorecardTotalText = "0/0";
     [ObservableProperty] private string didNotBatText = string.Empty;
@@ -66,8 +70,10 @@ public partial class ScoringViewModel : ObservableObject
     [ObservableProperty] private bool canWrite;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool isWicket;
+    [ObservableProperty] private bool isDroppedCatch;
     [ObservableProperty] private bool needsFielder;
     [ObservableProperty] private bool needsDismissedChoice;
+    private bool _suppressFieldingToggle;
     [ObservableProperty] private bool canEndInnings;
     [ObservableProperty] private bool awaitingNextInnings;
     [ObservableProperty] private bool lastBatsmanCanBatAsSingleWicket;
@@ -99,6 +105,8 @@ public partial class ScoringViewModel : ObservableObject
     private bool _streamLoaded;
     /// <summary>OnAppearing re-inits the page; skip while a ball is being scored so wicket/over popups are not cancelled.</summary>
     private bool _isScoringBall;
+    /// <summary>Drops re-entrant run-pad taps without flipping IsBusy — the pad never greys out mid-over.</summary>
+    private int _scoreGate;
     private TaskCompletionSource<SquadPlayer?>? _playerPickTcs;
 
     partial void OnDidNotBatTextChanged(string value)
@@ -195,8 +203,13 @@ public partial class ScoringViewModel : ObservableObject
 
         if (!await _matches.IsScoredOnThisDeviceAsync(_matchId).ConfigureAwait(true))
         {
-            await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={_matchId}").ConfigureAwait(true);
-            return;
+            // Reinstalled app: the rows may still be on the server. Rebuild before giving up.
+            await _matches.EnsureLocalMatchAsync(_matchId).ConfigureAwait(true);
+            if (!await _matches.IsScoredOnThisDeviceAsync(_matchId).ConfigureAwait(true))
+            {
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={_matchId}").ConfigureAwait(true);
+                return;
+            }
         }
 
         var active = await _matches.GetActiveMatchAsync().ConfigureAwait(true);
@@ -234,7 +247,7 @@ public partial class ScoringViewModel : ObservableObject
         IsLiveTelecast = ctx.IsLiveTelecast;
         CompleteMatchButtonText = "Complete match";
         SyncHint = !ctx.IsLiveTelecast
-            ? "This match is local. Balls stay on this phone. Completing the match syncs the full scorecard to the server."
+            ? "Backed up to the server as you score, but not telecast. If internet drops, balls stay on this phone and auto-send when it returns."
             : _isTournamentMatch
             ? "Live to the server as you score. Tournament Sync on the list is only after the tournament is finished."
             : "Live to the server as you score. If internet drops, balls stay on this phone and auto-send when it returns.";
@@ -250,8 +263,7 @@ public partial class ScoringViewModel : ObservableObject
         var keepBowlerId = Bowler?.Id;
         var keepFielderId = Fielder?.Id;
 
-        Batters.Clear();
-        foreach (var p in ctx.Batters) Batters.Add(p);
+        ReplaceIfChanged(Batters, ctx.Batters);
         ApplyBowlersFromContext(ctx);
 
         LastBatsmanCanBatAsSingleWicket = ctx.LastBatsmanCanBatAsSingleWicket;
@@ -287,7 +299,7 @@ public partial class ScoringViewModel : ObservableObject
         DismissedPlayer = Striker;
 
         UpdateWicketUiFlags();
-        await RefreshScoreAsync().ConfigureAwait(true);
+        ApplyScore(snap);
         await RefreshScorecardAsync().ConfigureAwait(true);
         await RefreshDuelAsync().ConfigureAwait(true);
 
@@ -345,8 +357,7 @@ public partial class ScoringViewModel : ObservableObject
         }
 
         LastBatsmanCanBatAsSingleWicket = ctx.LastBatsmanCanBatAsSingleWicket;
-        Batters.Clear();
-        foreach (var p in ctx.Batters) Batters.Add(p);
+        ReplaceIfChanged(Batters, ctx.Batters);
         ApplyBowlersFromContext(ctx);
         FormatHint = ctx.FormatHint;
         BattingTeamName = ctx.BattingTeamName;
@@ -391,12 +402,11 @@ public partial class ScoringViewModel : ObservableObject
     private void ApplyBowlersFromContext(ScoringContext ctx)
     {
         var keepBowlerId = Bowler?.Id;
-        Bowlers.Clear();
-        foreach (var p in ctx.Bowlers) Bowlers.Add(p);
+        ReplaceIfChanged(Bowlers, ctx.Bowlers);
 
-        // Fielders stay full side (catches/run-outs) even if a bowler is overs-capped.
-        Fielders.Clear();
-        foreach (var p in ctx.Fielders) Fielders.Add(p);
+        // Fielders stay full side (catches/run-outs) even if a bowler is overs-capped,
+        // and include squad substitutes so a sub can be credited with the catch.
+        ReplaceIfChanged(Fielders, ctx.Fielders);
 
         // Keep current bowler only while still eligible; overs-capped bowlers drop off the list.
         Bowler = keepBowlerId is Guid id
@@ -405,6 +415,35 @@ public partial class ScoringViewModel : ObservableObject
 
         if (Fielder is not null)
             Fielder = Fielders.FirstOrDefault(p => p.Id == Fielder.Id) ?? Fielder;
+    }
+
+    /// <summary>
+    /// Pickers lose their selection whenever ItemsSource is rebuilt, so only swap the
+    /// contents when the roster actually changed (most balls leave these lists untouched).
+    /// </summary>
+    private static void ReplaceIfChanged(
+        ObservableCollection<SquadPlayer> target,
+        IReadOnlyList<SquadPlayer> source)
+    {
+        if (target.Count == source.Count)
+        {
+            var same = true;
+            for (var i = 0; i < source.Count; i++)
+            {
+                if (target[i].Id == source[i].Id
+                    && string.Equals(target[i].DisplayName, source[i].DisplayName, StringComparison.Ordinal))
+                    continue;
+                same = false;
+                break;
+            }
+
+            if (same)
+                return;
+        }
+
+        target.Clear();
+        foreach (var p in source)
+            target.Add(p);
     }
 
     partial void OnStrikerChanged(SquadPlayer? value)
@@ -422,13 +461,35 @@ public partial class ScoringViewModel : ObservableObject
         _ = RefreshScorecardAsync();
     }
     partial void OnBowlerChanged(SquadPlayer? value) => _ = RefreshDuelAsync();
-    partial void OnIsWicketChanged(bool value) => UpdateWicketUiFlags();
+    partial void OnIsWicketChanged(bool value)
+    {
+        if (!_suppressFieldingToggle && value && IsDroppedCatch)
+        {
+            _suppressFieldingToggle = true;
+            IsDroppedCatch = false;
+            _suppressFieldingToggle = false;
+        }
+        UpdateWicketUiFlags();
+    }
+
+    partial void OnIsDroppedCatchChanged(bool value)
+    {
+        if (!_suppressFieldingToggle && value && IsWicket)
+        {
+            _suppressFieldingToggle = true;
+            IsWicket = false;
+            _suppressFieldingToggle = false;
+        }
+        UpdateWicketUiFlags();
+    }
+
     partial void OnSelectedWicketOptionChanged(SelectOption<WicketType>? value) => UpdateWicketUiFlags();
 
     private void UpdateWicketUiFlags()
     {
         var type = SelectedWicketOption?.Value ?? WicketType.None;
-        NeedsFielder = IsWicket && type is WicketType.Caught or WicketType.RunOut or WicketType.Stumped;
+        NeedsFielder = IsDroppedCatch
+            || (IsWicket && type is WicketType.Caught or WicketType.RunOut or WicketType.Stumped);
         NeedsDismissedChoice = IsWicket && type == WicketType.RunOut;
         RebuildCreaseBatters();
         if (!NeedsDismissedChoice)
@@ -447,6 +508,7 @@ public partial class ScoringViewModel : ObservableObject
             return;
         }
         if (!int.TryParse(runsText, out var runs)) return;
+        if (runs is < 0 or 5 or > 6) return;
 
         ApplyLoneBatsmanState();
         var alone = IsLastBatsmanAlone;
@@ -459,9 +521,11 @@ public partial class ScoringViewModel : ObservableObject
         }
 
         var wicketType = SelectedWicketOption?.Value ?? WicketType.Bowled;
-        if (IsWicket && NeedsFielder && Fielder is null)
+        if (NeedsFielder && Fielder is null)
         {
-            ErrorMessage = "Select fielder (catch / run-out / stumped).";
+            ErrorMessage = IsDroppedCatch
+                ? "Select fielder who dropped the catch."
+                : "Select fielder (catch / run-out / stumped).";
             return;
         }
 
@@ -471,14 +535,19 @@ public partial class ScoringViewModel : ObservableObject
             return;
         }
 
+        // Ignore a second tap while the ball is saving instead of showing a busy overlay.
+        if (Interlocked.Exchange(ref _scoreGate, 1) == 1)
+            return;
+
         try
         {
-            IsBusy = true;
             _isScoringBall = true;
             ErrorMessage = null;
 
             var extra = SelectedExtraOption?.Value ?? ExtraType.None;
-            var needsFielder = IsWicket && wicketType is WicketType.Caught or WicketType.RunOut or WicketType.Stumped;
+            var dropCatch = IsDroppedCatch && !IsWicket;
+            var needsFielder = dropCatch
+                || (IsWicket && wicketType is WicketType.Caught or WicketType.RunOut or WicketType.Stumped);
             // DB NonStrikerId is required — while alone, store striker id on both ends.
             var nonStrikerId = alone ? Striker.Id : NonStriker!.Id;
 
@@ -492,7 +561,8 @@ public partial class ScoringViewModel : ObservableObject
                 IsWicket,
                 IsWicket ? wicketType : WicketType.None,
                 IsWicket ? (DismissedPlayer?.Id ?? Striker.Id) : null,
-                needsFielder ? Fielder?.Id : null);
+                needsFielder ? Fielder?.Id : null,
+                dropCatch);
 
             input = extra switch
             {
@@ -501,21 +571,6 @@ public partial class ScoringViewModel : ObservableObject
                 ExtraType.NoBall => input with { RunsOffBat = runs, ExtraRuns = 1 },
                 _ => input with { RunsOffBat = runs, ExtraRuns = 0 }
             };
-
-            if (input.RunsOffBat >= 4)
-            {
-                var pick = await Shell.Current.DisplayActionSheet(
-                    "Shot zone (wagon wheel)",
-                    "Skip",
-                    null,
-                    ShotZones.Names).ConfigureAwait(true);
-                if (!string.IsNullOrWhiteSpace(pick) && pick != "Skip")
-                {
-                    var idx = Array.IndexOf(ShotZones.Names, pick);
-                    if (idx >= 0)
-                        input = input with { ShotZone = (byte)(idx + 1) };
-                }
-            }
 
             // Local SQLite only — pickers already use cached squad.
             _feedback.PlayBallEntered();
@@ -529,6 +584,7 @@ public partial class ScoringViewModel : ObservableObject
 
             SelectedExtraOption = ExtraOptions[0];
             IsWicket = false;
+            IsDroppedCatch = false;
 
             // Drop dismissed batters; leave empty crease end for popup pick after a wicket.
             await RefreshAvailableBattersAsync(dismissedId, autoFillEmptyEnd: dismissedId is null)
@@ -603,11 +659,10 @@ public partial class ScoringViewModel : ObservableObject
                     (Striker, NonStriker) = (NonStriker, Striker);
             }
 
-            await RefreshScoreAsync().ConfigureAwait(true);
+            // One snapshot read per ball drives the scoreboard, chase panel and over/target checks.
+            var snap = await RefreshScoreAsync().ConfigureAwait(true);
             await RefreshScorecardAsync().ConfigureAwait(true);
             await RefreshDuelAsync().ConfigureAwait(true);
-
-            var snap = await _matches.GetLiveSnapshotAsync(_matchId).ConfigureAwait(true);
 
             // Target chased — stop the game and offer End innings / Complete match.
             ApplyTargetAchievedFromSnapshot(snap);
@@ -657,7 +712,7 @@ public partial class ScoringViewModel : ObservableObject
         finally
         {
             _isScoringBall = false;
-            IsBusy = false;
+            Interlocked.Exchange(ref _scoreGate, 0);
         }
     }
 
@@ -785,7 +840,6 @@ public partial class ScoringViewModel : ObservableObject
         _playerPickTcs = tcs;
 
         // Windows DisplayActionSheet was auto-dismissing. This overlay stays until a name is tapped.
-        IsBusy = false;
         await Task.Delay(50).ConfigureAwait(true);
         IsPlayerPickModalVisible = true;
 
@@ -954,6 +1008,26 @@ public partial class ScoringViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task OpenScorecardAsync()
+    {
+        if (_matchId == Guid.Empty)
+            return;
+        await Shell.Current
+            .GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={_matchId:D}")
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task OpenAnalyticsAsync()
+    {
+        if (_matchId == Guid.Empty)
+            return;
+        await Shell.Current
+            .GoToAsync($"{nameof(Pages.MatchAnalyticsPage)}?id={_matchId:D}")
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private void OpenLiveStreamModal()
     {
         if (!CanWrite)
@@ -1056,9 +1130,15 @@ public partial class ScoringViewModel : ObservableObject
         }
     }
 
-    private async Task RefreshScoreAsync()
+    private async Task<LiveScoreSnapshot?> RefreshScoreAsync()
     {
         var snap = await _matches.GetLiveSnapshotAsync(_matchId).ConfigureAwait(true);
+        ApplyScore(snap);
+        return snap;
+    }
+
+    private void ApplyScore(LiveScoreSnapshot? snap)
+    {
         ScoreText = snap?.ScoreText ?? "0/0 (0.0)";
         SituationText = snap?.SituationText ?? string.Empty;
         ShowRatePanel = snap is not null;
@@ -1104,12 +1184,16 @@ public partial class ScoringViewModel : ObservableObject
 
         BattingCard.Clear();
         BowlingCard.Clear();
+        ThisOverBalls.Clear();
         if (card is null)
         {
             ExtrasText = "Extras 0";
             ScorecardTotalText = "0/0";
             DidNotBatText = string.Empty;
             DidNotBowlText = string.Empty;
+            HasThisOverBalls = false;
+            ShowThisOverEmpty = true;
+            ThisOverLabel = "This over";
             return;
         }
 
@@ -1117,6 +1201,13 @@ public partial class ScoringViewModel : ObservableObject
             BattingCard.Add(row);
         foreach (var row in card.Bowling)
             BowlingCard.Add(row);
+        foreach (var mark in card.ThisOver ?? Array.Empty<OverBallMark>())
+            ThisOverBalls.Add(OverBallChip.From(mark));
+        HasThisOverBalls = ThisOverBalls.Count > 0;
+        ShowThisOverEmpty = !HasThisOverBalls;
+        ThisOverLabel = HasThisOverBalls
+            ? $"This over · {ThisOverBalls.Count} ball{(ThisOverBalls.Count == 1 ? "" : "s")}"
+            : "This over";
         ExtrasText = $"Extras {card.Extras}";
         ScorecardTotalText = $"{card.TotalRuns}/{card.Wickets}";
         DidNotBatText = card.DidNotBatText;

@@ -1,3 +1,4 @@
+[assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/2021/maui", "JPL")]
 [assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "JPL")]
 [assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "JPL.Pages")]
 [assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "JPL.ViewModels")]

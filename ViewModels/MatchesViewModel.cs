@@ -233,8 +233,17 @@ public partial class MatchesViewModel : ObservableObject
 
         if (!match.CanScore)
         {
-            await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={match.Id}").ConfigureAwait(true);
-            return;
+            // An unfinished match the server still holds can be taken back onto this install
+            // (the app was reinstalled, so both the SQLite rows and the device id are gone).
+            var recovered = match.IsActive
+                            && _auth.CanWrite
+                            && await _matches.EnsureLocalMatchAsync(match.Id).ConfigureAwait(true)
+                            && await _matches.IsScoredOnThisDeviceAsync(match.Id).ConfigureAwait(true);
+            if (!recovered)
+            {
+                await Shell.Current.GoToAsync($"{nameof(Pages.MatchScorecardPage)}?id={match.Id}").ConfigureAwait(true);
+                return;
+            }
         }
 
         var active = _activeMatch ?? await _matches.GetActiveMatchAsync().ConfigureAwait(true);

@@ -131,6 +131,80 @@ public sealed record MatchSummaryDto(
     Guid? SeriesId = null,
     string? LiveStreamUrl = null);
 
+/// <summary>
+/// Raw Match + Innings + Delivery rows. Lets a device that lost its SQLite file
+/// (reinstall) rebuild the scoring graph and continue the match.
+/// </summary>
+public sealed record MatchExportDto(
+    MatchRowDto Match,
+    IReadOnlyList<InningsRowDto> Innings,
+    IReadOnlyList<DeliveryRowDto> Deliveries);
+
+public sealed record MatchRowDto(
+    Guid Id,
+    string Title,
+    Guid TeamAId,
+    Guid TeamBId,
+    Guid? TeamACaptainId,
+    Guid? TeamBCaptainId,
+    int OversLimit,
+    byte OversMode,
+    byte Format,
+    Guid? FormatId,
+    DateTime MatchDateUtc,
+    string? Venue,
+    byte Status,
+    Guid? TossWinnerTeamId,
+    bool TossWinnerBatsFirst,
+    bool LastBatsmanCanBatAsSingleWicket,
+    int BowlerMaxOvers,
+    Guid? PlayerOfTheMatchPlayerId,
+    Guid? TournamentId,
+    Guid? TournamentFixtureId,
+    Guid? SeriesId,
+    Guid? SeriesFixtureId,
+    long Version,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc,
+    bool IsDeleted,
+    string? SquadRosterJson,
+    bool IsLiveTelecast,
+    string? LiveStreamUrl,
+    Guid? StartedByUserId,
+    Guid? StartedOnDeviceId);
+
+public sealed record InningsRowDto(
+    Guid Id,
+    Guid MatchId,
+    int InningsNumber,
+    Guid BattingTeamId,
+    Guid BowlingTeamId,
+    bool IsCompleted,
+    bool IsFollowOn,
+    DateTime StartedAtUtc);
+
+public sealed record DeliveryRowDto(
+    Guid Id,
+    Guid MatchId,
+    Guid InningsId,
+    int Sequence,
+    int OverNumber,
+    int BallInOver,
+    Guid BatterId,
+    Guid NonStrikerId,
+    Guid BowlerId,
+    int RunsOffBat,
+    int ExtraRuns,
+    byte ExtraType,
+    bool IsWicket,
+    byte WicketType,
+    Guid? DismissedPlayerId,
+    Guid? FielderId,
+    bool IsDroppedCatch,
+    bool IsLegalDelivery,
+    DateTime CreatedAtUtc,
+    long Version);
+
 /// <summary>Completed nets session card — list is read-only from server; create/score only via outbox sync.</summary>
 public sealed record NetSessionSummaryDto(
     Guid Id,
@@ -177,6 +251,10 @@ public sealed class NetScorecardBowlingDto
     public int RunsConceded { get; set; }
     public int Wickets { get; set; }
     public int Maidens { get; set; }
+    public int Wides { get; set; }
+    public int NoBalls { get; set; }
+    public int Byes { get; set; }
+    public int LegByes { get; set; }
 }
 
 public sealed class MatchScorecardDto
@@ -227,6 +305,24 @@ public sealed class HallOfFameDto
     public List<TrophyRowDto> CaptainTrophies { get; set; } = new();
     public List<TrophyRowDto> TournamentChampionTrophies { get; set; } = new();
     public List<TrophyRowDto> SeriesChampionTrophies { get; set; } = new();
+    public List<TrophyRowDto> PlayerOfTheTournament { get; set; } = new();
+    public List<TrophyRowDto> PlayerOfTheSeries { get; set; } = new();
+    public List<TrophyRowDto> BestBatsman { get; set; } = new();
+    public List<TrophyRowDto> BestBowler { get; set; } = new();
+    public List<TrophyRowDto> BestFielder { get; set; } = new();
+}
+
+public sealed class StatsFilterOptionDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public sealed class StatsFilterOptionsDto
+{
+    public List<StatsFilterOptionDto> Tournaments { get; set; } = new();
+    public List<StatsFilterOptionDto> Series { get; set; } = new();
+    public List<StatsFilterOptionDto> Matches { get; set; } = new();
 }
 
 public sealed class TrophyRowDto
@@ -367,6 +463,7 @@ public sealed class VenueBookingParticipantRequest
 {
     public Guid PlayerId { get; set; }
     public string Status { get; set; } = "Pending";
+    public decimal Amount { get; set; }
 }
 
 public sealed class VenueBookingDto
@@ -392,6 +489,7 @@ public sealed class VenueBookingParticipantDto
     public Guid PlayerId { get; set; }
     public string PlayerName { get; set; } = string.Empty;
     public string Status { get; set; } = "Pending";
+    public decimal Amount { get; set; }
 }
 
 public sealed class TournamentUpsertRequest
@@ -400,6 +498,12 @@ public sealed class TournamentUpsertRequest
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; } = 1;
     public int QualifyPerGroup { get; set; } = 1;
+    /// <summary>0=QF, 1=Playoff, 2=Semis, 3=Final, 4=None (same as scheduler).</summary>
+    public byte KnockoutFormat { get; set; } = 2;
+    /// <summary>0=Single, 1=Double, 2=Custom.</summary>
+    public byte RoundRobinType { get; set; }
+    public int MatchesPerTeam { get; set; }
+    public string? CustomPairsJson { get; set; }
     public Guid VenueId { get; set; }
     public Guid? FormatId { get; set; }
     public byte Format { get; set; }
@@ -437,6 +541,11 @@ public sealed class TournamentDetailDto
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; }
     public int QualifyPerGroup { get; set; }
+    public byte KnockoutFormat { get; set; }
+    public byte RoundRobinType { get; set; }
+    public int MatchesPerTeam { get; set; }
+    public string? CustomPairsJson { get; set; }
+    public bool CustomFixturesReady { get; set; }
     public Guid VenueId { get; set; }
     public string VenueName { get; set; } = string.Empty;
     public Guid? FormatId { get; set; }
@@ -450,6 +559,14 @@ public sealed class TournamentDetailDto
     public string StatusText { get; set; } = string.Empty;
     public Guid? WinnerTeamId { get; set; }
     public string? WinnerTeamName { get; set; }
+    public Guid? PlayerOfTheTournamentPlayerId { get; set; }
+    public string? PlayerOfTheTournamentName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
     public long Version { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
@@ -565,6 +682,14 @@ public sealed class SeriesDetailDto
     public string StatusText { get; set; } = string.Empty;
     public Guid? WinnerTeamId { get; set; }
     public string? WinnerTeamName { get; set; }
+    public Guid? PlayerOfTheSeriesPlayerId { get; set; }
+    public string? PlayerOfTheSeriesName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
     public bool IsTied { get; set; }
     public long Version { get; set; }
     public DateTime CreatedAtUtc { get; set; }
@@ -681,7 +806,37 @@ public sealed class BowlingRowDto
     public int RunsConceded { get; set; }
     public int Wickets { get; set; }
     public int Maidens { get; set; }
+    public int Wides { get; set; }
+    public int NoBalls { get; set; }
+    public int Byes { get; set; }
+    public int LegByes { get; set; }
     public bool IsCaptain { get; set; }
+}
+
+public sealed class PlayerMatchReportDto
+{
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public string TeamName { get; set; } = string.Empty;
+    public string MatchTitle { get; set; } = string.Empty;
+    public string BattingSummary { get; set; } = string.Empty;
+    public string BowlingSummary { get; set; } = string.Empty;
+    public string FieldingSummary { get; set; } = string.Empty;
+    public bool HasBatting { get; set; }
+    public bool HasBowling { get; set; }
+    public bool HasFielding { get; set; }
+    public List<PlayerMatchBallLineDto> BattingBalls { get; set; } = new();
+    public List<PlayerMatchBallLineDto> BowlingBalls { get; set; } = new();
+    public List<PlayerMatchBallLineDto> FieldingBalls { get; set; } = new();
+}
+
+public sealed class PlayerMatchBallLineDto
+{
+    public string OverText { get; set; } = string.Empty;
+    public string Mark { get; set; } = string.Empty;
+    public string Kind { get; set; } = "run";
+    public string Detail { get; set; } = string.Empty;
+    public string InningsLabel { get; set; } = string.Empty;
 }
 
 public sealed class SchedulerListDto

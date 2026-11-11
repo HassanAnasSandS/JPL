@@ -79,7 +79,47 @@ public sealed class SessionAuthMiddleware
             path.StartsWith("/api/grounds/", StringComparison.OrdinalIgnoreCase))
             return true;
 
+        // Public browse (no booking/write). Booking endpoints still require auth.
+        if (IsPublicBrowse(path))
+            return true;
+
         return false;
+    }
+
+    /// <summary>
+    /// Read-only discovery of published grounds. POST bookings and owner APIs stay protected.
+    /// </summary>
+    private static bool IsPublicBrowse(string path)
+    {
+        if (path.Equals("/api/grounds/search", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (path.Equals("/api/grounds/location-options", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (path.Equals("/api/catalog/amenities", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/api/catalog/amenities/", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (path.Equals("/api/catalog/services", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/api/catalog/services/", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (path.Equals("/api/catalog/shop", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/api/catalog/shop/", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // GET api/grounds/{guid} and GET api/grounds/{guid}/reviews — not bookings.
+        if (!path.StartsWith("/api/grounds/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var rest = path["/api/grounds/".Length..];
+        if (rest.Length == 0)
+            return false;
+        var slash = rest.IndexOf('/');
+        var idPart = slash < 0 ? rest : rest[..slash];
+        if (!Guid.TryParse(idPart, out _))
+            return false;
+        if (slash < 0)
+            return true; // detail
+        var tail = rest[(slash + 1)..];
+        return tail.Equals("reviews", StringComparison.OrdinalIgnoreCase)
+               || tail.StartsWith("reviews?", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetBearerToken(HttpContext context, out string token)

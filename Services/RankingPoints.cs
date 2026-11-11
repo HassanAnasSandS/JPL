@@ -18,15 +18,12 @@ public static class RankingPoints
             return list;
 
         Add(list, "Runs", $"{p.Runs} × 1", p.Runs);
-        Add(list, "Twos", $"{p.Twos} × 0.5", p.Twos * 0.5);
-        Add(list, "Threes", $"{p.Threes} × 1", p.Threes);
-        Add(list, "Fours", $"{p.Fours} × 1", p.Fours);
-        Add(list, "Fives", $"{p.Fives} × 1", p.Fives);
-        Add(list, "Sixes", $"{p.Sixes} × 2", p.Sixes * 2);
+        Add(list, "Fours", $"{p.Fours} × 2", p.Fours * 2);
+        Add(list, "Sixes", $"{p.Sixes} × 4", p.Sixes * 4);
         Add(list, "Fifties", $"{p.Fifties} × 12", p.Fifties * 12);
         Add(list, "Hundreds", $"{p.Hundreds} × 25", p.Hundreds * 25);
-        Add(list, "Not outs", $"{p.NotOuts} × 3", p.NotOuts * 3);
-        Add(list, "Highest score", $"{p.HighestScore} × 0.2", p.HighestScore * 0.2);
+        Add(list, "Not outs", $"{p.NotOuts} × 5", p.NotOuts * 5);
+        Add(list, "Highest score", $"{p.HighestScore} × 0.5", p.HighestScore * 0.5);
 
         if (p.BallsFaced >= 6)
         {
@@ -37,19 +34,19 @@ public static class RankingPoints
         if (p.InningsBatted >= 2)
         {
             var avg = SkillRatings.BatAvg(p);
-            Add(list, "Average", $"Avg {avg:0.##} vs 20 · {p.InningsBatted} inns",
-                (avg - 20) * Math.Min(p.InningsBatted, 15) * 0.35);
+            Add(list, "Average", $"Avg {avg:0.##} vs 10 · {p.InningsBatted} inns",
+                (avg - 10) * Math.Min(p.InningsBatted, 15) * 0.20);
         }
 
-        Add(list, "Dots", $"{p.Dots} × −0.4", p.Dots * -0.4);
-        Add(list, "Ducks", $"{p.Ducks} × −6", p.Ducks * -6);
-        Add(list, "Golden ducks", $"{p.GoldenDucks} × −4 extra", p.GoldenDucks * -4);
-        Add(list, "Run outs", $"{p.RunOut} × −3", p.RunOut * -3);
-        Add(list, "Stumped", $"{p.StumpedOut} × −3", p.StumpedOut * -3);
-        Add(list, "Hit wicket", $"{p.HitWicketOut} × −2", p.HitWicketOut * -2);
-        Add(list, "Bowled", $"{p.BowledOut} × −1", p.BowledOut * -1);
-        Add(list, "LBW", $"{p.LbwOut} × −1", p.LbwOut * -1);
-        Add(list, "Caught", $"{p.CaughtOut} × −0.5", p.CaughtOut * -0.5);
+        Add(list, "Dots", $"{p.Dots} × −0.2", p.Dots * -0.2);
+        Add(list, "Ducks", $"{p.Ducks} × −10", p.Ducks * -10);
+        Add(list, "Golden ducks", $"{p.GoldenDucks} × −15", p.GoldenDucks * -15);
+        Add(list, "Run outs", $"{p.RunOut} × −5", p.RunOut * -5);
+        Add(list, "Stumped", $"{p.StumpedOut} × −5", p.StumpedOut * -5);
+        Add(list, "Hit wicket", $"{p.HitWicketOut} × −5", p.HitWicketOut * -5);
+        Add(list, "Bowled", $"{p.BowledOut} × −5", p.BowledOut * -5);
+        Add(list, "LBW", $"{p.LbwOut} × −5", p.LbwOut * -5);
+        Add(list, "Caught", $"{p.CaughtOut} × −5", p.CaughtOut * -5);
         return list;
     }
 
@@ -60,7 +57,7 @@ public static class RankingPoints
             return list;
 
         var overs = p.OversBowledBalls / 6.0;
-        Add(list, "Wickets", $"{p.Wickets} × 25", p.Wickets * 25);
+        Add(list, "Wickets", $"{p.Wickets} × 10", p.Wickets * 10);
         Add(list, "Bowled wickets", $"{p.BowledWkts} × 3", p.BowledWkts * 3);
         Add(list, "LBW wickets", $"{p.LbwWkts} × 2", p.LbwWkts * 2);
         Add(list, "Stumped wickets", $"{p.StumpedWkts} × 2", p.StumpedWkts * 2);
@@ -86,8 +83,8 @@ public static class RankingPoints
             Add(list, "Wicketless spell", $"{overs:0.#} ov, 0 wkts", -overs);
         }
 
-        Add(list, "Wides", $"{p.WidesBowled} × −1.5", p.WidesBowled * -1.5);
-        Add(list, "No-balls", $"{p.NoBallsBowled} × −2", p.NoBallsBowled * -2);
+        Add(list, "Wide runs", $"{p.WidesBowled} × −1.5", p.WidesBowled * -1.5);
+        Add(list, "No-ball runs", $"{p.NoBallsBowled} × −2", p.NoBallsBowled * -2);
         Add(list, "Byes", $"{p.ByesConceded} × −0.2", p.ByesConceded * -0.2);
         Add(list, "Leg byes", $"{p.LegByesConceded} × −0.2", p.LegByesConceded * -0.2);
         return list;
@@ -97,14 +94,16 @@ public static class RankingPoints
     {
         var list = new List<RankingPart>();
         var actions = SkillRatings.FieldActions(p);
-        if (actions <= 0)
+        if (actions <= 0 && p.DroppedCatches <= 0)
             return list;
 
         Add(list, "Catches", $"{p.Catches} × 10", p.Catches * 10);
         Add(list, "Run-outs", $"{p.RunOutsEffected} × 12", p.RunOutsEffected * 12);
         Add(list, "Stumpings", $"{p.Stumpings} × 15", p.Stumpings * 15);
+        if (p.DroppedCatches > 0)
+            Add(list, "Dropped catches", $"{p.DroppedCatches} × −10", p.DroppedCatches * -10);
 
-        if (p.Matches >= 4)
+        if (p.Matches >= 4 && actions > 0)
         {
             var expected = p.Matches * 0.25;
             if (actions < expected)

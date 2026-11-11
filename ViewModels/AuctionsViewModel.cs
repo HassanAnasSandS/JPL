@@ -9,7 +9,6 @@ public partial class AuctionsViewModel : ObservableObject
 {
     private readonly IAuctionService _auctions;
     private readonly IAuthService _auth;
-    private readonly IAuctionsModuleGate _gate;
 
     public ObservableCollection<AuctionListItem> Items { get; } = new();
 
@@ -19,63 +18,28 @@ public partial class AuctionsViewModel : ObservableObject
     [ObservableProperty] private int totalCount;
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private bool canWrite;
-    [ObservableProperty] private bool isUnlocked;
 
     private int _loadBusy;
 
-    public string CountLabel => TotalCount <= 0 ? "No auctions" : $"{Items.Count} of {TotalCount}";
+    public string CountLabel => TotalCount <= 0 ? "No Auction/Drafting" : $"{Items.Count} of {TotalCount}";
 
-    public AuctionsViewModel(IAuctionService auctions, IAuthService auth, IAuctionsModuleGate gate)
+    public AuctionsViewModel(IAuctionService auctions, IAuthService auth)
     {
         _auctions = auctions;
         _auth = auth;
-        _gate = gate;
         CanWrite = _auth.CanWrite;
-        IsUnlocked = _gate.IsUnlocked;
     }
 
     public void RefreshAuthState()
     {
         CanWrite = _auth.CanWrite;
-        IsUnlocked = _gate.IsUnlocked;
     }
 
-    /// <summary>Prompt for module password only when write action needs it.</summary>
-    private async Task<bool> EnsureWriteUnlockedAsync()
+    private bool EnsureCanCreate()
     {
-        if (!CanWrite)
-        {
-            ErrorMessage = "Read-only user cannot change auctions.";
-            return false;
-        }
-
-        if (_gate.IsUnlocked)
-        {
-            IsUnlocked = true;
+        if (CanWrite)
             return true;
-        }
-
-        var password = await Shell.Current.DisplayPromptAsync(
-            "Auction password",
-            "Enter password for Add / Edit / Delete.",
-            accept: "Unlock",
-            cancel: "Cancel",
-            placeholder: "Password",
-            maxLength: 32,
-            keyboard: Keyboard.Numeric).ConfigureAwait(true);
-
-        if (password is null)
-            return false;
-
-        if (_gate.TryUnlock(password))
-        {
-            IsUnlocked = true;
-            ErrorMessage = null;
-            return true;
-        }
-
-        IsUnlocked = false;
-        await Shell.Current.DisplayAlert("Access denied", "Wrong password.", "OK").ConfigureAwait(true);
+        ErrorMessage = "Read-only user cannot create Auction/Drafting.";
         return false;
     }
 
@@ -106,7 +70,6 @@ public partial class AuctionsViewModel : ObservableObject
                 IsLoadingMore = true;
             ErrorMessage = null;
             CanWrite = _auth.CanWrite;
-            IsUnlocked = _gate.IsUnlocked;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
 
             var page = await _auctions.GetPageAsync(Items.Count, q: null).ConfigureAwait(true);
@@ -132,7 +95,7 @@ public partial class AuctionsViewModel : ObservableObject
     [RelayCommand]
     private async Task AddAsync()
     {
-        if (!await EnsureWriteUnlockedAsync().ConfigureAwait(true))
+        if (!EnsureCanCreate())
             return;
         await Shell.Current.GoToAsync(nameof(Pages.AuctionEditPage)).ConfigureAwait(true);
     }
@@ -141,9 +104,17 @@ public partial class AuctionsViewModel : ObservableObject
     private async Task EditAsync(AuctionListItem? item)
     {
         if (item is null) return;
-        if (!await EnsureWriteUnlockedAsync().ConfigureAwait(true))
-            return;
+        if (!item.CanEditSetup) return;
         await Shell.Current.GoToAsync($"{nameof(Pages.AuctionEditPage)}?id={item.Id}").ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task EnterAsync(AuctionListItem? item)
+    {
+        if (item is null) return;
+        if (!item.CanEnterAsCaptain) return;
+        await Shell.Current.GoToAsync($"{nameof(Pages.AuctionEditPage)}?id={item.Id}&mode=enter")
+            .ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -158,11 +129,10 @@ public partial class AuctionsViewModel : ObservableObject
     private async Task DeleteAsync(AuctionListItem? item)
     {
         if (item is null) return;
-        if (!await EnsureWriteUnlockedAsync().ConfigureAwait(true))
-            return;
+        if (!item.CanDelete) return;
 
         var ok = await Shell.Current.DisplayAlert(
-            "Delete auction",
+            "Delete Auction/Drafting",
             $"Delete \"{item.Title}\"? This cannot be undone.",
             "Delete",
             "Cancel").ConfigureAwait(true);

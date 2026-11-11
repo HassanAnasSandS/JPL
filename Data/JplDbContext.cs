@@ -254,6 +254,7 @@ public sealed class JplDbContext : DbContext
                 .HasForeignKey(x => x.VenueBookingId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasIndex(x => x.PlayerId);
         });
 

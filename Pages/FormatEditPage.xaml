@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              x:Class="JPL.Pages.FormatEditPage"
              x:DataType="vm:FormatEditViewModel"
@@ -24,7 +25,7 @@
                             SelectedItem="{Binding SelectedType}" />
                     <Label Text="{Binding FormatHint}" Style="{StaticResource MutedLabel}" />
 
-                    <HorizontalStackLayout Spacing="12">
+                    <HorizontalStackLayout Spacing="12" jpl:ToggleOnTap.Enable="True">
                         <Switch IsToggled="{Binding NoOversLimit}"
                                 VerticalOptions="Center" />
                         <VerticalStackLayout Spacing="2" VerticalOptions="Center">
@@ -38,7 +39,7 @@
                     </HorizontalStackLayout>
 
                     <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowOversFields}">
-                        <HorizontalStackLayout Spacing="12">
+                        <HorizontalStackLayout Spacing="12" jpl:ToggleOnTap.Enable="True">
                             <Switch IsToggled="{Binding OversAreMatchTotal}"
                                     VerticalOptions="Center" />
                             <VerticalStackLayout Spacing="2" VerticalOptions="Center">

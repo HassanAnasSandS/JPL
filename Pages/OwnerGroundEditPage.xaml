@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
              xmlns:vm="clr-namespace:JPL.ViewModels"
              xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.OwnerGroundEditPage"
@@ -350,7 +351,9 @@
                                     <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
                                     <Label Grid.Column="1"
                                            Text="{Binding Code}"
-                                           VerticalOptions="Center" />
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="Fill"
+                                           jpl:ToggleOnTap.Enable="True" />
                                     <Button Grid.Column="2"
                                             Text="Remove"
                                             FontSize="11"
@@ -386,7 +389,9 @@
                                     <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
                                     <Label Grid.Column="1"
                                            Text="{Binding Code}"
-                                           VerticalOptions="Center" />
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="Fill"
+                                           jpl:ToggleOnTap.Enable="True" />
                                     <Entry Grid.Column="2"
                                            Placeholder="PKR"
                                            Text="{Binding AmountText}"
@@ -432,7 +437,9 @@
                                     <CheckBox IsChecked="{Binding IsSelected}" VerticalOptions="Center" />
                                     <Label Grid.Column="1"
                                            Text="{Binding Code}"
-                                           VerticalOptions="Center" />
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="Fill"
+                                           jpl:ToggleOnTap.Enable="True" />
                                     <Picker Grid.Column="2"
                                             ItemsSource="{Binding BindingContext.ShopKinds, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
                                             SelectedItem="{Binding Kind}"

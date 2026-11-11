@@ -39,6 +39,14 @@ public sealed class LeagueWriteGuardMiddleware
             return;
         }
 
+        if (IsAuctionApi(path)
+            && (string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, nameof(AppRole.User), StringComparison.OrdinalIgnoreCase)))
+        {
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
+
         if (string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase)
             && IsHomeLeagueRequest(context))
         {
@@ -64,6 +72,9 @@ public sealed class LeagueWriteGuardMiddleware
 
         return true;
     }
+
+    private static bool IsAuctionApi(string path)
+        => path.StartsWith("/api/auctions", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsMutating(string method)
         => HttpMethods.IsPost(method)

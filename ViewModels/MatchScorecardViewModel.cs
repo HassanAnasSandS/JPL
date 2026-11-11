@@ -18,6 +18,8 @@ public partial class MatchScorecardViewModel : ObservableObject
     private readonly IOptions<ApiOptions> _api;
     private string? _matchId;
     private Guid _loadedMatchId;
+    /// <summary>Match we already tried to pull back from the server — one attempt per match.</summary>
+    private Guid _hydratedMatchId;
     private CancellationTokenSource? _watchCts;
     private int _tickBusy;
     private string? _boundStreamUrl;
@@ -33,10 +35,13 @@ public partial class MatchScorecardViewModel : ObservableObject
 
             _matchId = value;
             _loadedMatchId = Guid.Empty;
+            _hydratedMatchId = Guid.Empty;
             _boundStreamUrl = null;
             IsLiveStreamOpen = false;
             StreamSource = null;
             IsDetailScorecardModalOpen = false;
+            IsPlayerReportOpen = false;
+            PlayerReport = null;
             _ = LoadAsync();
         }
     }
@@ -69,6 +74,9 @@ public partial class MatchScorecardViewModel : ObservableObject
     [ObservableProperty] private string totalOvers = "—";
     [ObservableProperty] private bool isLiveStreamOpen;
     [ObservableProperty] private bool isDetailScorecardModalOpen;
+    [ObservableProperty] private bool isPlayerReportOpen;
+    [ObservableProperty] private bool isPlayerReportBusy;
+    [ObservableProperty] private PlayerMatchReport? playerReport;
     [ObservableProperty] private string strikerName = "—";
     [ObservableProperty] private string strikerScore = "";
     [ObservableProperty] private string nonStrikerName = "—";
@@ -99,6 +107,7 @@ public partial class MatchScorecardViewModel : ObservableObject
     public bool ShowDetailPane => ShowFullScorecard || ShowPlaceholder;
     public bool ShowShellNavBar => !ShowLiveOverlay;
     public bool ShowDetailScorecardModal => IsDetailScorecardModalOpen && IsLiveStreamOpen;
+    public bool HasPlayerReport => PlayerReport is not null;
     public string ScorecardTapHint => "Tap for full scorecard";
     public string LiveBannerText => BrandSlogans.LiveScore;
 
@@ -157,6 +166,9 @@ public partial class MatchScorecardViewModel : ObservableObject
 
     partial void OnIsDetailScorecardModalOpenChanged(bool value)
         => OnPropertyChanged(nameof(ShowDetailScorecardModal));
+
+    partial void OnPlayerReportChanged(PlayerMatchReport? value)
+        => OnPropertyChanged(nameof(HasPlayerReport));
 
     partial void OnHasScorecardChanged(bool value)
     {
@@ -284,6 +296,53 @@ public partial class MatchScorecardViewModel : ObservableObject
         => IsDetailScorecardModalOpen = false;
 
     [RelayCommand]
+    private async Task OpenPlayerReportAsync(object? parameter)
+    {
+        var playerId = parameter switch
+        {
+            Guid g => g,
+            _ when Guid.TryParse($"{parameter}", out var parsed) => parsed,
+            _ => Guid.Empty
+        };
+        if (playerId == Guid.Empty || !Guid.TryParse(MatchId, out var matchId))
+            return;
+
+        IsPlayerReportOpen = true;
+        IsPlayerReportBusy = true;
+        PlayerReport = null;
+        try
+        {
+            PlayerReport = await _matches.GetPlayerMatchReportAsync(matchId, playerId).ConfigureAwait(true)
+                           ?? new PlayerMatchReport
+                           {
+                               PlayerId = playerId,
+                               PlayerName = "Player",
+                               BattingSummary = "No ball-by-ball data for this match."
+                           };
+        }
+        catch (Exception ex)
+        {
+            PlayerReport = new PlayerMatchReport
+            {
+                PlayerId = playerId,
+                PlayerName = "Player",
+                BattingSummary = ex.Message
+            };
+        }
+        finally
+        {
+            IsPlayerReportBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ClosePlayerReport()
+    {
+        IsPlayerReportOpen = false;
+        PlayerReport = null;
+    }
+
+    [RelayCommand]
     private void ToggleDetailScorecard()
     {
         if (ShowFullScorecard)
@@ -317,6 +376,15 @@ public partial class MatchScorecardViewModel : ObservableObject
             }
 
             var card = await _matches.GetMatchScorecardAsync(id).ConfigureAwait(true);
+            if ((card is null || card.Innings.Count == 0) && !silent && _hydratedMatchId != id)
+            {
+                // Nothing local and nothing on the scorecard endpoint — the raw rows may still
+                // be on the server (app reinstalled mid-match). Rebuild once, then read again.
+                _hydratedMatchId = id;
+                if (await _matches.EnsureLocalMatchAsync(id, reclaimDeviceIfOwner: false).ConfigureAwait(true))
+                    card = await _matches.GetMatchScorecardAsync(id).ConfigureAwait(true) ?? card;
+            }
+
             if (card is null)
             {
                 if (!silent)
@@ -328,7 +396,7 @@ public partial class MatchScorecardViewModel : ObservableObject
                     CurrentOver = "0.0";
                     TotalOvers = "—";
                     HasScorecard = false;
-                    ErrorMessage = "Scorecard not found on this device.";
+                    ErrorMessage = "Match not on this device or server. It was scored offline and never uploaded.";
                 }
                 return;
             }

@@ -54,11 +54,13 @@ public sealed class PublicIdentityController : ControllerBase
         if (!System.IO.File.Exists(path))
             return NotFound("Profile page is missing.");
         var html = await System.IO.File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+        var photoAbs = $"{Request.Scheme}://{Request.Host}/api/public/leagues/{leagueId:D}/players/{playerId:D}/image";
         html = html
             .Replace("{{LEAGUE_ID}}", leagueId.ToString("D"), StringComparison.Ordinal)
             .Replace("{{PLAYER_ID}}", playerId.ToString("D"), StringComparison.Ordinal)
             .Replace("{{LEAGUE_NAME}}", System.Net.WebUtility.HtmlEncode(leagueName), StringComparison.Ordinal)
-            .Replace("{{PLAYER_NAME}}", System.Net.WebUtility.HtmlEncode(name), StringComparison.Ordinal);
+            .Replace("{{PLAYER_NAME}}", System.Net.WebUtility.HtmlEncode(name), StringComparison.Ordinal)
+            .Replace("{{PHOTO_URL}}", photoAbs, StringComparison.Ordinal);
         Response.Headers.CacheControl = "no-store";
         return Content(html, "text/html; charset=utf-8");
     }

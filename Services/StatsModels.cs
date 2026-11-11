@@ -18,6 +18,12 @@ public sealed class ConfrontationStat
     public int Fives { get; set; }
     public int Sixes { get; set; }
     public int Outs { get; set; }
+    public int Bowled { get; set; }
+    public int Caught { get; set; }
+    public int Lbw { get; set; }
+    public int RunOut { get; set; }
+    public int Stumped { get; set; }
+    public int HitWicket { get; set; }
     public int ExtrasConceded { get; set; }
 
     public double StrikeRate => Balls == 0 ? 0 : Math.Round(Runs * 100.0 / Balls, 1);
@@ -28,34 +34,68 @@ public sealed class ConfrontationStat
     public double BowlingEconomy => Balls == 0 ? 0 : Math.Round(RunsConcededTotal * 6.0 / Balls, 2);
     public double BowlingStrikeRate => Outs == 0 ? 0 : Math.Round((double)Balls / Outs, 2);
     public string BowlingStrikeRateText => Outs == 0 ? "-" : BowlingStrikeRate.ToString("0.##");
+    public bool HasWicketTypes => Outs > 0;
+}
+
+/// <summary>This fielder vs a batter they dismissed (or dropped against).</summary>
+public sealed class FieldingVsStat
+{
+    public Guid FielderId { get; set; }
+    public string FielderName { get; set; } = string.Empty;
+    public Guid BatterId { get; set; }
+    public string BatterName { get; set; } = string.Empty;
+    public int Catches { get; set; }
+    public int RunOuts { get; set; }
+    public int Stumpings { get; set; }
+    public int DroppedCatches { get; set; }
+    public int Total => Catches + RunOuts + Stumpings;
 }
 
 /// <summary>This captain vs an opposing captain (player 1 vs 1 · Captaincy).</summary>
 public sealed class CaptainVsStat
 {
-    public Guid CaptainId { get; init; }
-    public string CaptainName { get; init; } = string.Empty;
-    public Guid OpponentCaptainId { get; init; }
-    public string OpponentCaptainName { get; init; } = string.Empty;
+    public Guid CaptainId { get; set; }
+    public string CaptainName { get; set; } = string.Empty;
+    public Guid OpponentCaptainId { get; set; }
+    public string OpponentCaptainName { get; set; } = string.Empty;
 
     public int Played { get; set; }
     public int Won { get; set; }
     public int Lost { get; set; }
     public int Tied { get; set; }
+    public int RunsFor { get; set; }
+    public int RunsAgainst { get; set; }
+    public int BallsFor { get; set; }
+    public int BallsAgainst { get; set; }
     public int Series { get; set; }
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
     public int SeriesTied { get; set; }
 
+    public int Points => Won * 2 + Tied;
     public double WinPct => Played == 0
         ? 0
         : Math.Round(((Won + Tied * 0.5) / Played) * 100, 1);
     public string WinPctText => Played == 0 ? "-" : WinPct.ToString("0.#") + "%";
+    public double Nrr
+    {
+        get
+        {
+            var of = BallsFor <= 0 ? 0 : RunsFor / (BallsFor / 6.0);
+            var oa = BallsAgainst <= 0 ? 0 : RunsAgainst / (BallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string NrrText => Played == 0 ? "-" : Nrr.ToString("+0.000;-0.000;0.000");
     public string RecordText => $"{Won}–{Lost}–{Tied}";
     public bool HasSeries => Series > 0;
     public string SeriesRecordText => Series == 0
         ? "-"
         : $"{SeriesWon}–{SeriesLoss}–{SeriesTied}";
+    public double SeriesWinPct => Series == 0
+        ? 0
+        : Math.Round(((SeriesWon + SeriesTied * 0.5) / Series) * 100, 1);
+    public string SeriesWinPctText => Series == 0 ? "-" : SeriesWinPct.ToString("0.#") + "%";
 }
 
 /// <summary>Full leaderboard row: Match · Batting · Bowling · Fielding · Attendance.</summary>
@@ -75,33 +115,78 @@ public sealed class PlayerCareerSummary
     public int Won { get; set; }
     public int Loss { get; set; }
     public int Tied { get; set; }
+    public double MatchWinPct => Matches == 0
+        ? 0
+        : Math.Round(((Won + Tied * 0.5) / Matches) * 100, 1);
+    public string MatchWinPctText => Matches == 0 ? "-" : MatchWinPct.ToString("0.#") + "%";
     public int CaptainMatches { get; set; }
     public int CaptainWon { get; set; }
     public int CaptainLoss { get; set; }
     public int CaptainTied { get; set; }
+    public int CaptainPoints => CaptainWon * 2 + CaptainTied;
+    public int CaptainRunsFor { get; set; }
+    public int CaptainRunsAgainst { get; set; }
+    public int CaptainBallsFor { get; set; }
+    public int CaptainBallsAgainst { get; set; }
+    public double CaptainWinPct => CaptainMatches == 0
+        ? 0
+        : Math.Round(((CaptainWon + CaptainTied * 0.5) / CaptainMatches) * 100, 1);
+    public string CaptainWinPctText => CaptainMatches == 0 ? "-" : CaptainWinPct.ToString("0.#") + "%";
+    public double CaptainNrr
+    {
+        get
+        {
+            var of = CaptainBallsFor <= 0 ? 0 : CaptainRunsFor / (CaptainBallsFor / 6.0);
+            var oa = CaptainBallsAgainst <= 0 ? 0 : CaptainRunsAgainst / (CaptainBallsAgainst / 6.0);
+            return Math.Round(of - oa, 3);
+        }
+    }
+    public string CaptainNrrText => CaptainMatches == 0 ? "-" : CaptainNrr.ToString("+0.000;-0.000;0.000");
 
     // Tournament
     public int Tournaments { get; set; }
     public int TournamentWon { get; set; }
     public int TournamentLoss { get; set; }
     public int TournamentTied { get; set; }
+    public double TournamentWinPct => Tournaments == 0
+        ? 0
+        : Math.Round(((TournamentWon + TournamentTied * 0.5) / Tournaments) * 100, 1);
+    public string TournamentWinPctText => Tournaments == 0 ? "-" : TournamentWinPct.ToString("0.#") + "%";
     public int CaptainTournaments { get; set; }
     public int CaptainTournamentWon { get; set; }
     public int CaptainTournamentLoss { get; set; }
     public int CaptainTournamentTied { get; set; }
+    public double CaptainTournamentWinPct => CaptainTournaments == 0
+        ? 0
+        : Math.Round(((CaptainTournamentWon + CaptainTournamentTied * 0.5) / CaptainTournaments) * 100, 1);
+    public string CaptainTournamentWinPctText => CaptainTournaments == 0
+        ? "-"
+        : CaptainTournamentWinPct.ToString("0.#") + "%";
 
     // Series
     public int Series { get; set; }
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
     public int SeriesTied { get; set; }
+    public double SeriesWinPct => Series == 0
+        ? 0
+        : Math.Round(((SeriesWon + SeriesTied * 0.5) / Series) * 100, 1);
+    public string SeriesWinPctText => Series == 0 ? "-" : SeriesWinPct.ToString("0.#") + "%";
     public int CaptainSeries { get; set; }
     public int CaptainSeriesWon { get; set; }
     public int CaptainSeriesLoss { get; set; }
     public int CaptainSeriesTied { get; set; }
+    public double CaptainSeriesWinPct => CaptainSeries == 0
+        ? 0
+        : Math.Round(((CaptainSeriesWon + CaptainSeriesTied * 0.5) / CaptainSeries) * 100, 1);
+    public string CaptainSeriesWinPctText => CaptainSeries == 0
+        ? "-"
+        : CaptainSeriesWinPct.ToString("0.#") + "%";
 
     // Batting
     public int InningsBatted { get; set; }
+    /// <summary>Distinct innings in which this player bowled at least one delivery.</summary>
+    public int InningsBowled { get; set; }
     public int BallsFaced { get; set; }
     public int Runs { get; set; }
     public int Dots { get; set; }
@@ -118,6 +203,8 @@ public sealed class PlayerCareerSummary
     public int CaughtOut { get; set; }
     public int LbwOut { get; set; }
     public int RunOut { get; set; }
+    /// <summary>Times this player got their batting partner run out (surviving partner).</summary>
+    public int PartnerRunOuts { get; set; }
     public int StumpedOut { get; set; }
     public int HitWicketOut { get; set; }
     public int RetiredOut { get; set; }
@@ -128,6 +215,10 @@ public sealed class PlayerCareerSummary
     public int RunsConceded { get; set; }
     public int Wickets { get; set; }
     public int DotBallsBowled { get; set; }
+    /// <summary>Boundaries of 4 off the bat conceded while bowling.</summary>
+    public int FoursConceded { get; set; }
+    /// <summary>Boundaries of 6+ off the bat conceded while bowling.</summary>
+    public int SixesConceded { get; set; }
     public int WidesBowled { get; set; }
     public int NoBallsBowled { get; set; }
     public int ByesConceded { get; set; }
@@ -143,6 +234,15 @@ public sealed class PlayerCareerSummary
     public int Catches { get; set; }
     public int RunOutsEffected { get; set; }
     public int Stumpings { get; set; }
+    /// <summary>Catches + run outs + stumpings.</summary>
+    public int FieldingTotal => Catches + RunOutsEffected + Stumpings;
+    /// <summary>Fielding total per match played.</summary>
+    public double FieldingPerMatch => Matches == 0
+        ? 0
+        : Math.Round(FieldingTotal / (double)Matches, 2);
+    public string FieldingPerMatchText => Matches == 0 ? "-" : FieldingPerMatch.ToString("0.##");
+    /// <summary>Catches dropped while fielding (credited to the fielder).</summary>
+    public int DroppedCatches { get; set; }
 
     // Attendance (venue bookings)
     public int AttendanceTotal { get; set; }
@@ -152,6 +252,19 @@ public sealed class PlayerCareerSummary
         ? 0
         : Math.Round(AttendancePresent * 100.0 / AttendanceTotal, 1);
     public string AttendancePctText => AttendanceTotal == 0 ? "-" : AttendancePct.ToString("0.#") + "%";
+    /// <summary>Sum of this player's venue-booking share amounts.</summary>
+    public decimal PaymentTotal { get; set; }
+    /// <summary>Sum of shares marked Paid.</summary>
+    public decimal PaymentPaid { get; set; }
+    /// <summary>Unpaid share (PaymentTotal − PaymentPaid).</summary>
+    public decimal PaymentRemaining => Math.Max(0, PaymentTotal - PaymentPaid);
+    public double PaymentPaidPct => PaymentTotal <= 0
+        ? 0
+        : Math.Round((double)(PaymentPaid / PaymentTotal) * 100, 1);
+    public string PaymentTotalText => PaymentTotal.ToString("0.##");
+    public string PaymentPaidText => PaymentPaid.ToString("0.##");
+    public string PaymentRemainingText => PaymentRemaining.ToString("0.##");
+    public string PaymentPaidPctText => PaymentTotal <= 0 ? "-" : PaymentPaidPct.ToString("0.#") + "%";
 
     // Batting milestones
     public int HighestScore { get; set; }
@@ -163,14 +276,28 @@ public sealed class PlayerCareerSummary
     public int GoldenDucks { get; set; }
     public int Fifties { get; set; }
     public int Hundreds { get; set; }
+    /// <summary>Share of runs from 4s and 6s: (4×Fours + 6×Sixes) / Runs.</summary>
+    public double BoundaryPct => Runs <= 0
+        ? 0
+        : Math.Round((Fours * 4 + Sixes * 6) * 100.0 / Runs, 1);
+    public string BoundaryPctText => Runs <= 0 ? "-" : BoundaryPct.ToString("0.#") + "%";
 
     // Bowling milestones
     public int Maidens { get; set; }
+    /// <summary>Innings with 5+ bowler-credited wickets.</summary>
+    public int FiveWicketHauls { get; set; }
     public int BestBowlingWickets { get; set; }
     public int BestBowlingRuns { get; set; }
     public string BestBowlingText { get; set; } = "-";
+    /// <summary>Bowler-credited wickets where the batter was dismissed for 0.</summary>
+    public int DuckWkts { get; set; }
+    /// <summary>Bowler-credited wickets where the batter was dismissed first ball for 0.</summary>
+    public int GoldenDuckWkts { get; set; }
     /// <summary>Bowler-credited wickets in three consecutive deliveries (same innings).</summary>
     public int HatTricks { get; set; }
+    /// <summary>Completed overs.balls from legal balls bowled (e.g. 17.3).</summary>
+    public string OversBowledText =>
+        OversBowledBalls <= 0 ? "-" : $"{OversBowledBalls / 6}.{OversBowledBalls % 6}";
 
     public string HighestScoreText
     {
@@ -208,11 +335,24 @@ public sealed class PlayerCareerSummary
     public string BowlingStrikeRateText => Wickets == 0 ? "-" : BowlingStrikeRate.ToString("0.##");
 }
 
+/// <summary>One player on a team squad (Statistics · Teams detail).</summary>
+public sealed class TeamSquadPlayerRow
+{
+    public Guid PlayerId { get; init; }
+    public string PlayerName { get; init; } = string.Empty;
+    public bool IsCaptain { get; init; }
+    public string RoleText => IsCaptain ? "Captain" : "Squad";
+}
+
 /// <summary>Statistics · Teams row: matches, NRR, tournaments, series.</summary>
 public sealed class TeamCareerSummary
 {
     public Guid TeamId { get; init; }
     public string TeamName { get; init; } = string.Empty;
+    public Guid? CaptainPlayerId { get; set; }
+    public string? CaptainName { get; set; }
+    public string CaptainLine => string.IsNullOrWhiteSpace(CaptainName) ? "No captain" : CaptainName!;
+    public bool HasCaptain => !string.IsNullOrWhiteSpace(CaptainName);
     public int Rank { get; set; }
     public bool IsAltRow { get; set; }
 
@@ -228,10 +368,19 @@ public sealed class TeamCareerSummary
     public int Tournaments { get; set; }
     public int TournamentWon { get; set; }
     public int TournamentLoss { get; set; }
+    public int TournamentTied { get; set; }
+    public double TournamentWinPct => Tournaments == 0
+        ? 0
+        : Math.Round(((TournamentWon + TournamentTied * 0.5) / Tournaments) * 100, 1);
+    public string TournamentWinPctText => Tournaments == 0 ? "-" : TournamentWinPct.ToString("0.#") + "%";
     public int Series { get; set; }
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
     public int SeriesTied { get; set; }
+    public double SeriesWinPct => Series == 0
+        ? 0
+        : Math.Round(((SeriesWon + SeriesTied * 0.5) / Series) * 100, 1);
+    public string SeriesWinPctText => Series == 0 ? "-" : SeriesWinPct.ToString("0.#") + "%";
 
     public double WinPct => Played == 0
         ? 0
@@ -252,8 +401,8 @@ public sealed class TeamCareerSummary
 /// <summary>Head-to-head row: this team vs one opponent.</summary>
 public sealed class TeamVsStat
 {
-    public Guid OpponentTeamId { get; init; }
-    public string OpponentTeamName { get; init; } = string.Empty;
+    public Guid OpponentTeamId { get; set; }
+    public string OpponentTeamName { get; set; } = string.Empty;
     public string TeamName { get; set; } = string.Empty;
     public int Played { get; set; }
     public int Won { get; set; }

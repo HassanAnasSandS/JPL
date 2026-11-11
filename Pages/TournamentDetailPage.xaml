@@ -9,9 +9,10 @@
              Title="Tournament"
              HideSoftInputOnTapped="True">
 
+    <Grid>
     <RefreshView IsRefreshing="{Binding IsBusy}" Command="{Binding LoadCommand}">
         <ScrollView>
-            <VerticalStackLayout Padding="14" Spacing="16">
+            <VerticalStackLayout Padding="12" Spacing="10">
 
                 <!-- Header -->
                 <VerticalStackLayout Spacing="6">
@@ -42,6 +43,27 @@
                            FontAttributes="Bold"
                            FontSize="14"
                            TextColor="{StaticResource Secondary}" />
+                    <VerticalStackLayout Spacing="2"
+                                         Margin="0,4,0,0"
+                                         IsVisible="{Binding HasAwards}">
+                        <Label Text="{Binding PlayerOfTournamentLine}"
+                               IsVisible="{Binding HasPlayerOfTournament}"
+                               FontAttributes="Bold"
+                               FontSize="13"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding BestBatsmanLine}"
+                               IsVisible="{Binding HasBestBatsman}"
+                               FontSize="12"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding BestBowlerLine}"
+                               IsVisible="{Binding HasBestBowler}"
+                               FontSize="12"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding BestFielderLine}"
+                               IsVisible="{Binding HasBestFielder}"
+                               FontSize="12"
+                               TextColor="{StaticResource Primary}" />
+                    </VerticalStackLayout>
                     <HorizontalStackLayout Spacing="8" Margin="0,4,0,0">
                         <Button Text="Edit draft"
                                 IsVisible="{Binding CanSave}"
@@ -59,12 +81,20 @@
                 </VerticalStackLayout>
 
                 <!-- Points tables (one per group) -->
-                <VerticalStackLayout Spacing="12" IsVisible="{Binding HasStandings}">
+                <VerticalStackLayout Spacing="8" IsVisible="{Binding HasStandings}">
                     <Label Text="Points table" Style="{StaticResource SectionLabel}" />
-                    <Label Text="Win 2 · Tie 1 · Loss 0"
+                    <Label Text="Won = 2 · Tied = 1 · Loss = 0"
                            Style="{StaticResource MutedLabel}"
                            FontSize="11"
                            Margin="0,-6,0,0" />
+                    <Label Text="Q = Qualified · E = Eliminated (shown when certain)"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="11"
+                           Margin="0,-4,0,0" />
+                    <Label Text="Tap a team to see their schedule and results"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="11"
+                           Margin="0,-4,0,0" />
 
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding StandingGroups}" Spacing="14">
                         <BindableLayout.ItemTemplate>
@@ -97,20 +127,50 @@
                                             <DataTemplate x:DataType="svc:TournamentStandingItem">
                                                 <Grid ColumnDefinitions="28,*,28,28,28,28,36,52"
                                                       ColumnSpacing="2"
-                                                      Padding="6,8"
+                                                      Padding="6,5"
                                                       BackgroundColor="{StaticResource SurfaceMuted}">
+                                                    <Grid.GestureRecognizers>
+                                                        <TapGestureRecognizer
+                                                            Command="{Binding BindingContext.OpenTeamScheduleCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                            CommandParameter="{Binding .}" />
+                                                    </Grid.GestureRecognizers>
                                                     <Label Text="{Binding Rank}"
                                                            FontSize="12"
                                                            FontAttributes="Bold"
                                                            HorizontalTextAlignment="Center"
                                                            VerticalOptions="Center"
                                                            TextColor="{StaticResource Secondary}" />
-                                                    <Label Grid.Column="1"
-                                                           Text="{Binding TeamName}"
-                                                           FontSize="13"
-                                                           FontAttributes="Bold"
-                                                           LineBreakMode="TailTruncation"
-                                                           VerticalOptions="Center" />
+                                                    <HorizontalStackLayout Grid.Column="1"
+                                                                           Spacing="6"
+                                                                           VerticalOptions="Center">
+                                                        <Label Text="{Binding TeamName}"
+                                                               FontSize="13"
+                                                               FontAttributes="Bold"
+                                                               LineBreakMode="TailTruncation"
+                                                               VerticalOptions="Center" />
+                                                        <Border IsVisible="{Binding IsQualified}"
+                                                                StrokeThickness="0"
+                                                                BackgroundColor="#D1FAE5"
+                                                                Padding="6,2"
+                                                                StrokeShape="RoundRectangle 6"
+                                                                VerticalOptions="Center">
+                                                            <Label Text="Q"
+                                                                   FontSize="10"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{StaticResource Success}" />
+                                                        </Border>
+                                                        <Border IsVisible="{Binding IsEliminated}"
+                                                                StrokeThickness="0"
+                                                                BackgroundColor="#FFE8EC"
+                                                                Padding="6,2"
+                                                                StrokeShape="RoundRectangle 6"
+                                                                VerticalOptions="Center">
+                                                            <Label Text="E"
+                                                                   FontSize="10"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{StaticResource Danger}" />
+                                                        </Border>
+                                                    </HorizontalStackLayout>
                                                     <Label Grid.Column="2" Text="{Binding Played}" FontSize="12" HorizontalTextAlignment="Center" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
                                                     <Label Grid.Column="3" Text="{Binding Won}" FontSize="12" HorizontalTextAlignment="Center" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
                                                     <Label Grid.Column="4" Text="{Binding Lost}" FontSize="12" HorizontalTextAlignment="Center" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
@@ -138,14 +198,33 @@
                     </VerticalStackLayout>
                 </VerticalStackLayout>
 
-                <!-- Fixtures schedule -->
-                <VerticalStackLayout Spacing="10">
+                <!-- Fixtures schedule (day-wise, same pattern as Tournament Scheduler) -->
+                <VerticalStackLayout Spacing="8">
                     <Label Text="Fixtures" Style="{StaticResource SectionLabel}" />
-                    <Label Text="Save to create schedule. Start when both teams are ready."
+                    <Label Text="Save to create the schedule. Fixtures can start after that."
                            IsVisible="{Binding IsDraft}"
                            Style="{StaticResource MutedLabel}"
                            FontSize="11"
-                           Margin="0,-4,0,0" />
+                           Margin="0,-6,0,0" />
+                    <Label Text="Tap a fixture to open its scorecard. Start when both teams are ready."
+                           IsVisible="{Binding ShowFixtureHint}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="11"
+                           Margin="0,-6,0,0" />
+                    <VerticalStackLayout Spacing="2"
+                                         IsVisible="{Binding HasFixtures}"
+                                         Margin="0,0,0,2">
+                        <Label Text="{Binding TournamentMatchesLine}"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding GroupRoundMatchesLine}"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                        <Label Text="{Binding GroupMatchesLine}"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
 
                     <Label Text="No fixtures yet."
                            IsVisible="{Binding ShowNoFixtures}"
@@ -153,74 +232,91 @@
 
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding FixtureGroups}"
                                          IsVisible="{Binding HasFixtures}"
-                                         Spacing="14">
+                                         Spacing="10">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="vm:TournamentFixtureGroup">
-                                <VerticalStackLayout Spacing="0">
+                                <VerticalStackLayout Spacing="4">
                                     <Label Text="{Binding Title}"
                                            FontAttributes="Bold"
-                                           FontSize="14"
-                                           Margin="0,0,0,6"
+                                           FontSize="13"
+                                           Margin="2,2,0,0"
                                            TextColor="{StaticResource Primary}" />
 
-                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Fixtures}" Spacing="0">
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Fixtures}" Spacing="4">
                                         <BindableLayout.ItemTemplate>
                                             <DataTemplate x:DataType="svc:TournamentFixtureItem">
-                                                    <Grid ColumnDefinitions="*,Auto"
-                                                      ColumnSpacing="8"
-                                                      Padding="0,12">
-                                                    <VerticalStackLayout Spacing="2" VerticalOptions="Center">
-                                                        <VerticalStackLayout.GestureRecognizers>
-                                                            <TapGestureRecognizer
-                                                                Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                                                CommandParameter="{Binding .}" />
-                                                        </VerticalStackLayout.GestureRecognizers>
-                                                        <Label Text="{Binding Label}"
-                                                               FontSize="11"
-                                                               Style="{StaticResource MutedLabel}" />
-                                                        <Label Text="{Binding VsLine}"
-                                                               FontSize="14"
-                                                               FontAttributes="Bold"
-                                                               TextColor="{StaticResource Primary}" />
-                                                        <Label Text="{Binding ResultText}"
-                                                               IsVisible="{Binding HasResult}"
-                                                               FontSize="12"
-                                                               FontAttributes="Bold"
-                                                               TextColor="{StaticResource Secondary}" />
-                                                        <Label Text="{Binding MatchStatusText}"
-                                                               FontSize="11"
-                                                               Style="{StaticResource MutedLabel}" />
-                                                    </VerticalStackLayout>
-                                                    <VerticalStackLayout Grid.Column="1"
-                                                                         Spacing="4"
-                                                                         VerticalOptions="Center"
-                                                                         HorizontalOptions="End">
-                                                        <Button Text="Start"
-                                                                IsVisible="{Binding CanStart}"
-                                                                Style="{StaticResource GoldButton}"
-                                                                Padding="12,6"
-                                                                FontSize="11"
-                                                                MinimumHeightRequest="34"
-                                                                Command="{Binding BindingContext.StartFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                                                CommandParameter="{Binding .}" />
-                                                        <Button Text="Resume"
-                                                                IsVisible="{Binding CanResume}"
-                                                                Style="{StaticResource GhostButton}"
-                                                                Padding="12,6"
-                                                                FontSize="11"
-                                                                MinimumHeightRequest="34"
-                                                                Command="{Binding BindingContext.ResumeFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                                                CommandParameter="{Binding .}" />
-                                                        <Button Text="{Binding ScorecardLabel}"
-                                                                IsVisible="{Binding CanOpenScorecard}"
-                                                                Style="{StaticResource GhostButton}"
-                                                                Padding="12,6"
-                                                                FontSize="11"
-                                                                MinimumHeightRequest="34"
-                                                                Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
-                                                                CommandParameter="{Binding .}" />
-                                                    </VerticalStackLayout>
-                                                </Grid>
+                                                <Border Stroke="{StaticResource Gray200}"
+                                                        StrokeThickness="1"
+                                                        BackgroundColor="{StaticResource CardBackground}"
+                                                        StrokeShape="RoundRectangle 10"
+                                                        Padding="10,8">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                        <VerticalStackLayout Spacing="1" VerticalOptions="Center">
+                                                            <VerticalStackLayout.GestureRecognizers>
+                                                                <TapGestureRecognizer
+                                                                    Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                                    CommandParameter="{Binding .}" />
+                                                            </VerticalStackLayout.GestureRecognizers>
+                                                            <Label Text="{Binding Label}"
+                                                                   FontSize="11"
+                                                                   Style="{StaticResource MutedLabel}" />
+                                                            <Label Text="{Binding VsLine}"
+                                                                   FontAttributes="Bold"
+                                                                   FontSize="14"
+                                                                   LineBreakMode="TailTruncation"
+                                                                   TextColor="{StaticResource Primary}" />
+                                                            <Label Text="{Binding ResultText}"
+                                                                   IsVisible="{Binding HasResult}"
+                                                                   FontSize="11"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{StaticResource Success}" />
+                                                            <Label Text="{Binding MatchStatusText}"
+                                                                   FontSize="11"
+                                                                   Style="{StaticResource MutedLabel}" />
+                                                        </VerticalStackLayout>
+                                                        <VerticalStackLayout Grid.Column="1"
+                                                                             Spacing="4"
+                                                                             VerticalOptions="Center"
+                                                                             HorizontalOptions="End">
+                                                            <Button Text="Start"
+                                                                    IsVisible="{Binding CanStart}"
+                                                                    Style="{StaticResource GoldButton}"
+                                                                    Padding="12,0"
+                                                                    FontSize="12"
+                                                                    FontAttributes="Bold"
+                                                                    HeightRequest="32"
+                                                                    MinimumHeightRequest="32"
+                                                                    MinimumWidthRequest="72"
+                                                                    CornerRadius="8"
+                                                                    Command="{Binding BindingContext.StartFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                                    CommandParameter="{Binding .}" />
+                                                            <Button Text="Resume"
+                                                                    IsVisible="{Binding CanResume}"
+                                                                    Style="{StaticResource GhostButton}"
+                                                                    Padding="12,0"
+                                                                    FontSize="12"
+                                                                    FontAttributes="Bold"
+                                                                    HeightRequest="32"
+                                                                    MinimumHeightRequest="32"
+                                                                    MinimumWidthRequest="72"
+                                                                    CornerRadius="8"
+                                                                    Command="{Binding BindingContext.ResumeFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                                    CommandParameter="{Binding .}" />
+                                                            <Button Text="{Binding ScorecardLabel}"
+                                                                    IsVisible="{Binding CanOpenScorecard}"
+                                                                    Style="{StaticResource GhostButton}"
+                                                                    Padding="12,0"
+                                                                    FontSize="12"
+                                                                    FontAttributes="Bold"
+                                                                    HeightRequest="32"
+                                                                    MinimumHeightRequest="32"
+                                                                    MinimumWidthRequest="88"
+                                                                    CornerRadius="8"
+                                                                    Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                                    CommandParameter="{Binding .}" />
+                                                        </VerticalStackLayout>
+                                                    </Grid>
+                                                </Border>
                                             </DataTemplate>
                                         </BindableLayout.ItemTemplate>
                                     </VerticalStackLayout>
@@ -234,4 +330,124 @@
             </VerticalStackLayout>
         </ScrollView>
     </RefreshView>
+
+        <Grid IsVisible="{Binding ShowTeamScheduleModal}"
+              InputTransparent="False"
+              ZIndex="30">
+            <BoxView Color="#990D1B2A"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding CloseTeamScheduleCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border Style="{StaticResource CardBorder}"
+                    Padding="16"
+                    Margin="18"
+                    VerticalOptions="Center"
+                    MaximumWidthRequest="480"
+                    MaximumHeightRequest="560"
+                    HorizontalOptions="Center">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="{Binding TeamScheduleTitle}"
+                               FontAttributes="Bold"
+                               FontSize="18"
+                               LineBreakMode="TailTruncation"
+                               TextColor="{StaticResource Primary}" />
+                        <Label Text="{Binding TeamScheduleSubtitle}"
+                               FontSize="12"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
+                    <ScrollView Grid.Row="1" MaximumHeightRequest="400">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="No fixtures for this team."
+                                   IsVisible="{Binding TeamScheduleEmpty}"
+                                   Style="{StaticResource MutedLabel}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TeamScheduleMatches}"
+                                                 Spacing="6">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TeamScheduleMatchItem">
+                                        <Border Stroke="{StaticResource Gray200}"
+                                                StrokeThickness="1"
+                                                BackgroundColor="{StaticResource CardBackground}"
+                                                StrokeShape="RoundRectangle 10"
+                                                Padding="10,8">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                                    <Label Text="{Binding StageLabel}"
+                                                           FontSize="11"
+                                                           Style="{StaticResource MutedLabel}" />
+                                                    <Label Text="{Binding OpponentLine}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"
+                                                           LineBreakMode="TailTruncation"
+                                                           TextColor="{StaticResource Primary}" />
+                                                    <Label Text="{Binding StatusText}"
+                                                           IsVisible="{Binding ShowStatus}"
+                                                           FontSize="11"
+                                                           Style="{StaticResource MutedLabel}" />
+                                                    <Label Text="{Binding ResultText}"
+                                                           IsVisible="{Binding HasResult}"
+                                                           FontSize="12"
+                                                           FontAttributes="Bold"
+                                                           TextColor="{StaticResource Success}" />
+                                                </VerticalStackLayout>
+                                                <VerticalStackLayout Grid.Column="1"
+                                                                     Spacing="4"
+                                                                     VerticalOptions="Center"
+                                                                     HorizontalOptions="End">
+                                                    <Button Text="Start"
+                                                            IsVisible="{Binding CanStart}"
+                                                            Style="{StaticResource GoldButton}"
+                                                            Padding="12,0"
+                                                            FontSize="12"
+                                                            FontAttributes="Bold"
+                                                            HeightRequest="32"
+                                                            MinimumHeightRequest="32"
+                                                            MinimumWidthRequest="72"
+                                                            CornerRadius="8"
+                                                            Command="{Binding BindingContext.StartFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                            CommandParameter="{Binding Fixture}" />
+                                                    <Button Text="Resume"
+                                                            IsVisible="{Binding CanResume}"
+                                                            Style="{StaticResource GhostButton}"
+                                                            Padding="12,0"
+                                                            FontSize="12"
+                                                            FontAttributes="Bold"
+                                                            HeightRequest="32"
+                                                            MinimumHeightRequest="32"
+                                                            MinimumWidthRequest="72"
+                                                            CornerRadius="8"
+                                                            Command="{Binding BindingContext.ResumeFixtureCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                            CommandParameter="{Binding Fixture}" />
+                                                    <Button Text="{Binding ScorecardLabel}"
+                                                            IsVisible="{Binding CanOpenScorecard}"
+                                                            Style="{StaticResource GhostButton}"
+                                                            Padding="12,0"
+                                                            FontSize="12"
+                                                            FontAttributes="Bold"
+                                                            HeightRequest="32"
+                                                            MinimumHeightRequest="32"
+                                                            MinimumWidthRequest="88"
+                                                            CornerRadius="8"
+                                                            Command="{Binding BindingContext.OpenScorecardCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                            CommandParameter="{Binding Fixture}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                    <Button Grid.Row="2"
+                            Text="Close"
+                            Style="{StaticResource GhostButton}"
+                            HeightRequest="40"
+                            Command="{Binding CloseTeamScheduleCommand}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
 </ContentPage>

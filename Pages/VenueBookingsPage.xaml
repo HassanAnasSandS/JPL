@@ -57,12 +57,36 @@
                                         <Label Text="{Binding DateText}"
                                                Style="{StaticResource MutedLabel}" />
                                     </VerticalStackLayout>
-                                    <Label Grid.Column="1"
-                                           Text="{Binding CostText}"
-                                           FontAttributes="Bold"
-                                           FontSize="16"
-                                           VerticalOptions="Center"
-                                           TextColor="{StaticResource Secondary}" />
+                                    <VerticalStackLayout Grid.Column="1"
+                                                         Spacing="1"
+                                                         HorizontalOptions="End"
+                                                         VerticalOptions="Center">
+                                        <Label Text="{Binding CostText}"
+                                               FontAttributes="Bold"
+                                               FontSize="16"
+                                               HorizontalTextAlignment="End"
+                                               TextColor="{StaticResource Secondary}" />
+                                        <Label FontSize="11"
+                                               HorizontalTextAlignment="End"
+                                               TextColor="{StaticResource Success}">
+                                            <Label.FormattedText>
+                                                <FormattedString>
+                                                    <Span Text="Paid " />
+                                                    <Span Text="{Binding PaidAmountText}" FontAttributes="Bold" />
+                                                </FormattedString>
+                                            </Label.FormattedText>
+                                        </Label>
+                                        <Label FontSize="11"
+                                               HorizontalTextAlignment="End"
+                                               TextColor="{StaticResource Danger}">
+                                            <Label.FormattedText>
+                                                <FormattedString>
+                                                    <Span Text="Due " />
+                                                    <Span Text="{Binding OutstandingAmountText}" FontAttributes="Bold" />
+                                                </FormattedString>
+                                            </Label.FormattedText>
+                                        </Label>
+                                    </VerticalStackLayout>
                                 </Grid>
                                 <Label Text="{Binding BookedByLine}" FontSize="12" Style="{StaticResource MutedLabel}" />
                                 <Label Text="{Binding ParticipantsLine}" FontSize="12" Style="{StaticResource MutedLabel}" />

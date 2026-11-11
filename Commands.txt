@@ -1,11 +1,41 @@
-Android App Release 
-dotnet build "E:\JPL\JPL.csproj" -f net9.0-android -c Release
-# output: E:\JPL\releases\Cric360-v1.0.3.apk  (display 1.0.3, versionCode 6)
+New Build Publish/Release krnay k lie 
 
-API Release
+APIs
+
+Get-Process -Name "JPL.Api" -ErrorAction SilentlyContinue | Stop-Process -Force
+dotnet clean "E:\JPL\JPL.Api\JPL.Api.csproj" -c Release
+Remove-Item "E:\JPL\JPL.Api\bin","E:\JPL\JPL.Api\obj","E:\JPL\bin\APIs" -Recurse -Force -ErrorAction SilentlyContinue
 dotnet publish "E:\JPL\JPL.Api\JPL.Api.csproj" -c Release -o "E:\JPL\bin\APIs"
-# health: https://jpl.shoptick.shop/api/health  version 1.0.2
 
-Grounds API Release
+-----
+
+Ground APIs
+
+Get-Process -Name "JPL.Grounds.Api" -ErrorAction SilentlyContinue | Stop-Process -Force
+dotnet clean "E:\JPL\JPL.Grounds.Api\JPL.Grounds.Api.csproj" -c Release
+Remove-Item "E:\JPL\JPL.Grounds.Api\bin","E:\JPL\JPL.Grounds.Api\obj","E:\JPL\bin\GroundsApi" -Recurse -Force -ErrorAction SilentlyContinue
 dotnet publish "E:\JPL\JPL.Grounds.Api\JPL.Grounds.Api.csproj" -c Release -o "E:\JPL\bin\GroundsApi"
-# health: https://jplground.shoptick.shop/api/health  version 1.0.3
+
+-----
+
+Android
+
+dotnet build "E:\JPL\JPL.csproj" -f net9.0-android -c Release
+
+-------------------------------------------
+
+Direct Update Run Krnay k lie
+
+Desktop (New Updated Build Bna kr)
+
+Start-Process dotnet -ArgumentList "run","-f","net9.0-windows10.0.19041.0" -WorkingDirectory "E:\JPL"
+
+Desktop (Without New Updated Build Bna kr)
+
+Start-Process "E:\JPL\bin\Debug\net9.0-windows10.0.19041.0\win10-x64\JPL.exe"
+
+-----
+
+
+
+

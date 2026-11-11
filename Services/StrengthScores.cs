@@ -120,14 +120,15 @@ public static class StrengthScores
     public static double FieldingRaw(PlayerCareerSummary p)
     {
         var actions = SkillRatings.FieldActions(p);
-        if (actions <= 0)
+        if (actions <= 0 && p.DroppedCatches <= 0)
             return 0;
 
         var matches = Math.Max(p.Matches, 1);
         var dpm = actions / (double)matches;
         var quality = Unit(dpm, 0.15, 1.1) * 55
                       + Unit(actions, 1, 8) * 30
-                      + Unit(p.Stumpings, 0, 4) * 15;
+                      + Unit(p.Stumpings, 0, 4) * 15
+                      - Unit(p.DroppedCatches, 0, 5) * 25;
         var trust = 0.80 + 0.20 * Math.Min(1.0, matches / 5.0);
         return Clamp(quality * trust);
     }

@@ -68,7 +68,7 @@ public sealed class SeriesController : ControllerBase
 
     [HttpGet("page")]
     public async Task<ActionResult<PagedResult<SeriesListDto>>> GetPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         (skip, take) = Paging.Clamp(skip, take);
         var query = _db.Series.AsNoTracking().Where(s => !s.IsDeleted);
@@ -213,6 +213,10 @@ public sealed class SeriesController : ControllerBase
 
         s.Status = SeriesStatus.Scheduled;
         s.WinnerTeamId = null;
+        s.PlayerOfTheSeriesPlayerId = null;
+        s.BestBatsmanPlayerId = null;
+        s.BestBowlerPlayerId = null;
+        s.BestFielderPlayerId = null;
         s.IsTied = false;
         s.UpdatedAtUtc = DateTime.Now;
         s.Version++;
@@ -353,6 +357,24 @@ public sealed class SeriesController : ControllerBase
             .ToDictionaryAsync(x => x.Id, x => x.Name, ct)
             .ConfigureAwait(false);
 
+        var awardPlayerIds = new[]
+            {
+                s.PlayerOfTheSeriesPlayerId,
+                s.BestBatsmanPlayerId,
+                s.BestBowlerPlayerId,
+                s.BestFielderPlayerId
+            }
+            .Where(id => id is Guid)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var playerNames = awardPlayerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Players.AsNoTracking()
+                .Where(p => awardPlayerIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+                .ConfigureAwait(false);
+
         var venueName = await _db.Venues.AsNoTracking()
             .Where(v => v.Id == s.VenueId)
             .Select(v => v.Name)
@@ -441,6 +463,22 @@ public sealed class SeriesController : ControllerBase
             StatusText = StatusText(s.Status),
             WinnerTeamId = s.WinnerTeamId,
             WinnerTeamName = winnerName,
+            PlayerOfTheSeriesPlayerId = s.PlayerOfTheSeriesPlayerId,
+            PlayerOfTheSeriesName = s.PlayerOfTheSeriesPlayerId is Guid pot
+                ? playerNames.GetValueOrDefault(pot)
+                : null,
+            BestBatsmanPlayerId = s.BestBatsmanPlayerId,
+            BestBatsmanName = s.BestBatsmanPlayerId is Guid bat
+                ? playerNames.GetValueOrDefault(bat)
+                : null,
+            BestBowlerPlayerId = s.BestBowlerPlayerId,
+            BestBowlerName = s.BestBowlerPlayerId is Guid bowl
+                ? playerNames.GetValueOrDefault(bowl)
+                : null,
+            BestFielderPlayerId = s.BestFielderPlayerId,
+            BestFielderName = s.BestFielderPlayerId is Guid field
+                ? playerNames.GetValueOrDefault(field)
+                : null,
             IsTied = s.IsTied,
             Version = s.Version,
             CreatedAtUtc = s.CreatedAtUtc,

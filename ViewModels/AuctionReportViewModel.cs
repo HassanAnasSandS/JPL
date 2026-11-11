@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using JPL.Domain;
 using JPL.Services;
 
 namespace JPL.ViewModels;
@@ -9,6 +10,7 @@ public partial class AuctionReportViewModel : ObservableObject
 {
     private readonly IAuctionService _auctions;
     private List<AuctionReportRow> _all = new();
+    private int _auctionCount;
     private string _sortColumn = "PlayerName";
     private bool _sortAscending = true;
 
@@ -23,9 +25,28 @@ public partial class AuctionReportViewModel : ObservableObject
     [ObservableProperty] private string sortedByText = "Sorted by Player (asc) — tap a column header to sort";
     [ObservableProperty] private bool showDetail;
     [ObservableProperty] private AuctionReportRow? selected;
-    [ObservableProperty] private string detailTitle = "Player auction details";
+    [ObservableProperty] private string detailTitle = "Player details";
     [ObservableProperty] private string playerNameFilter = string.Empty;
+    [ObservableProperty] private int selectedTab;
 
+    public AuctionKind CurrentKind => (AuctionKind)Math.Clamp(SelectedTab, 0, 4);
+    public bool IsSimpleAuctionTab => SelectedTab == 0;
+    public bool IsAdvanceAuctionTab => SelectedTab == 1;
+    public bool IsSimpleDraftTab => SelectedTab == 2;
+    public bool IsAdvanceDraftTab => SelectedTab == 3;
+    public bool IsBasicAuctionTab => SelectedTab == 4;
+    public bool IsDraftingTab => AuctionKindText.IsDrafting(CurrentKind);
+    public bool ShowAuctionStats => !IsDraftingTab;
+    public bool ShowDraftStats => IsDraftingTab;
+    public string ReportTitle => $"{AuctionKindText.Of(CurrentKind)} analytics";
+    public string DetailKindLine => IsDraftingTab
+        ? $"{AuctionKindText.Of(CurrentKind)} · pool appearances"
+        : $"{AuctionKindText.Of(CurrentKind)} · as lot";
+    public string DetailCaptainHeading => IsDraftingTab ? "As captain (picks)" : "As captain";
+    public string DetailLotHeading => $"{AuctionKindText.Of(CurrentKind)} history (as {(IsDraftingTab ? "pool player" : "lot")})";
+    public string DetailCaptainHistoryHeading => $"{AuctionKindText.Of(CurrentKind)} history (as captain)";
+    public string EmptyRowsText => $"No {AuctionKindText.Of(CurrentKind)} participation yet.";
+    public string EmptyCaptainText => $"Never a captain in {AuctionKindText.Of(CurrentKind)}.";
     public bool CanLoad => !IsBusy && !IsSorting;
     public bool ShowTable => !ShowDetail;
     public bool ShowLoading => IsBusy || IsSorting;
@@ -35,6 +56,14 @@ public partial class AuctionReportViewModel : ObservableObject
     public bool HasDetailCaptainEvents => DetailCaptainEvents.Count > 0;
     public bool HasNoDetailCaptainEvents => !HasDetailCaptainEvents;
     public bool HasActiveFilters => !string.IsNullOrWhiteSpace(PlayerNameFilter);
+    public bool ShowCaptainWallet => ShowDetail && !IsDraftingTab && Selected?.HasCaptainWallet == true;
+    public bool ShowCaptainDraft => ShowDetail && IsDraftingTab && Selected is { TimesAsCaptain: > 0 };
+    public bool ShowLotPrices => ShowDetail && !IsDraftingTab;
+    public string DetailSubtitle => Selected is null
+        ? string.Empty
+        : IsDraftingTab
+            ? $"{Selected.AuctionsParticipated} {AuctionKindText.Of(CurrentKind)} · Picked {Selected.TimesSold}"
+            : $"Across {Selected.AuctionsParticipated} {AuctionKindText.Of(CurrentKind)}";
 
     public AuctionReportViewModel(IAuctionService auctions) => _auctions = auctions;
 
@@ -59,13 +88,60 @@ public partial class AuctionReportViewModel : ObservableObject
     partial void OnShowDetailChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowTable));
+        OnPropertyChanged(nameof(ShowCaptainWallet));
+        OnPropertyChanged(nameof(ShowCaptainDraft));
+        OnPropertyChanged(nameof(ShowLotPrices));
         SortCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedChanged(AuctionReportRow? value)
+    {
+        OnPropertyChanged(nameof(ShowCaptainWallet));
+        OnPropertyChanged(nameof(ShowCaptainDraft));
+        OnPropertyChanged(nameof(DetailSubtitle));
     }
 
     partial void OnPlayerNameFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasActiveFilters));
         ApplySort();
+    }
+
+    partial void OnSelectedTabChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsSimpleAuctionTab));
+        OnPropertyChanged(nameof(IsAdvanceAuctionTab));
+        OnPropertyChanged(nameof(IsSimpleDraftTab));
+        OnPropertyChanged(nameof(IsAdvanceDraftTab));
+        OnPropertyChanged(nameof(IsBasicAuctionTab));
+        OnPropertyChanged(nameof(IsDraftingTab));
+        OnPropertyChanged(nameof(ShowAuctionStats));
+        OnPropertyChanged(nameof(ShowDraftStats));
+        OnPropertyChanged(nameof(ReportTitle));
+        OnPropertyChanged(nameof(DetailKindLine));
+        OnPropertyChanged(nameof(DetailCaptainHeading));
+        OnPropertyChanged(nameof(DetailLotHeading));
+        OnPropertyChanged(nameof(DetailCaptainHistoryHeading));
+        OnPropertyChanged(nameof(EmptyRowsText));
+        OnPropertyChanged(nameof(EmptyCaptainText));
+        OnPropertyChanged(nameof(ShowCaptainWallet));
+        OnPropertyChanged(nameof(ShowCaptainDraft));
+        OnPropertyChanged(nameof(ShowLotPrices));
+        OnPropertyChanged(nameof(DetailSubtitle));
+    }
+
+    [RelayCommand]
+    private async Task SelectTabAsync(string? key)
+    {
+        if (!int.TryParse(key, out var i) || i < 0 || i > 3)
+            return;
+        if (SelectedTab == i && _all.Count > 0)
+            return;
+
+        SelectedTab = i;
+        if (ShowDetail)
+            BackToTable();
+        await LoadAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -77,7 +153,8 @@ public partial class AuctionReportViewModel : ObservableObject
             ErrorMessage = null;
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
 
-            var list = await _auctions.GetAllTimeReportAsync().ConfigureAwait(true);
+            var (count, list) = await _auctions.GetAllTimeReportAsync(CurrentKind).ConfigureAwait(true);
+            _auctionCount = count;
             _all = list.ToList();
             ApplySort();
 
@@ -105,7 +182,6 @@ public partial class AuctionReportViewModel : ObservableObject
         PlayerNameFilter = string.Empty;
     }
 
-    /// <summary>Tap column header: first click sorts desc for numbers / asc for name; tap again toggles.</summary>
     [RelayCommand(CanExecute = nameof(CanSort))]
     private async Task Sort(string? column)
     {
@@ -119,14 +195,12 @@ public partial class AuctionReportViewModel : ObservableObject
         else
         {
             _sortColumn = column;
-            // Name: A→Z first; numeric stats: high→low first.
             _sortAscending = column is "PlayerName";
         }
 
         IsSorting = true;
         try
         {
-            // Let the spinner paint so the tap is visibly acknowledged.
             await Task.Delay(50).ConfigureAwait(true);
 
             var sortColumn = _sortColumn;
@@ -176,20 +250,40 @@ public partial class AuctionReportViewModel : ObservableObject
 
     private void UpdateSummary(IReadOnlyList<AuctionReportRow> rows)
     {
-        if (_all.Count == 0)
+        var type = AuctionKindText.Of(CurrentKind);
+        if (_auctionCount == 0 && _all.Count == 0)
         {
-            SummaryText = "No auction data yet.";
+            SummaryText = $"No {type} data yet.";
             return;
         }
 
         var players = rows.Count;
+        var prefix = HasActiveFilters
+            ? $"{players} of {_all.Count} players"
+            : $"{players} player{(players == 1 ? "" : "s")}";
+        var events = $"{_auctionCount} {type}";
+
+        if (players == 0)
+        {
+            SummaryText = HasActiveFilters
+                ? "No players match the search."
+                : $"{events} · no player stats yet.";
+            return;
+        }
+
+        if (IsDraftingTab)
+        {
+            var picked = rows.Sum(r => r.TimesSold);
+            var left = rows.Sum(r => r.TimesUnsold);
+            var squad = rows.Sum(r => r.PlayersBoughtAsCaptain);
+            SummaryText = $"{events} · {prefix} · Picked {picked} · Left {left} · Captain picks {squad}";
+            return;
+        }
+
         var wallets = rows.Sum(r => r.TotalWalletAssigned);
         var spent = rows.Sum(r => r.TotalSpentAsCaptain);
         var earned = rows.Sum(r => r.TotalSoldAmount);
-        var prefix = HasActiveFilters ? $"{players} of {_all.Count} players" : $"{players} players";
-        SummaryText = players == 0
-            ? "No players match the search."
-            : $"{prefix} · Sold {earned:N0} · Wallets {wallets:N0} · Spent {spent:N0}";
+        SummaryText = $"{events} · {prefix} · Sold {earned:N0} · Wallets {wallets:N0} · Spent {spent:N0}";
     }
 
     private static List<AuctionReportRow> BuildSortedRows(
@@ -228,15 +322,16 @@ public partial class AuctionReportViewModel : ObservableObject
         "TotalWalletAssigned" => r.TotalWalletAssigned,
         "TotalSpentAsCaptain" => r.TotalSpentAsCaptain,
         "WalletRemaining" => r.WalletRemaining,
+        "PlayersBoughtAsCaptain" => r.PlayersBoughtAsCaptain,
         _ => r.PlayerName
     };
 
-    private static string DisplayName(string column) => column switch
+    private string DisplayName(string column) => column switch
     {
         "PlayerName" => "Player",
-        "AuctionsParticipated" => "Auc",
-        "TimesSold" => "Sold",
-        "TimesUnsold" => "Unsold",
+        "AuctionsParticipated" => IsDraftingTab ? "#" : "A/D",
+        "TimesSold" => IsDraftingTab ? "Pick" : "Sold",
+        "TimesUnsold" => IsDraftingTab ? "Left" : "Unsold",
         "TotalBasePrice" => "B.Tot",
         "TotalSoldAmount" => "S.Tot",
         "AverageSoldPrice" => "Avg",
@@ -245,6 +340,7 @@ public partial class AuctionReportViewModel : ObservableObject
         "TotalWalletAssigned" => "Wallet",
         "TotalSpentAsCaptain" => "Spent",
         "WalletRemaining" => "Left",
+        "PlayersBoughtAsCaptain" => "Squad",
         _ => column
     };
 
@@ -274,12 +370,12 @@ public partial class AuctionReportViewModel : ObservableObject
         {
             IsBusy = true;
             ErrorMessage = null;
-            var detail = await _auctions.GetPlayerDetailAsync(playerId).ConfigureAwait(true);
+            var detail = await _auctions.GetPlayerDetailAsync(playerId, CurrentKind).ConfigureAwait(true);
             DetailLots.Clear();
             DetailCaptainEvents.Clear();
             if (detail is null)
             {
-                ErrorMessage = "No auction history for this player.";
+                ErrorMessage = $"No {AuctionKindText.Of(CurrentKind)} history for this player.";
                 NotifyDetailFlags();
                 return;
             }
@@ -308,5 +404,8 @@ public partial class AuctionReportViewModel : ObservableObject
         OnPropertyChanged(nameof(HasNoDetailLots));
         OnPropertyChanged(nameof(HasDetailCaptainEvents));
         OnPropertyChanged(nameof(HasNoDetailCaptainEvents));
+        OnPropertyChanged(nameof(ShowCaptainWallet));
+        OnPropertyChanged(nameof(ShowCaptainDraft));
+        OnPropertyChanged(nameof(DetailSubtitle));
     }
 }

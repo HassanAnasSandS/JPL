@@ -169,7 +169,10 @@ public sealed class Delivery
     public WicketType WicketType { get; set; }
     public Guid? DismissedPlayerId { get; set; }
     public Guid? FielderId { get; set; }
+    /// <summary>Fielder dropped a catch on this ball (not a wicket).</summary>
+    public bool IsDroppedCatch { get; set; }
     public bool IsLegalDelivery { get; set; } = true;
+    /// <summary>Legacy shot-zone tag. Zone capture was removed; kept so old rows and sync payloads still map.</summary>
     public byte ShotZone { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public long Version { get; set; } = 1;
@@ -266,6 +269,7 @@ public sealed class VenueBookingParticipant
     public VenueBooking VenueBooking { get; set; } = null!;
     public Guid PlayerId { get; set; }
     public string Status { get; set; } = VenueBookingPaymentStatus.Pending;
+    public decimal Amount { get; set; }
 }
 
 public enum TournamentStatus : byte
@@ -280,7 +284,9 @@ public enum TournamentFixtureStage : byte
 {
     Group = 0,
     SemiFinal = 1,
-    Final = 2
+    Final = 2,
+    QuarterFinal = 3,
+    Playoff = 4
 }
 
 public sealed class Tournament
@@ -289,6 +295,14 @@ public sealed class Tournament
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; } = 1;
     public int QualifyPerGroup { get; set; } = 1;
+    /// <summary>Same as scheduler: 0=QF, 1=Playoff, 2=Semis, 3=Final, 4=None.</summary>
+    public byte KnockoutFormat { get; set; } = 2;
+    /// <summary>0=Single, 1=Double, 2=Custom.</summary>
+    public byte RoundRobinType { get; set; }
+    /// <summary>Custom only — matches each team should play.</summary>
+    public int MatchesPerTeam { get; set; }
+    /// <summary>Custom only — JSON array of { "a": guid, "b": guid }.</summary>
+    public string? CustomPairsJson { get; set; }
     /// <summary>Venue applied to every fixture match (required).</summary>
     public Guid VenueId { get; set; }
     public Guid? FormatId { get; set; }
@@ -299,6 +313,10 @@ public sealed class Tournament
     public int BowlerMaxOvers { get; set; }
     public TournamentStatus Status { get; set; } = TournamentStatus.Draft;
     public Guid? WinnerTeamId { get; set; }
+    public Guid? PlayerOfTheTournamentPlayerId { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.Now;
@@ -355,6 +373,10 @@ public sealed class Series
     public int BowlerMaxOvers { get; set; }
     public SeriesStatus Status { get; set; } = SeriesStatus.Draft;
     public Guid? WinnerTeamId { get; set; }
+    public Guid? PlayerOfTheSeriesPlayerId { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
     public bool IsTied { get; set; }
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
@@ -414,6 +436,8 @@ public sealed class NetDelivery
     public WicketType WicketType { get; set; }
     public Guid? DismissedPlayerId { get; set; }
     public Guid? FielderId { get; set; }
+    /// <summary>Fielder dropped a catch on this ball (not a wicket).</summary>
+    public bool IsDroppedCatch { get; set; }
     public bool IsLegalDelivery { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     public long Version { get; set; } = 1;

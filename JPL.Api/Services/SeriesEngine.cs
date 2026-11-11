@@ -106,6 +106,20 @@ public static class SeriesEngine
             changed = true;
         }
 
+        if (series.Status == SeriesStatus.Completed)
+        {
+            var deliveries = innsByMatch.Values
+                .SelectMany(list => list)
+                .SelectMany(i => i.Deliveries)
+                .ToList();
+            if (EventAwardsCalculator.TryAssignSeries(series, deliveries))
+            {
+                series.UpdatedAtUtc = DateTime.Now;
+                series.Version++;
+                changed = true;
+            }
+        }
+
         return (standings, changed);
     }
 

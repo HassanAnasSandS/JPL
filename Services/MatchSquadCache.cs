@@ -11,7 +11,19 @@ public sealed class SquadPlayer
     public Guid Id { get; init; }
     public string FullName { get; init; } = string.Empty;
     public bool IsCaptain { get; init; }
-    public string DisplayName => IsCaptain ? $"{FullName} (C)" : FullName;
+    public bool IsSubstitute { get; init; }
+    public string DisplayName
+    {
+        get
+        {
+            var n = FullName;
+            if (IsCaptain)
+                n += " (C)";
+            if (IsSubstitute)
+                n += " (Substitute)";
+            return n;
+        }
+    }
     public override string ToString() => DisplayName;
 }
 
@@ -28,6 +40,11 @@ public sealed class MatchRosterPayload
     public string? TeamBCaptainName { get; set; }
     public List<SquadPlayer> TeamAPlayers { get; set; } = new();
     public List<SquadPlayer> TeamBPlayers { get; set; } = new();
+    public List<SquadPlayer> TeamASubstitutes { get; set; } = new();
+    public List<SquadPlayer> TeamBSubstitutes { get; set; } = new();
+
+    public IEnumerable<SquadPlayer> AllNamedPlayers()
+        => TeamAPlayers.Concat(TeamBPlayers).Concat(TeamASubstitutes).Concat(TeamBSubstitutes);
 
     public static MatchRosterPayload From(
         ApiTeamDto teamA,
@@ -36,14 +53,19 @@ public sealed class MatchRosterPayload
     {
         var byId = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id);
 
-        static List<SquadPlayer> Side(IReadOnlyList<Guid>? ids, Dictionary<Guid, ApiPlayerDto> byId, Guid? captainId)
+        static List<SquadPlayer> Side(
+            IReadOnlyList<Guid>? ids,
+            Dictionary<Guid, ApiPlayerDto> byId,
+            Guid? captainId,
+            bool substitute)
             => (ids ?? Array.Empty<Guid>())
                 .Where(id => byId.ContainsKey(id))
                 .Select(id => new SquadPlayer
                 {
                     Id = id,
                     FullName = byId[id].FullName,
-                    IsCaptain = captainId == id
+                    IsCaptain = captainId == id,
+                    IsSubstitute = substitute
                 })
                 .OrderBy(p => p.FullName)
                 .ToList();
@@ -61,8 +83,10 @@ public sealed class MatchRosterPayload
             TeamBCaptainId = teamB.CaptainPlayerId,
             TeamACaptainName = CapName(teamA.CaptainPlayerId),
             TeamBCaptainName = CapName(teamB.CaptainPlayerId),
-            TeamAPlayers = Side(TeamRoster.PlayingPlayerIds(teamA), byId, teamA.CaptainPlayerId),
-            TeamBPlayers = Side(TeamRoster.PlayingPlayerIds(teamB), byId, teamB.CaptainPlayerId)
+            TeamAPlayers = Side(TeamRoster.PlayingPlayerIds(teamA), byId, teamA.CaptainPlayerId, substitute: false),
+            TeamBPlayers = Side(TeamRoster.PlayingPlayerIds(teamB), byId, teamB.CaptainPlayerId, substitute: false),
+            TeamASubstitutes = Side(TeamRoster.SubstitutePlayerIds(teamA), byId, teamA.CaptainPlayerId, substitute: true),
+            TeamBSubstitutes = Side(TeamRoster.SubstitutePlayerIds(teamB), byId, teamB.CaptainPlayerId, substitute: true)
         };
     }
 
@@ -73,14 +97,19 @@ public sealed class MatchRosterPayload
     {
         var byId = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id);
 
-        static List<SquadPlayer> Side(IEnumerable<Guid> ids, Dictionary<Guid, Player> byId, Guid? captainId)
+        static List<SquadPlayer> Side(
+            IEnumerable<Guid> ids,
+            Dictionary<Guid, Player> byId,
+            Guid? captainId,
+            bool substitute)
             => ids
                 .Where(id => byId.ContainsKey(id))
                 .Select(id => new SquadPlayer
                 {
                     Id = id,
                     FullName = byId[id].FullName,
-                    IsCaptain = captainId == id
+                    IsCaptain = captainId == id,
+                    IsSubstitute = substitute
                 })
                 .OrderBy(p => p.FullName)
                 .ToList();
@@ -88,12 +117,17 @@ public sealed class MatchRosterPayload
         string? CapName(Guid? id)
             => id is Guid c && byId.TryGetValue(c, out var p) ? p.FullName : null;
 
-        static IEnumerable<Guid> PlayingOrSquad(ICollection<TeamPlayer> tps)
+        static (IEnumerable<Guid> Playing, IEnumerable<Guid> Bench) Split(ICollection<TeamPlayer> tps)
         {
             var playing = tps.Where(tp => tp.IsPlaying).Select(tp => tp.PlayerId).ToList();
-            return playing.Count > 0 ? playing : tps.Select(tp => tp.PlayerId);
+            if (playing.Count == 0)
+                return (tps.Select(tp => tp.PlayerId), Array.Empty<Guid>());
+            var chosen = playing.ToHashSet();
+            return (playing, tps.Select(tp => tp.PlayerId).Where(id => !chosen.Contains(id)));
         }
 
+        var a = Split(teamA.TeamPlayers);
+        var b = Split(teamB.TeamPlayers);
         return new MatchRosterPayload
         {
             TeamAId = teamA.Id,
@@ -104,8 +138,10 @@ public sealed class MatchRosterPayload
             TeamBCaptainId = teamB.CaptainPlayerId,
             TeamACaptainName = CapName(teamA.CaptainPlayerId),
             TeamBCaptainName = CapName(teamB.CaptainPlayerId),
-            TeamAPlayers = Side(PlayingOrSquad(teamA.TeamPlayers), byId, teamA.CaptainPlayerId),
-            TeamBPlayers = Side(PlayingOrSquad(teamB.TeamPlayers), byId, teamB.CaptainPlayerId)
+            TeamAPlayers = Side(a.Playing, byId, teamA.CaptainPlayerId, substitute: false),
+            TeamBPlayers = Side(b.Playing, byId, teamB.CaptainPlayerId, substitute: false),
+            TeamASubstitutes = Side(a.Bench, byId, teamA.CaptainPlayerId, substitute: true),
+            TeamBSubstitutes = Side(b.Bench, byId, teamB.CaptainPlayerId, substitute: true)
         };
     }
 
@@ -141,6 +177,8 @@ public sealed class MatchRosterPayload
 
         TeamAPlayers = Relabel(TeamAPlayers, playerNames);
         TeamBPlayers = Relabel(TeamBPlayers, playerNames);
+        TeamASubstitutes = Relabel(TeamASubstitutes, playerNames);
+        TeamBSubstitutes = Relabel(TeamBSubstitutes, playerNames);
 
         if (TeamACaptainId is Guid ca && playerNames.TryGetValue(ca, out var can) && !string.IsNullOrWhiteSpace(can))
             TeamACaptainName = can;
@@ -155,7 +193,7 @@ public sealed class MatchRosterPayload
         {
             if (!playerNames.TryGetValue(p.Id, out var n) || string.IsNullOrWhiteSpace(n) || n == p.FullName)
                 return p;
-            return new SquadPlayer { Id = p.Id, FullName = n, IsCaptain = p.IsCaptain };
+            return new SquadPlayer { Id = p.Id, FullName = n, IsCaptain = p.IsCaptain, IsSubstitute = p.IsSubstitute };
         }).ToList();
 }
 
@@ -248,6 +286,20 @@ public static class LiveMasterNames
 
 public sealed class MatchSquadSnapshot
 {
+    private IReadOnlyList<SquadPlayer> _teamAPlayers = Array.Empty<SquadPlayer>();
+    private IReadOnlyList<SquadPlayer> _teamBPlayers = Array.Empty<SquadPlayer>();
+    private IReadOnlyList<SquadPlayer> _teamASubstitutes = Array.Empty<SquadPlayer>();
+    private IReadOnlyList<SquadPlayer> _teamBSubstitutes = Array.Empty<SquadPlayer>();
+    private IReadOnlyList<SquadPlayer> _tournamentPlayers = Array.Empty<SquadPlayer>();
+    private Guid? _battingTeamId;
+    private Guid? _bowlingTeamId;
+
+    // Scoring reads Fielders / AllPlayers / NameOf per ball — rebuild only when a list changes.
+    private IReadOnlyList<SquadPlayer>? _fielders;
+    private IReadOnlyList<SquadPlayer>? _allPlayers;
+    private HashSet<Guid>? _substituteIds;
+    private Dictionary<Guid, string>? _displayNames;
+
     public Guid MatchId { get; init; }
     public Guid TeamAId { get; init; }
     public Guid TeamBId { get; init; }
@@ -257,16 +309,63 @@ public sealed class MatchSquadSnapshot
     public Guid? TeamBCaptainId { get; init; }
     public string? TeamACaptainName { get; set; }
     public string? TeamBCaptainName { get; set; }
-    public IReadOnlyList<SquadPlayer> TeamAPlayers { get; set; } = Array.Empty<SquadPlayer>();
-    public IReadOnlyList<SquadPlayer> TeamBPlayers { get; set; } = Array.Empty<SquadPlayer>();
+
+    public IReadOnlyList<SquadPlayer> TeamAPlayers
+    {
+        get => _teamAPlayers;
+        set { _teamAPlayers = value; Invalidate(); }
+    }
+
+    public IReadOnlyList<SquadPlayer> TeamBPlayers
+    {
+        get => _teamBPlayers;
+        set { _teamBPlayers = value; Invalidate(); }
+    }
+
+    public IReadOnlyList<SquadPlayer> TeamASubstitutes
+    {
+        get => _teamASubstitutes;
+        set { _teamASubstitutes = value; Invalidate(); }
+    }
+
+    public IReadOnlyList<SquadPlayer> TeamBSubstitutes
+    {
+        get => _teamBSubstitutes;
+        set { _teamBSubstitutes = value; Invalidate(); }
+    }
+
     /// <summary>
     /// Tournament matches: every player from every tournament team (fielder dropdown).
     /// Empty for normal matches — fielders fall back to bowling side.
     /// </summary>
-    public IReadOnlyList<SquadPlayer> TournamentPlayers { get; set; } = Array.Empty<SquadPlayer>();
-    public Guid? BattingTeamId { get; set; }
-    public Guid? BowlingTeamId { get; set; }
+    public IReadOnlyList<SquadPlayer> TournamentPlayers
+    {
+        get => _tournamentPlayers;
+        set { _tournamentPlayers = value; Invalidate(); }
+    }
+
+    public Guid? BattingTeamId
+    {
+        get => _battingTeamId;
+        set { _battingTeamId = value; Invalidate(); }
+    }
+
+    public Guid? BowlingTeamId
+    {
+        get => _bowlingTeamId;
+        set { _bowlingTeamId = value; Invalidate(); }
+    }
+
     public DateTime LoadedAtUtc { get; init; } = DateTime.Now;
+
+    /// <summary>Last time names/substitutes were refreshed — scoring serves a fresh snapshot without I/O.</summary>
+    public DateTime RefreshedAtUtc { get; set; } = DateTime.MinValue;
+
+    /// <summary>Bench lookup already succeeded; skip the Teams/Players round trip on later warms.</summary>
+    public bool SubstitutesResolved { get; set; }
+
+    /// <summary>Tournament fielder pool already resolved (or match is not a tournament match).</summary>
+    public bool TournamentPlayersResolved { get; set; }
 
     public IReadOnlyList<SquadPlayer> Batters =>
         BattingTeamId == TeamAId ? TeamAPlayers
@@ -278,25 +377,77 @@ public sealed class MatchSquadSnapshot
         : BowlingTeamId == TeamBId ? TeamBPlayers
         : TeamBPlayers;
 
-    /// <summary>Catch / run-out / stumped: tournament = all tournament teams; else bowling side.</summary>
-    public IReadOnlyList<SquadPlayer> Fielders =>
-        TournamentPlayers.Count > 0 ? TournamentPlayers : Bowlers;
+    public IReadOnlyList<SquadPlayer> BowlingSubstitutes =>
+        BowlingTeamId == TeamAId ? TeamASubstitutes
+        : BowlingTeamId == TeamBId ? TeamBSubstitutes
+        : Array.Empty<SquadPlayer>();
 
-    public IReadOnlyList<SquadPlayer> AllPlayers
-    {
-        get
-        {
-            var map = new Dictionary<Guid, SquadPlayer>();
-            foreach (var p in TeamAPlayers) map[p.Id] = p;
-            foreach (var p in TeamBPlayers) map[p.Id] = p;
-            foreach (var p in TournamentPlayers) map[p.Id] = p;
-            return map.Values.OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase).ToList();
-        }
-    }
+    /// <summary>
+    /// Catch / run-out / stumped: bowling XI plus that team's squad substitutes.
+    /// Tournament matches also include other tournament playing XIs.
+    /// </summary>
+    public IReadOnlyList<SquadPlayer> Fielders => _fielders ??= BuildFielders();
+
+    public IReadOnlyList<SquadPlayer> AllPlayers => _allPlayers ??= BuildAllPlayers();
+
+    public IReadOnlySet<Guid> SubstituteIds() => _substituteIds ??= BuildSubstituteIds();
 
     public string NameOf(Guid playerId)
-        => AllPlayers.FirstOrDefault(p => p.Id == playerId)?.FullName
-           ?? playerId.ToString("N")[..8];
+    {
+        _displayNames ??= AllPlayers
+            .GroupBy(p => p.Id)
+            .ToDictionary(g => g.Key, g => g.First().DisplayName);
+        return _displayNames.TryGetValue(playerId, out var name)
+            ? name
+            : playerId.ToString("N")[..8];
+    }
+
+    /// <summary>Called after any roster list changes so the derived views are rebuilt once, lazily.</summary>
+    public void Invalidate()
+    {
+        _fielders = null;
+        _allPlayers = null;
+        _substituteIds = null;
+        _displayNames = null;
+    }
+
+    private IReadOnlyList<SquadPlayer> BuildFielders()
+    {
+        var map = new Dictionary<Guid, SquadPlayer>();
+        void Add(IEnumerable<SquadPlayer> list)
+        {
+            foreach (var p in list)
+                map[p.Id] = p;
+        }
+
+        if (TournamentPlayers.Count > 0)
+            Add(TournamentPlayers);
+        Add(Bowlers);
+        Add(BowlingSubstitutes);
+        return map.Values
+            .OrderBy(p => p.IsSubstitute)
+            .ThenBy(p => p.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private IReadOnlyList<SquadPlayer> BuildAllPlayers()
+    {
+        var map = new Dictionary<Guid, SquadPlayer>();
+        foreach (var p in TeamAPlayers) map[p.Id] = p;
+        foreach (var p in TeamBPlayers) map[p.Id] = p;
+        foreach (var p in TeamASubstitutes) map[p.Id] = p;
+        foreach (var p in TeamBSubstitutes) map[p.Id] = p;
+        foreach (var p in TournamentPlayers) map[p.Id] = p;
+        return map.Values.OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private HashSet<Guid> BuildSubstituteIds()
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var p in TeamASubstitutes) ids.Add(p.Id);
+        foreach (var p in TeamBSubstitutes) ids.Add(p.Id);
+        return ids;
+    }
 
     public string TeamNameOf(Guid teamId)
         => teamId == TeamAId ? TeamAName
@@ -316,6 +467,9 @@ public interface IMatchSquadCache
 
 public sealed class MatchSquadCache : IMatchSquadCache
 {
+    /// <summary>How long a warmed snapshot is reused without any SQLite/API work.</summary>
+    private static readonly TimeSpan FreshFor = TimeSpan.FromSeconds(30);
+
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
     private readonly IApiClient _api;
     private readonly Dictionary<Guid, MatchSquadSnapshot> _cache = new();
@@ -344,15 +498,20 @@ public sealed class MatchSquadCache : IMatchSquadCache
 
     public async Task<MatchSquadSnapshot> WarmAsync(Guid matchId, CancellationToken ct = default)
     {
-        await EnsureMasterNamesAsync(ct).ConfigureAwait(false);
-
         MatchSquadSnapshot? existing;
         lock (_gate)
             existing = _cache.TryGetValue(matchId, out var s) ? s : null;
 
+        // Ball-by-ball scoring warms the cache after every delivery — serve a recent
+        // snapshot straight from memory instead of re-hitting SQLite and the API.
+        if (existing is not null && DateTime.UtcNow - existing.RefreshedAtUtc < FreshFor)
+            return existing;
+
+        await EnsureMasterNamesAsync(ct).ConfigureAwait(false);
+
         if (existing is not null)
         {
-            if (existing.TournamentPlayers.Count == 0)
+            if (!existing.TournamentPlayersResolved)
             {
                 await using var dbRefresh = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
                 var matchRefresh = await dbRefresh.Matches.AsNoTracking()
@@ -360,12 +519,17 @@ public sealed class MatchSquadCache : IMatchSquadCache
                     .ConfigureAwait(false);
                 if (matchRefresh?.TournamentId is Guid tidRefresh)
                 {
-                    existing.TournamentPlayers = await LoadTournamentPlayersAsync(dbRefresh, tidRefresh, ct)
-                        .ConfigureAwait(false);
+                    var pool = await LoadTournamentPlayersAsync(dbRefresh, tidRefresh, ct).ConfigureAwait(false);
+                    existing.TournamentPlayers = pool;
+                    existing.TournamentPlayersResolved = pool.Count > 0;
                 }
+                else
+                    existing.TournamentPlayersResolved = true;
             }
 
+            await FillSubstitutesAsync(existing, ct).ConfigureAwait(false);
             OverlaySnapshot(existing);
+            existing.RefreshedAtUtc = DateTime.UtcNow;
             return existing;
         }
 
@@ -413,12 +577,17 @@ public sealed class MatchSquadCache : IMatchSquadCache
                 TeamBCaptainName = roster.TeamBCaptainName,
                 TeamAPlayers = WithCaptainFlags(roster.TeamAPlayers, roster.TeamACaptainId ?? match.TeamACaptainId),
                 TeamBPlayers = WithCaptainFlags(roster.TeamBPlayers, roster.TeamBCaptainId ?? match.TeamBCaptainId),
+                TeamASubstitutes = MarkSubstitutes(roster.TeamASubstitutes),
+                TeamBSubstitutes = MarkSubstitutes(roster.TeamBSubstitutes),
                 BattingTeamId = innings?.BattingTeamId ?? match.TeamAId,
                 BowlingTeamId = innings?.BowlingTeamId ?? match.TeamBId,
                 TournamentPlayers = tournamentPlayers
             };
 
+        snap.TournamentPlayersResolved = match.TournamentId is null || tournamentPlayers.Count > 0;
+        await FillSubstitutesAsync(snap, ct).ConfigureAwait(false);
         OverlaySnapshot(snap);
+        snap.RefreshedAtUtc = DateTime.UtcNow;
 
         lock (_gate)
             _cache[matchId] = snap;
@@ -565,6 +734,8 @@ public sealed class MatchSquadCache : IMatchSquadCache
 
         snap.TeamAPlayers = MatchRosterPayload.Relabel(snap.TeamAPlayers, players);
         snap.TeamBPlayers = MatchRosterPayload.Relabel(snap.TeamBPlayers, players);
+        snap.TeamASubstitutes = MatchRosterPayload.Relabel(snap.TeamASubstitutes, players);
+        snap.TeamBSubstitutes = MatchRosterPayload.Relabel(snap.TeamBSubstitutes, players);
 
         if (snap.TeamACaptainId is Guid ca && players.TryGetValue(ca, out var can) && !string.IsNullOrWhiteSpace(can))
             snap.TeamACaptainName = can;
@@ -584,8 +755,65 @@ public sealed class MatchSquadCache : IMatchSquadCache
                 {
                     Id = p.Id,
                     FullName = p.FullName,
-                    IsCaptain = captainId == p.Id
+                    IsCaptain = captainId == p.Id,
+                    IsSubstitute = p.IsSubstitute
                 })
+            .ToList();
+    }
+
+    private static IReadOnlyList<SquadPlayer> MarkSubstitutes(IReadOnlyList<SquadPlayer> players)
+        => players.Select(p => p.IsSubstitute
+            ? p
+            : new SquadPlayer
+            {
+                Id = p.Id,
+                FullName = p.FullName,
+                IsCaptain = p.IsCaptain,
+                IsSubstitute = true
+            }).ToList();
+
+    private async Task FillSubstitutesAsync(MatchSquadSnapshot snap, CancellationToken ct)
+    {
+        if (snap.SubstitutesResolved)
+            return;
+
+        try
+        {
+            var teams = await _api.GetTeamsAsync(ct).ConfigureAwait(false);
+            var players = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+            var byId = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id);
+            var teamA = teams.FirstOrDefault(t => t.Id == snap.TeamAId && !t.IsDeleted);
+            var teamB = teams.FirstOrDefault(t => t.Id == snap.TeamBId && !t.IsDeleted);
+            if (teamA is not null)
+                snap.TeamASubstitutes = BenchFromTeam(teamA, snap.TeamAPlayers, byId, snap.TeamACaptainId);
+            if (teamB is not null)
+                snap.TeamBSubstitutes = BenchFromTeam(teamB, snap.TeamBPlayers, byId, snap.TeamBCaptainId);
+            snap.SubstitutesResolved = teamA is not null && teamB is not null;
+        }
+        catch
+        {
+            /* keep roster JSON substitutes when offline */
+        }
+    }
+
+    private static IReadOnlyList<SquadPlayer> BenchFromTeam(
+        ApiTeamDto team,
+        IReadOnlyList<SquadPlayer> playing,
+        Dictionary<Guid, ApiPlayerDto> byId,
+        Guid? captainId)
+    {
+        var chosen = playing.Select(p => p.Id).ToHashSet();
+        return (team.PlayerIds ?? Array.Empty<Guid>())
+            .Where(id => id != Guid.Empty && !chosen.Contains(id) && byId.ContainsKey(id))
+            .Distinct()
+            .Select(id => new SquadPlayer
+            {
+                Id = id,
+                FullName = byId[id].FullName,
+                IsCaptain = captainId == id,
+                IsSubstitute = true
+            })
+            .OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 }

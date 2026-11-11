@@ -150,13 +150,15 @@ public sealed class Delivery
     public bool IsWicket { get; set; }
     public WicketType WicketType { get; set; } = WicketType.None;
     public Guid? DismissedPlayerId { get; set; }
-    /// <summary>Catcher / run-out / stump fielder (fielding side).</summary>
+    /// <summary>Catcher / run-out / stump / drop-catch fielder (fielding side).</summary>
     public Guid? FielderId { get; set; }
+    /// <summary>Fielder dropped a catch on this ball (not a wicket; requires <see cref="FielderId"/>).</summary>
+    public bool IsDroppedCatch { get; set; }
 
     /// <summary>Legal delivery counts as a ball faced / ball bowled for stats.</summary>
     public bool IsLegalDelivery { get; set; } = true;
 
-    /// <summary>1–8 wagon sector (Long off … Long on). 0 = not tagged.</summary>
+    /// <summary>Legacy shot-zone tag. Zone capture was removed; kept so old rows and sync payloads still map.</summary>
     public byte ShotZone { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;

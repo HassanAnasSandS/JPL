@@ -30,6 +30,7 @@ public sealed partial class FormatFilterViewModel : ObservableObject
 {
     private readonly IFormatService _formats;
     private string _committedKey = string.Empty;
+    private string _optionsKey = string.Empty;
 
     public ObservableCollection<FormatFilterOption> Options { get; } = new();
 
@@ -59,8 +60,12 @@ public sealed partial class FormatFilterViewModel : ObservableObject
     {
         try
         {
-            var keep = Options.Where(o => o.IsSelected).Select(o => o.Id).ToHashSet();
             var list = await _formats.GetAllAsync().ConfigureAwait(true);
+            var nextKey = string.Join(",", list.Select(f => f.Id).OrderBy(id => id));
+            // League switch → format catalog IDs change; drop stale selections from the prior league.
+            var keep = string.Equals(nextKey, _optionsKey, StringComparison.Ordinal)
+                ? Options.Where(o => o.IsSelected).Select(o => o.Id).ToHashSet()
+                : new HashSet<Guid>();
             Options.Clear();
             foreach (var item in list)
             {
@@ -71,6 +76,9 @@ public sealed partial class FormatFilterViewModel : ObservableObject
                     RefreshSummary));
             }
 
+            _optionsKey = nextKey;
+            if (keep.Count == 0)
+                _committedKey = string.Empty;
             RefreshSummary();
         }
         catch

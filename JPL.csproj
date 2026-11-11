@@ -28,8 +28,8 @@
 		<ApplicationId>com.jpl.cricketscorer</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>1.0.3</ApplicationDisplayVersion>
-		<ApplicationVersion>6</ApplicationVersion>
+		<ApplicationDisplayVersion>1.0.9</ApplicationDisplayVersion>
+		<ApplicationVersion>12</ApplicationVersion>
 
 		<!-- Unpackaged desktop exe — avoids MSIX packaging issues for local debug. -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -57,7 +57,7 @@
 		<!-- App Icon: Cric360 PNG only (do not add appiconfg.svg — MAUI overlays it on the icon). -->
 		<MauiIcon Include="Resources\AppIcon\appicon.png" Color="#0D1B2A" BaseSize="512,512" />
 
-		<!-- Splash: Cric360 logo on navy -->
+		<!-- Splash: Cric360 logo + loading ring on navy (ring animates on Android). -->
 		<MauiSplashScreen Include="Resources\Splash\splash.png" Color="#0D1B2A" BaseSize="256,256" />
 
 		<!-- Images -->

@@ -336,6 +336,8 @@ public sealed class NetSessionService : INetSessionService
         var ballInOver = legalSoFar % 6;
         var isWideOrNb = input.ExtraType is ExtraType.Wide or ExtraType.NoBall;
         var isLegal = !isWideOrNb;
+        if (input.RunsOffBat == 5)
+            throw new InvalidOperationException("5 runs off the bat is not allowed.");
 
         var delivery = new NetDelivery
         {
@@ -352,7 +354,10 @@ public sealed class NetSessionService : INetSessionService
             IsWicket = input.IsWicket,
             WicketType = input.IsWicket ? input.WicketType : WicketType.None,
             DismissedPlayerId = input.IsWicket ? (input.DismissedPlayerId ?? input.BatterId) : null,
-            FielderId = input.IsWicket ? input.FielderId : null,
+            IsDroppedCatch = !input.IsWicket && input.IsDroppedCatch,
+            FielderId = input.IsWicket || (!input.IsWicket && input.IsDroppedCatch)
+                ? input.FielderId
+                : null,
             IsLegalDelivery = isLegal
         };
 
@@ -526,7 +531,11 @@ public sealed class NetSessionService : INetSessionService
                 RunsConceded = bowled.Sum(d => d.RunsOffBat + d.ExtraRuns),
                 Wickets = bowled.Count(d =>
                     d.IsWicket && d.WicketType is not WicketType.RunOut and not WicketType.Retired and not WicketType.None),
-                Maidens = CountMaidens(bowled)
+                Maidens = CountMaidens(bowled),
+                Wides = bowled.Where(d => d.ExtraType == ExtraType.Wide).Sum(d => d.ExtraRuns),
+                NoBalls = bowled.Where(d => d.ExtraType == ExtraType.NoBall).Sum(d => d.ExtraRuns),
+                Byes = bowled.Where(d => d.ExtraType == ExtraType.Bye).Sum(d => d.ExtraRuns),
+                LegByes = bowled.Where(d => d.ExtraType == ExtraType.LegBye).Sum(d => d.ExtraRuns)
             });
         }
 
@@ -772,6 +781,7 @@ public sealed class NetSessionService : INetSessionService
         d.WicketType,
         d.DismissedPlayerId,
         d.FielderId,
+        d.IsDroppedCatch,
         d.IsLegalDelivery,
         d.CreatedAtUtc,
         d.Version

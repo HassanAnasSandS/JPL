@@ -1,6 +1,6 @@
 namespace JPL.Services;
 
-public enum AppWorkspace : byte
+public enum AppWorkspace
 {
     Leagues = 0,
     Grounds = 1,
@@ -38,23 +38,44 @@ public sealed class AppWorkspaceStore : IAppWorkspace
 
     public void Restore()
     {
-        if (Preferences.Default.ContainsKey(Key))
+        try
         {
-            var raw = Preferences.Default.Get(Key, (int)AppWorkspace.Leagues);
-            _current = Enum.IsDefined(typeof(AppWorkspace), raw) ? (AppWorkspace)raw : AppWorkspace.Leagues;
-            return;
-        }
+            if (Preferences.Default.ContainsKey(Key))
+            {
+                _current = FromStored(Preferences.Default.Get(Key, 0));
+                return;
+            }
 
-        var disk = SessionDisk.Load();
-        if (disk?.Workspace is int w && Enum.IsDefined(typeof(AppWorkspace), w))
+            var disk = SessionDisk.Load();
+            if (disk?.Workspace is int w)
+            {
+                _current = FromStored(w);
+                Preferences.Default.Set(Key, (int)_current);
+                SessionDisk.FlushPlatformPrefs();
+                return;
+            }
+        }
+        catch
         {
-            _current = (AppWorkspace)w;
-            Preferences.Default.Set(Key, w);
-            SessionDisk.FlushPlatformPrefs();
-            return;
+            /* Corrupt prefs must not block login. */
         }
 
         _current = AppWorkspace.Leagues;
+    }
+
+    /// <summary>
+    /// Preferences/disk store an int. Do not use Enum.IsDefined(typeof, int) —
+    /// that throws if the enum is backed by byte.
+    /// </summary>
+    internal static AppWorkspace FromStored(int raw)
+    {
+        foreach (var value in Enum.GetValues<AppWorkspace>())
+        {
+            if ((int)value == raw)
+                return value;
+        }
+
+        return AppWorkspace.Leagues;
     }
 
     public void Clear()

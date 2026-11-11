@@ -18,6 +18,8 @@ public partial class StatsPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        if (_vm.ShowDetail)
+            return;
         PageSafe.Run(() => _vm.LoadCommand.ExecuteAsync(null));
     }
 }
@@ -57,7 +59,7 @@ public sealed class StatsTabTemplateSelector : DataTemplateSelector
             4 => Bowling,
             5 => Fielding,
             6 => Captaincy,
-            7 => Attendance,
+            8 => Attendance,
             _ => Match
         };
     }

@@ -27,7 +27,7 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
 
     [HttpGet("amenities/page")]
     public async Task<ActionResult<PagedResult<CatalogItemDto>>> AmenitiesPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         skip = Paging.ClampSkip(skip);
         take = Paging.ClampTake(take);
@@ -53,7 +53,7 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
 
     [HttpGet("services/page")]
     public async Task<ActionResult<PagedResult<CatalogItemDto>>> ServicesPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         skip = Paging.ClampSkip(skip);
         take = Paging.ClampTake(take);
@@ -79,7 +79,7 @@ public sealed class CatalogController : ControllerBase, IAsyncDisposable
 
     [HttpGet("shop/page")]
     public async Task<ActionResult<PagedResult<ShopCatalogItemDto>>> ShopPage(
-        int skip = 0, int take = 5, string? q = null, CancellationToken ct = default)
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
     {
         skip = Paging.ClampSkip(skip);
         take = Paging.ClampTake(take);

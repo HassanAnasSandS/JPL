@@ -47,20 +47,6 @@
                                    HorizontalOptions="Center"
                                    IntervalMs="3200" />
 
-                <ActivityIndicator IsRunning="{Binding ShowBusyOverlay}"
-                                   IsVisible="{Binding ShowBusyOverlay}"
-                                   Color="#B6FF3B"
-                                   WidthRequest="44"
-                                   HeightRequest="44"
-                                   HorizontalOptions="Center"
-                                   Margin="0,8,0,0" />
-                <Label Text="{Binding BusyOverlayMessage}"
-                       IsVisible="{Binding ShowBusyOverlay}"
-                       TextColor="#E8F5D8"
-                       FontSize="14"
-                       HorizontalTextAlignment="Center"
-                       HorizontalOptions="Center" />
-
                 <VerticalStackLayout Spacing="12" IsVisible="{Binding ShowLoginForm}">
                     <Border StrokeThickness="0"
                             BackgroundColor="#152033"

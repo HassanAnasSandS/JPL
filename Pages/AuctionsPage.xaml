@@ -6,13 +6,13 @@
              x:Class="JPL.Pages.AuctionsPage"
              x:Name="ThisPage"
              x:DataType="vm:AuctionsViewModel"
-             Title="Auctions"
+             Title="Auction/Drafting"
              HideSoftInputOnTapped="True">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="14" RowSpacing="10">
+    <Grid RowDefinitions="Auto,*,Auto" Padding="{OnIdiom Phone=14, Default=10}" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
             <VerticalStackLayout VerticalOptions="Center">
-                <Label Text="Auctions"
+                <Label Text="Auction/Drafting"
                        FontSize="22"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
@@ -37,66 +37,93 @@
         <RefreshView Grid.Row="1"
                      IsRefreshing="{Binding IsBusy}"
                      Command="{Binding LoadCommand}">
-            <CollectionView ItemsSource="{Binding Items}"
+            <CollectionView x:Name="AuctionsList"
+                            ItemsSource="{Binding Items}"
                             SelectionMode="None"
                             RemainingItemsThreshold="1"
                             RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}"
-                            EmptyView="No auctions yet. Create First Auction to begin.">
+                            EmptyView="No Auction/Drafting yet. Create first Auction/Drafting to begin.">
+                <CollectionView.ItemsLayout>
+                    <GridItemsLayout x:Name="AuctionsGridLayout"
+                                     Orientation="Vertical"
+                                     Span="1"
+                                     HorizontalItemSpacing="10"
+                                     VerticalItemSpacing="10" />
+                </CollectionView.ItemsLayout>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="svc:AuctionListItem">
-                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,10" Padding="14">
-                            <VerticalStackLayout Spacing="8">
-                                <Grid ColumnDefinitions="*,Auto">
+                        <Border Style="{StaticResource CardBorder}" Padding="{OnIdiom Phone=14, Default=12}"
+                                HorizontalOptions="Fill" VerticalOptions="Fill">
+                            <VerticalStackLayout Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                     <VerticalStackLayout Spacing="2">
                                         <Label Text="{Binding Title}"
                                                FontAttributes="Bold"
-                                               FontSize="16"
-                                               TextColor="{StaticResource Primary}" />
+                                               FontSize="15"
+                                               TextColor="{StaticResource Primary}"
+                                               LineBreakMode="TailTruncation" />
                                         <Label Text="{Binding AuctionDateUtc, StringFormat='{0:dd MMM yyyy}'}"
                                                Style="{StaticResource MutedLabel}" />
+                                        <Label FontSize="11" TextColor="{StaticResource Secondary}">
+                                            <Label.Text>
+                                                <MultiBinding StringFormat="{}{0} · {1}">
+                                                    <Binding Path="KindLabel" />
+                                                    <Binding Path="ModeLabel" />
+                                                </MultiBinding>
+                                            </Label.Text>
+                                        </Label>
                                     </VerticalStackLayout>
                                     <Label Grid.Column="1"
                                            Text="{Binding TotalSoldAmount, StringFormat='{0:N0}'}"
                                            FontAttributes="Bold"
-                                           FontSize="16"
+                                           FontSize="15"
                                            VerticalOptions="Center"
                                            TextColor="{StaticResource Secondary}" />
                                 </Grid>
-                                <Label Text="{Binding CaptainCount, StringFormat='Captains: {0}'}"
-                                       FontSize="12"
-                                       Style="{StaticResource MutedLabel}" />
                                 <Label FontSize="12" Style="{StaticResource MutedLabel}">
                                     <Label.Text>
-                                        <MultiBinding StringFormat="Players {0} · Sold {1} · Unsold {2}">
+                                        <MultiBinding StringFormat="Captains {0} · Players {1} · Sold {2} · Unsold {3}">
+                                            <Binding Path="CaptainCount" />
                                             <Binding Path="PlayerCount" />
                                             <Binding Path="SoldCount" />
                                             <Binding Path="UnsoldCount" />
                                         </MultiBinding>
                                     </Label.Text>
                                 </Label>
-                                <HorizontalStackLayout Spacing="8">
+                                <FlexLayout Wrap="Wrap" AlignItems="Start" JustifyContent="Start">
                                     <Button Text="View"
+                                            Margin="0,0,6,4"
                                             Padding="12,6"
                                             FontSize="12"
                                             BackgroundColor="#E8EEF5"
                                             TextColor="{StaticResource Primary}"
                                             Clicked="OnViewClicked"
                                             CommandParameter="{Binding .}" />
-                                    <Button Text="Edit"
+                                    <Button Text="Enter"
+                                            Margin="0,0,6,4"
                                             Padding="12,6"
                                             FontSize="12"
                                             Style="{StaticResource GoldButton}"
-                                            IsVisible="{Binding Source={x:Reference ThisPage}, Path=BindingContext.CanWrite}"
+                                            IsVisible="{Binding CanEnterAsCaptain}"
+                                            Clicked="OnEnterClicked"
+                                            CommandParameter="{Binding .}" />
+                                    <Button Text="Run"
+                                            Margin="0,0,6,4"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            Style="{StaticResource GoldButton}"
+                                            IsVisible="{Binding CanEditSetup}"
                                             Clicked="OnEditClicked"
                                             CommandParameter="{Binding .}" />
                                     <Button Text="Delete"
+                                            Margin="0,0,6,4"
                                             Padding="12,6"
                                             FontSize="12"
                                             Style="{StaticResource DangerButton}"
-                                            IsVisible="{Binding Source={x:Reference ThisPage}, Path=BindingContext.CanWrite}"
+                                            IsVisible="{Binding CanDelete}"
                                             Clicked="OnDeleteClicked"
                                             CommandParameter="{Binding .}" />
-                                </HorizontalStackLayout>
+                                </FlexLayout>
                             </VerticalStackLayout>
                         </Border>
                     </DataTemplate>

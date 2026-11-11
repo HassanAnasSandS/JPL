@@ -17,13 +17,27 @@
                            Text="{Binding Name}"
                            MaxLength="160" />
 
-                    <Label Text="Groups (1, 2 or 4)" FontSize="12" Style="{StaticResource MutedLabel}" />
-                    <Picker Title="Groups"
-                            ItemsSource="{Binding GroupOptions}"
-                            SelectedItem="{Binding GroupCount}" />
+                    <VerticalStackLayout Spacing="6" IsVisible="{Binding ShowGroupPicker}">
+                        <Label Text="Groups (1, 2 or 4)" FontSize="12" Style="{StaticResource MutedLabel}" />
+                        <Picker Title="Groups"
+                                ItemsSource="{Binding GroupOptions}"
+                                SelectedItem="{Binding GroupCount}" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="6" IsVisible="{Binding IsCustom}">
+                        <Label Text="Groups" FontSize="12" Style="{StaticResource MutedLabel}" />
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{StaticResource SurfaceMuted}"
+                                Padding="12,10"
+                                StrokeShape="RoundRectangle 8">
+                            <Label Text="1 only (Custom)"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Primary}" />
+                        </Border>
+                    </VerticalStackLayout>
 
                     <Label Text="Type" FontSize="12" Style="{StaticResource MutedLabel}" />
-                    <Picker Title="Round robin type"
+                    <Picker Title="Tournament type"
                             ItemsSource="{Binding TypeOptions}"
                             SelectedItem="{Binding SelectedType}" />
 
@@ -32,10 +46,12 @@
                             ItemsSource="{Binding KnockoutOptions}"
                             SelectedItem="{Binding SelectedKnockout}" />
 
-                    <Label Text="Qualification — top teams per group" FontSize="12" Style="{StaticResource MutedLabel}" />
-                    <Picker Title="Qualify per group"
-                            ItemsSource="{Binding QualifyOptions}"
-                            SelectedItem="{Binding QualifyPerGroup}" />
+                    <VerticalStackLayout Spacing="6" IsVisible="{Binding ShowQualifyPicker}">
+                        <Label Text="Qualification — top teams per group" FontSize="12" Style="{StaticResource MutedLabel}" />
+                        <Picker Title="Qualify per group"
+                                ItemsSource="{Binding QualifyOptions}"
+                                SelectedItem="{Binding QualifyPerGroup}" />
+                    </VerticalStackLayout>
 
                     <Label Text="{Binding SetupHint}"
                            FontSize="12"
@@ -79,12 +95,18 @@
                                                     BackgroundColor="{StaticResource SurfaceMuted}"
                                                     Padding="10,8"
                                                     StrokeShape="RoundRectangle 10">
-                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                                     <Label Text="{Binding Name}"
                                                            FontAttributes="Bold"
                                                            VerticalOptions="Center"
                                                            LineBreakMode="TailTruncation" />
-                                                    <Button Grid.Column="1"
+                                                    <Label Grid.Column="1"
+                                                           Text="{Binding MatchLoadLabel}"
+                                                           Style="{StaticResource MutedLabel}"
+                                                           FontSize="11"
+                                                           VerticalOptions="Center"
+                                                           IsVisible="{Binding BindingContext.IsCustom, Source={x:Reference ThisPage}, x:DataType={x:Null}}" />
+                                                    <Button Grid.Column="2"
                                                             Text="Remove"
                                                             Padding="10,6"
                                                             FontSize="12"
@@ -103,8 +125,94 @@
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
 
+            <Border Style="{StaticResource CardBorder}"
+                    Padding="14"
+                    IsVisible="{Binding ShowCustomBuilder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Custom fixtures" Style="{StaticResource SectionLabel}" />
+                    <Label Text="Choose Manual or Auto. Each team plays the matches-per-team count you pick (e.g. 2 or 4). Auto can be run again anytime for a different schedule."
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+
+                    <Label Text="Matches per team" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Matches per team"
+                            ItemsSource="{Binding MatchesPerTeamOptions}"
+                            SelectedItem="{Binding MatchesPerTeam}" />
+
+                    <Label Text="Method" FontSize="12" Style="{StaticResource MutedLabel}" />
+                    <Picker Title="Manual or Auto"
+                            ItemsSource="{Binding CustomMethodOptions}"
+                            SelectedItem="{Binding SelectedCustomMethod}" />
+
+                    <VerticalStackLayout Spacing="8" IsVisible="{Binding IsCustomManual}">
+                        <Label Text="Add fixture" FontSize="12" Style="{StaticResource MutedLabel}" />
+                        <Grid ColumnDefinitions="*,Auto,*,Auto" ColumnSpacing="8" RowDefinitions="Auto">
+                            <Picker Title="Team A"
+                                    ItemsSource="{Binding CustomTeamChoices}"
+                                    ItemDisplayBinding="{Binding Name}"
+                                    SelectedItem="{Binding PairTeamA}" />
+                            <Label Grid.Column="1"
+                                   Text="vs"
+                                   VerticalOptions="Center"
+                                   FontAttributes="Bold" />
+                            <Picker Grid.Column="2"
+                                    Title="Team B"
+                                    ItemsSource="{Binding CustomTeamChoices}"
+                                    ItemDisplayBinding="{Binding Name}"
+                                    SelectedItem="{Binding PairTeamB}" />
+                            <Button Grid.Column="3"
+                                    Text="Add"
+                                    Style="{StaticResource GoldButton}"
+                                    Padding="12,8"
+                                    Command="{Binding AddCustomPairCommand}" />
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="6" IsVisible="{Binding IsCustomAuto}">
+                        <Label Text="Auto builds a full valid schedule (every team gets exactly the matches-per-team count). Tap again for a different draw."
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
+                        <Button Text="{Binding AutoGenerateButtonText}"
+                                Style="{StaticResource GoldButton}"
+                                HeightRequest="44"
+                                Command="{Binding GenerateCustomFixturesCommand}" />
+                    </VerticalStackLayout>
+
+                    <Label Text="{Binding CustomPairingHint}"
+                           FontSize="12"
+                           TextColor="{StaticResource Primary}" />
+
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding CustomPairs}" Spacing="6">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SchedulerCustomPairDraft">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource SurfaceMuted}"
+                                        Padding="10,8"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Label Text="{Binding Label}"
+                                               FontAttributes="Bold"
+                                               VerticalOptions="Center"
+                                               LineBreakMode="TailTruncation" />
+                                        <Button Grid.Column="1"
+                                                Text="Remove"
+                                                Padding="10,6"
+                                                FontSize="12"
+                                                BackgroundColor="#FFE8EC"
+                                                TextColor="{StaticResource Danger}"
+                                                IsVisible="{Binding BindingContext.IsCustomManual, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                Command="{Binding BindingContext.RemoveCustomPairCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                CommandParameter="{Binding .}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
             <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
-            <Button Text="Save schedule"
+            <Button Text="{Binding SaveButtonText}"
                     Style="{StaticResource GoldButton}"
                     HeightRequest="48"
                     Command="{Binding SaveCommand}" />

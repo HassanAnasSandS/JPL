@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 20;
+    private const int SchemaVersion = 22;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -200,6 +200,8 @@ public static class DbBootstrap
 
         await EnsureColumnAsync(db, "Deliveries", "FielderId",
             """ALTER TABLE "Deliveries" ADD COLUMN "FielderId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Deliveries", "IsDroppedCatch",
+            """ALTER TABLE "Deliveries" ADD COLUMN "IsDroppedCatch" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Deliveries", "ShotZone",
             """ALTER TABLE "Deliveries" ADD COLUMN "ShotZone" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
 
@@ -371,12 +373,16 @@ public static class DbBootstrap
                 "VenueBookingId" TEXT NOT NULL,
                 "PlayerId" TEXT NOT NULL,
                 "Status" TEXT NOT NULL,
+                "Amount" TEXT NOT NULL DEFAULT '0',
                 CONSTRAINT "PK_VenueBookingParticipants" PRIMARY KEY ("VenueBookingId", "PlayerId"),
                 CONSTRAINT "FK_VenueBookingParticipants_VenueBookings_VenueBookingId" FOREIGN KEY ("VenueBookingId") REFERENCES "VenueBookings" ("Id") ON DELETE CASCADE
             );
             """, ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync(
             """CREATE INDEX IF NOT EXISTS "IX_VenueBookingParticipants_PlayerId" ON "VenueBookingParticipants" ("PlayerId");""", ct)
+            .ConfigureAwait(false);
+        await EnsureColumnAsync(db, "VenueBookingParticipants", "Amount",
+            """ALTER TABLE "VenueBookingParticipants" ADD COLUMN "Amount" TEXT NOT NULL DEFAULT '0';""", ct)
             .ConfigureAwait(false);
 
         await EnsureColumnAsync(db, "Matches", "TournamentId",
@@ -524,6 +530,41 @@ public static class DbBootstrap
             """ALTER TABLE "Matches" ADD COLUMN "FormatId" TEXT NULL;""", ct).ConfigureAwait(false);
         await EnsureColumnAsync(db, "Tournaments", "FormatId",
             """ALTER TABLE "Tournaments" ADD COLUMN "FormatId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "RoundRobinType",
+            """ALTER TABLE "Tournaments" ADD COLUMN "RoundRobinType" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "MatchesPerTeam",
+            """ALTER TABLE "Tournaments" ADD COLUMN "MatchesPerTeam" INTEGER NOT NULL DEFAULT 0;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "CustomPairsJson",
+            """ALTER TABLE "Tournaments" ADD COLUMN "CustomPairsJson" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "KnockoutFormat",
+            """ALTER TABLE "Tournaments" ADD COLUMN "KnockoutFormat" INTEGER NOT NULL DEFAULT 2;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "PlayerOfTheTournamentPlayerId",
+            """ALTER TABLE "Tournaments" ADD COLUMN "PlayerOfTheTournamentPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "BestBatsmanPlayerId",
+            """ALTER TABLE "Tournaments" ADD COLUMN "BestBatsmanPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "BestBowlerPlayerId",
+            """ALTER TABLE "Tournaments" ADD COLUMN "BestBowlerPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Tournaments", "BestFielderPlayerId",
+            """ALTER TABLE "Tournaments" ADD COLUMN "BestFielderPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Series", "PlayerOfTheSeriesPlayerId",
+            """ALTER TABLE "Series" ADD COLUMN "PlayerOfTheSeriesPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Series", "BestBatsmanPlayerId",
+            """ALTER TABLE "Series" ADD COLUMN "BestBatsmanPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Series", "BestBowlerPlayerId",
+            """ALTER TABLE "Series" ADD COLUMN "BestBowlerPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "Series", "BestFielderPlayerId",
+            """ALTER TABLE "Series" ADD COLUMN "BestFielderPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
+        try
+        {
+            // Backfill: map legacy Group×Qualify combos onto scheduler-style knockout formats.
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "Tournaments" SET "KnockoutFormat" = 4 WHERE "GroupCount" = 1 AND "QualifyPerGroup" = 1 AND "KnockoutFormat" = 2;
+                UPDATE "Tournaments" SET "KnockoutFormat" = 3 WHERE "GroupCount" = 1 AND "QualifyPerGroup" = 2 AND "KnockoutFormat" = 2;
+                UPDATE "Tournaments" SET "KnockoutFormat" = 3 WHERE "GroupCount" = 2 AND "QualifyPerGroup" = 1 AND "KnockoutFormat" = 2;
+                """, ct).ConfigureAwait(false);
+        }
+        catch { /* column / dialect */ }
         await EnsureColumnAsync(db, "Series", "FormatId",
             """ALTER TABLE "Series" ADD COLUMN "FormatId" TEXT NULL;""", ct).ConfigureAwait(false);
 
@@ -712,6 +753,10 @@ public static class DbBootstrap
         await db.Database.ExecuteSqlRawAsync(
             """CREATE INDEX IF NOT EXISTS "IX_NetDeliveries_BatterId_BowlerId" ON "NetDeliveries" ("BatterId", "BowlerId");""",
             ct).ConfigureAwait(false);
+
+        await EnsureColumnAsync(db, "NetDeliveries", "IsDroppedCatch",
+            """ALTER TABLE "NetDeliveries" ADD COLUMN "IsDroppedCatch" INTEGER NOT NULL DEFAULT 0;""", ct)
+            .ConfigureAwait(false);
     }
 
     public static async Task EnsureSchedulerTablesAsync(JplDbContext db, CancellationToken ct = default)
@@ -857,15 +902,18 @@ public static class DbBootstrap
         if (!tableExists)
             return;
 
-        cmd.CommandText = $"PRAGMA table_info(\"{table}\");";
-        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         var exists = false;
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        cmd.CommandText = $"PRAGMA table_info(\"{table}\");";
+        // Close the reader before ALTER — SQLite rejects a second command on an open reader.
+        await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
-            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
-                exists = true;
-                break;
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                {
+                    exists = true;
+                    break;
+                }
             }
         }
 
@@ -880,15 +928,17 @@ public static class DbBootstrap
         if (cmd.Connection!.State != System.Data.ConnectionState.Open)
             await cmd.Connection.OpenAsync(ct).ConfigureAwait(false);
 
-        cmd.CommandText = $"PRAGMA table_info(\"{table}\");";
-        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         var exists = false;
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        cmd.CommandText = $"PRAGMA table_info(\"{table}\");";
+        await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
-            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
-                exists = true;
-                break;
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                {
+                    exists = true;
+                    break;
+                }
             }
         }
 
