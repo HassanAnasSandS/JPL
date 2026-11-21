@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             xmlns:svc="clr-namespace:JPL.Services"
+             x:Class="JPL.Pages.PlayerPaymentsPage"
+             x:Name="ThisPage"
+             x:DataType="vm:PlayerPaymentsViewModel"
+             Title="Player Payments"
+             HideSoftInputOnTapped="True"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+
+    <Grid Padding="12" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                <Label Text="Player Payments" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
+                <Label Text="Venue booking amounts by player" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+            </VerticalStackLayout>
+            <Button Grid.Column="1" Text="Refresh" Command="{Binding LoadCommand}"
+                    Padding="14,8" CornerRadius="9" FontAttributes="Bold"
+                    BackgroundColor="{StaticResource Primary}" TextColor="White" />
+        </Grid>
+
+        <SearchBar Grid.Row="1" Placeholder="Search player" Text="{Binding PlayerNameFilter}"
+                   BackgroundColor="White" CancelButtonColor="{StaticResource Primary}" />
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,72,72,82" ColumnSpacing="4"
+              Padding="8,9" BackgroundColor="{StaticResource Primary}">
+            <Button Text="Player" Command="{Binding SortCommand}" CommandParameter="PlayerName" />
+            <Button Grid.Column="1" Text="Total" Command="{Binding SortCommand}" CommandParameter="PaymentTotal" />
+            <Button Grid.Column="2" Text="Paid" Command="{Binding SortCommand}" CommandParameter="PaymentPaid" />
+            <Button Grid.Column="3" Text="Remaining" Command="{Binding SortCommand}" CommandParameter="PaymentRemaining" />
+            <Grid.Resources>
+                <Style TargetType="Button">
+                    <Setter Property="FontSize" Value="12" />
+                    <Setter Property="FontAttributes" Value="Bold" />
+                    <Setter Property="TextColor" Value="White" />
+                    <Setter Property="BackgroundColor" Value="Transparent" />
+                    <Setter Property="BorderWidth" Value="0" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="HorizontalOptions" Value="Fill" />
+                </Style>
+            </Grid.Resources>
+        </Grid>
+
+        <Grid Grid.Row="3" RowDefinitions="Auto,*" RowSpacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Text="{Binding CountText}" FontSize="11" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" />
+                <Label Grid.Column="1" Text="{Binding SortDirectionText}" FontSize="11" TextColor="{StaticResource Primary}" />
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <CollectionView x:Name="PaymentsList" ItemsSource="{Binding Players}"
+                                RemainingItemsThreshold="4" RemainingItemsThresholdReached="OnRemainingItemsThresholdReached"
+                                SelectionMode="None">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="svc:PlayerCareerSummary">
+                            <Grid ColumnDefinitions="*,72,72,82" ColumnSpacing="4" Padding="8,12" BackgroundColor="White">
+                                <Grid.Triggers>
+                                    <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="#F0F3F7" />
+                                    </DataTrigger>
+                                </Grid.Triggers>
+                                <Label Text="{Binding PlayerName}" FontSize="13" FontAttributes="Bold"
+                                       TextColor="{StaticResource TextPrimary}" LineBreakMode="TailTruncation"
+                                       VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="{Binding PaymentTotalText}" FontSize="12"
+                                       HorizontalTextAlignment="Center" VerticalOptions="Center" TextColor="{StaticResource TextPrimary}" />
+                                <Label Grid.Column="2" Text="{Binding PaymentPaidText}" FontSize="12"
+                                       HorizontalTextAlignment="Center" VerticalOptions="Center" TextColor="{StaticResource Success}" />
+                                <Label Grid.Column="3" Text="{Binding PaymentRemainingText}" FontSize="12"
+                                       HorizontalTextAlignment="Center" VerticalOptions="Center" TextColor="{StaticResource Danger}" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <VerticalStackLayout Padding="20" Spacing="8" HorizontalOptions="Center" VerticalOptions="Center">
+                            <ActivityIndicator IsRunning="{Binding IsBusy}" Color="{StaticResource Secondary}" />
+                            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" HorizontalTextAlignment="Center" />
+                            <Label Text="No player payments found." TextColor="{StaticResource TextSecondary}" HorizontalTextAlignment="Center" />
+                        </VerticalStackLayout>
+                    </CollectionView.EmptyView>
+                </CollectionView>
+                <ActivityIndicator IsRunning="{Binding IsLoadingMore}" IsVisible="{Binding IsLoadingMore}"
+                                   Color="{StaticResource Secondary}" HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,8" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentPage>

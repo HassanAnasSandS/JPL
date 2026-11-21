@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Player Payments · {{LEAGUE_NAME}} · Cric360</title>
+  <meta property="og:title" content="Player Payments · {{LEAGUE_NAME}} · Cric360" />
+  <meta property="og:description" content="Player totals, payments received and remaining balances." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; --bg:#081018; --navy:#0d1b2a; --card:#14283b; --line:#26394c; --gold:#d4af37; --text:#f4f6fa; --muted:#9aaabd; --green:#1b8b4d; --red:#c62828; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:radial-gradient(900px 400px at 4% 0%,#17283a,transparent 60%),var(--bg); color:var(--text); font-family:Outfit,system-ui,sans-serif; }
+    a { color:inherit; text-decoration:none; }
+    .top { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:14px; padding:13px 18px; background:rgba(8,16,24,.94); border-bottom:1px solid var(--line); backdrop-filter:blur(12px); }
+    .brand { font-size:12px; font-weight:800; letter-spacing:.14em; color:var(--gold); }
+    .back { margin-left:auto; color:var(--gold); font-size:13px; font-weight:700; }
+    .wrap { width:min(980px,100%); margin:0 auto; padding:22px 16px 48px; }
+    .hero { padding:22px; border-radius:20px; border:1px solid #35475a; background:linear-gradient(145deg,#16283b,#0d1b2a); }
+    .eyebrow { margin:0 0 7px; color:var(--gold); font-size:11px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(26px,5vw,36px); line-height:1.1; }
+    .sub { margin:8px 0 0; color:#b9c4d2; font-size:14px; }
+    .overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:20px 0 24px; }
+    .overview-card { min-width:0; padding:20px 22px; border:1px solid #21485b; border-radius:18px; background:#062331; }
+    .overview-card span { display:block; color:#a9bdca; font-size:14px; font-weight:600; }
+    .overview-card strong { display:block; margin-top:8px; color:var(--text); font:700 clamp(22px,3vw,30px) "JetBrains Mono",monospace; font-variant-numeric:tabular-nums; }
+    .overview-card.paid-total strong { color:#00b982; }
+    .overview-card.remaining-total strong { color:#ff5c62; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:22px 2px 10px; }
+    .toolbar h2 { margin:0; color:var(--gold); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+    .toolbar span { color:var(--muted); font-size:12px; }
+    .search { width:min(290px,58vw); padding:10px 12px; border:1px solid var(--line); border-radius:10px; outline:none; background:#101d2b; color:var(--text); font:inherit; }
+    .table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:16px; background:#f2f4f7; color:#0d1b2a; box-shadow:0 14px 38px rgba(0,0,0,.24); }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    thead { background:#e8edf3; color:#667b93; }
+    th { padding:13px 12px; text-align:right; font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+    th:first-child { width:43%; text-align:left; }
+    td { padding:14px 12px; border-top:1px solid #e2e8ef; text-align:right; font-family:"JetBrains Mono",ui-monospace,monospace; font-size:13px; font-variant-numeric:tabular-nums; }
+    td:first-child { text-align:left; font-family:Outfit,system-ui,sans-serif; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    tbody tr:nth-child(even) { background:#f8fafc; }
+    .paid { color:var(--green); font-weight:700; }
+    .remaining { color:var(--red); font-weight:700; }
+    tbody tr { cursor:pointer; }
+    tbody tr:hover { background:#eaf1f8; }
+    tbody tr:focus-visible { outline:3px solid var(--gold); outline-offset:-3px; }
+    .state { padding:30px 16px; text-align:center; color:#6d8095; font-size:14px; }
+    .footer { margin-top:12px; color:#8294a9; font-size:11px; text-align:center; }
+    .modal[hidden] { display:none; }
+    .modal { position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:16px; background:rgba(0,0,0,.76); }
+    .dialog { width:min(720px,100%); max-height:min(88vh,850px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #35475a; border-radius:20px; background:#eef2f6; color:var(--navy); box-shadow:0 24px 80px #0008; }
+    .dialog-head { display:flex; align-items:center; gap:16px; padding:18px 20px; background:var(--navy); color:var(--text); }
+    .dialog-head h2 { margin:0; font-size:20px; }
+    .dialog-head p { margin:3px 0 0; color:#b9c4d2; font-size:13px; }
+    .close { margin-left:auto; width:46px; height:46px; border:0; border-radius:12px; background:var(--gold); color:var(--navy); font:inherit; font-size:24px; cursor:pointer; }
+    .dialog-body { overflow:auto; padding:16px; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:13px; border-radius:14px; background:var(--navy); color:var(--text); }
+    .summary span { display:block; color:#a9b8c8; font-size:11px; }
+    .summary strong { display:block; margin-top:3px; font:700 18px "JetBrains Mono",monospace; }
+    .history-title { margin:18px 2px 8px; color:var(--navy); font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+    .transactions { display:grid; gap:8px; }
+    .transaction { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; padding:12px; border:1px solid #dbe4ed; border-radius:12px; background:#fff; }
+    .transaction h3 { margin:0; font-size:14px; }
+    .transaction .meta { color:#6c7f94; font-size:12px; }
+    .transaction .amt { align-self:center; color:var(--green); font:700 16px "JetBrains Mono",monospace; }
+    .transaction.pending .amt { color:var(--red); }
+    .empty-history { padding:16px; border-radius:12px; background:#fff; color:#718297; text-align:center; }
+    @media (max-width:520px) {
+      .wrap { padding:14px 10px 32px; }
+      .hero { padding:18px 16px; border-radius:16px; }
+      .overview { grid-template-columns:1fr; gap:8px; margin:14px 0 20px; }
+      .overview-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-radius:13px; }
+      .overview-card span { font-size:13px; }
+      .overview-card strong { margin-top:0; font-size:18px; }
+      .toolbar { align-items:flex-start; flex-direction:column; }
+      .search { width:100%; }
+      th,td { padding:12px 8px; font-size:11px; }
+      th:first-child { width:38%; }
+      .dialog-head { padding:14px; }
+      .dialog-body { padding:12px; }
+      .summary strong { font-size:14px; }
+      .transaction { padding:10px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/p/{{LEAGUE_ID}}">CRIC360</a>
+    <a class="back" href="/p/{{LEAGUE_ID}}">← League players</a>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <p class="eyebrow">Player payments</p>
+      <h1>{{LEAGUE_NAME}}</h1>
+      <p class="sub">Venue booking totals, amounts paid, and outstanding balances.</p>
+    </section>
+    <section class="overview" aria-label="League payment totals">
+      <article class="overview-card"><span>Total payments</span><strong id="overallTotal">—</strong></article>
+      <article class="overview-card paid-total"><span>Amount paid</span><strong id="overallPaid">—</strong></article>
+      <article class="overview-card remaining-total"><span>Remaining balance</span><strong id="overallRemaining">—</strong></article>
+    </section>
+    <div class="toolbar">
+      <div><h2>Payment list</h2><span id="count" aria-live="polite">Loading players…</span></div>
+      <input id="search" class="search" type="search" placeholder="Search player" aria-label="Search player" />
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Player</th><th scope="col">Total</th><th scope="col">Paid</th><th scope="col">Remaining</th></tr></thead>
+        <tbody id="rows"><tr><td class="state" colspan="4">Loading payment details…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="footer">Cric360 · Player payment summary</p>
+  </main>
+  <div id="playerModal" class="modal" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="modalName">
+      <header class="dialog-head"><div><h2 id="modalName">Player payments</h2><p id="modalSub">Booking contribution history</p></div><button id="closeModal" class="close" type="button" aria-label="Close">×</button></header>
+      <div class="dialog-body"><div id="modalSummary" class="summary"></div><h3 class="history-title">Payment details</h3><div id="modalTransactions" class="transactions"></div></div>
+    </section>
+  </div>
+  <script>
+    (() => {
+      const leagueId = "{{LEAGUE_ID}}";
+      const rows = document.getElementById("rows");
+      const count = document.getElementById("count");
+      const search = document.getElementById("search");
+      const modal = document.getElementById("playerModal");
+      const closeModal = () => { modal.hidden = true; document.body.style.overflow = ""; };
+      let players = [];
+      const amount = value => new Intl.NumberFormat("en-PK", { maximumFractionDigits: 2 }).format(Number(value) || 0);
+      const safe = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      const dateText = value => new Date(value).toLocaleDateString("en-PK", { day:"numeric", month:"short", year:"numeric" });
+      const renderOverview = () => {
+        const totals = players.reduce((sum, player) => ({
+          total: sum.total + (Number(player.total) || 0),
+          paid: sum.paid + (Number(player.paid) || 0),
+          remaining: sum.remaining + (Number(player.remaining) || 0)
+        }), { total:0, paid:0, remaining:0 });
+        document.getElementById("overallTotal").textContent = amount(totals.total);
+        document.getElementById("overallPaid").textContent = amount(totals.paid);
+        document.getElementById("overallRemaining").textContent = amount(totals.remaining);
+      };
+      const openPlayer = player => {
+        document.getElementById("modalName").textContent = player.playerName;
+        document.getElementById("modalSub").textContent = "Venue booking payment history";
+        document.getElementById("modalSummary").innerHTML = `<div><span>Total share</span><strong>${amount(player.total)}</strong></div><div><span>Paid</span><strong style="color:#36c17d">${amount(player.paid)}</strong></div><div><span>Remaining</span><strong style="color:#ff7777">${amount(player.remaining)}</strong></div>`;
+        const history = player.transactions || [];
+        const paid = history.filter(x => String(x.status).toLowerCase() === "paid");
+        const pending = history.filter(x => String(x.status).toLowerCase() !== "paid");
+        const card = (x, isPending) => `<article class="transaction${isPending ? " pending" : ""}"><div><h3>${safe(x.purpose || "Venue booking")}</h3><div class="meta">${dateText(x.date)} · Booked by ${safe(x.bookedBy || "—")}</div></div><div class="amt">${isPending ? "Due " : "Paid "}${amount(x.amount)}</div></article>`;
+        document.getElementById("modalTransactions").innerHTML = paid.length || pending.length
+          ? `${paid.length ? `<div class="transactions">${paid.map(x => card(x,false)).join("")}</div>` : ""}${pending.length ? `<h3 class="history-title">Outstanding shares</h3><div class="transactions">${pending.map(x => card(x,true)).join("")}</div>` : ""}`
+          : `<div class="empty-history">No booking payments found.</div>`;
+        modal.hidden = false; document.body.style.overflow = "hidden"; document.getElementById("closeModal").focus();
+      };
+      const render = () => {
+        const query = search.value.trim().toLocaleLowerCase();
+        const filtered = players.filter(p => p.playerName.toLocaleLowerCase().includes(query))
+          .sort((a, b) => (Number(b.remaining) || 0) - (Number(a.remaining) || 0) || a.playerName.localeCompare(b.playerName));
+        count.textContent = `${filtered.length} ${filtered.length === 1 ? "player" : "players"}`;
+        rows.replaceChildren();
+        if (!filtered.length) {
+          const tr = document.createElement("tr");
+          const td = document.createElement("td");
+          td.className = "state"; td.colSpan = 4; td.textContent = players.length ? "No players match your search." : "No payment records found.";
+          tr.append(td); rows.append(tr); return;
+        }
+        for (const p of filtered) {
+          const tr = document.createElement("tr");
+          tr.tabIndex = 0; tr.setAttribute("role", "button"); tr.setAttribute("aria-label", `View payment details for ${p.playerName}`);
+          tr.addEventListener("click", () => openPlayer(p));
+          tr.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPlayer(p); } });
+          const name = document.createElement("td"); name.textContent = p.playerName;
+          const total = document.createElement("td"); total.textContent = amount(p.total);
+          const paid = document.createElement("td"); paid.className = "paid"; paid.textContent = amount(p.paid);
+          const remaining = document.createElement("td"); remaining.className = "remaining"; remaining.textContent = amount(p.remaining);
+          tr.append(name, total, paid, remaining); rows.append(tr);
+        }
+      };
+      document.getElementById("closeModal").addEventListener("click", closeModal);
+      modal.addEventListener("click", event => { if (event.target === modal) closeModal(); });
+      document.addEventListener("keydown", event => { if (event.key === "Escape" && !modal.hidden) closeModal(); });
+      search.addEventListener("input", render);
+      fetch(`/api/public/leagues/${encodeURIComponent(leagueId)}/payments`, { cache: "no-store" })
+        .then(response => { if (!response.ok) throw new Error("Could not load payment records."); return response.json(); })
+        .then(data => { players = Array.isArray(data.players) ? data.players : []; renderOverview(); render(); })
+        .catch(() => { count.textContent = ""; rows.replaceChildren(); const tr=document.createElement("tr"); const td=document.createElement("td"); td.className="state"; td.colSpan=4; td.textContent="Payment list is temporarily unavailable."; tr.append(td); rows.append(tr); });
+    })();
+  </script>
+</body>
+</html>

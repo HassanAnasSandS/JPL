@@ -195,6 +195,7 @@ public sealed class StatsFilterOptionsDto
     public List<StatsFilterOptionDto> Tournaments { get; set; } = new();
     public List<StatsFilterOptionDto> Series { get; set; } = new();
     public List<StatsFilterOptionDto> Matches { get; set; } = new();
+    public List<StatsFilterOptionDto> Captains { get; set; } = new();
 }
 
 public sealed class TrophyRow
@@ -287,6 +288,33 @@ public sealed class ApiVenueBookingParticipantDto
     public string PlayerName { get; set; } = string.Empty;
     public string Status { get; set; } = "Pending";
     public decimal Amount { get; set; }
+}
+
+public sealed class ApiExpenseDto
+{
+    public Guid Id { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string CreatedByUsername { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public Guid PurchasedByPlayerId { get; set; }
+    public string PurchasedByPlayerName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal ContributedAmount { get; set; }
+    public decimal OutstandingAmount { get; set; }
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public bool IsDeleted { get; set; }
+    public bool CanEdit { get; set; }
+    public List<ApiExpenseContributionDto> Contributions { get; set; } = new();
+}
+
+public sealed class ApiExpenseContributionDto
+{
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = "Pending";
 }
 
 public sealed class ApiTournamentListDto
@@ -612,6 +640,10 @@ public interface IApiClient
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default);
     Task<ApiPagedResult<PlayerCareerSummary>> GetStatsLeaderboardPageAsync(
         int skip,
@@ -627,12 +659,51 @@ public interface IApiClient
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default);
     Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<FieldingVsStat>> GetFieldingVsAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default);
+    Task<IReadOnlyList<PartnershipStat>> GetPartnershipsAsync(Guid playerId, CancellationToken ct = default);
+    Task<IReadOnlyList<PartnershipMatchStat>> GetPartnershipMatchesAsync(
+        Guid playerId,
+        Guid partnerId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<PartnershipStat>> GetPartnershipLeaderboardAsync(
+        string? query = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
+    Task<ApiPagedResult<PartnershipStat>> GetPartnershipLeaderboardPageAsync(
+        int skip,
+        string? query = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
     Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default);
     Task<ApiPagedResult<RankingRow>> GetRankingsPageAsync(
         int skip,
@@ -728,6 +799,13 @@ public interface IApiClient
     Task<ApiVenueBookingDto> CreateVenueBookingAsync(object body, CancellationToken ct = default);
     Task<ApiVenueBookingDto> UpdateVenueBookingAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteVenueBookingAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ApiExpenseDto>> GetExpensesAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<ApiExpenseDto>> GetExpensesPageAsync(int skip, string? q = null, CancellationToken ct = default);
+    Task<ApiExpenseDto?> GetExpenseAsync(Guid id, CancellationToken ct = default);
+    Task<ApiExpenseDto> CreateExpenseAsync(object body, CancellationToken ct = default);
+    Task<ApiExpenseDto> UpdateExpenseAsync(Guid id, object body, CancellationToken ct = default);
+    Task DeleteExpenseAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiTournamentListDto>> GetTournamentsAsync(CancellationToken ct = default);
     Task<ApiPagedResult<ApiTournamentListDto>> GetTournamentsPageAsync(int skip, string? q = null, CancellationToken ct = default);
@@ -1182,6 +1260,10 @@ public sealed class ApiClient : IApiClient
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1197,6 +1279,14 @@ public sealed class ApiClient : IApiClient
                 query.Add($"source={Uri.EscapeDataString(source)}");
             if (attendanceFromDebut)
                 query.Add("attendanceFromDebut=true");
+            if (asCaptain)
+                query.Add("asCaptain=true");
+            if (asPlayer)
+                query.Add("asPlayer=true");
+            if (captainPlayerId is Guid captainId && captainId != Guid.Empty)
+                query.Add($"captainPlayerId={captainId:D}");
+            if (captainOpponentSide)
+                query.Add("captainOpponentSide=true");
             AppendFormatIds(query, formatIds);
             AppendGuidIds(query, "tournamentIds", tournamentIds);
             AppendGuidIds(query, "seriesIds", seriesIds);
@@ -1223,13 +1313,23 @@ public sealed class ApiClient : IApiClient
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default)
-        => GetPagedAsync<PlayerCareerSummary>(
-            "api/stats/leaderboard/page" + StatsPageQuery(
+    {
+        var query = StatsPageQuery(
                 skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source, formatIds,
                 tournamentIds: tournamentIds, seriesIds: seriesIds, matchIds: matchIds,
-                attendanceFromDebut: attendanceFromDebut),
-            ct);
+                attendanceFromDebut: attendanceFromDebut);
+        if (asCaptain) query += "&asCaptain=true";
+        if (asPlayer) query += "&asPlayer=true";
+        if (captainPlayerId is Guid captainId && captainId != Guid.Empty)
+            query += $"&captainPlayerId={captainId:D}";
+        if (captainOpponentSide) query += "&captainOpponentSide=true";
+        return GetPagedAsync<PlayerCareerSummary>("api/stats/leaderboard/page" + query, ct);
+    }
 
     public Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1301,6 +1401,115 @@ public sealed class ApiClient : IApiClient
                 .ConfigureAwait(false);
             return (IReadOnlyList<CaptainVsStat>)(list ?? new List<CaptainVsStat>());
         }, ct);
+
+    public Task<IReadOnlyList<PartnershipStat>> GetPartnershipsAsync(Guid playerId, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/stats/confrontations/{playerId:D}/partnerships", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<PartnershipStat>>(JsonOptions, ct).ConfigureAwait(false);
+            return (IReadOnlyList<PartnershipStat>)(list ?? new List<PartnershipStat>());
+        }, ct);
+
+    public Task<IReadOnlyList<PartnershipMatchStat>> GetPartnershipMatchesAsync(
+        Guid playerId,
+        Guid partnerId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            var queryParams = new List<string>();
+            if (fromUtc is DateTime from)
+                queryParams.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
+            if (toExclusiveUtc is DateTime to)
+                queryParams.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+            if (venueId is Guid vid && vid != Guid.Empty)
+                queryParams.Add($"venueId={vid:D}");
+            AppendFormatIds(queryParams, formatIds);
+            AppendGuidIds(queryParams, "tournamentIds", tournamentIds);
+            AppendGuidIds(queryParams, "seriesIds", seriesIds);
+            AppendGuidIds(queryParams, "matchIds", matchIds);
+            var url = $"api/stats/partnerships/{playerId:D}/{partnerId:D}/matches"
+                + (queryParams.Count == 0 ? string.Empty : "?" + string.Join("&", queryParams));
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<PartnershipMatchStat>>(JsonOptions, ct).ConfigureAwait(false);
+            return (IReadOnlyList<PartnershipMatchStat>)(list ?? new List<PartnershipMatchStat>());
+        }, ct);
+
+    public Task<IReadOnlyList<PartnershipStat>> GetPartnershipLeaderboardAsync(
+        string? query = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            var queryParams = new List<string>();
+            if (!string.IsNullOrWhiteSpace(query))
+                queryParams.Add($"q={Uri.EscapeDataString(query.Trim())}");
+            if (fromUtc is DateTime from)
+                queryParams.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
+            if (toExclusiveUtc is DateTime to)
+                queryParams.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+            if (venueId is Guid vid && vid != Guid.Empty)
+                queryParams.Add($"venueId={vid:D}");
+            AppendFormatIds(queryParams, formatIds);
+            AppendGuidIds(queryParams, "tournamentIds", tournamentIds);
+            AppendGuidIds(queryParams, "seriesIds", seriesIds);
+            AppendGuidIds(queryParams, "matchIds", matchIds);
+            var url = "api/stats/partnerships" + (queryParams.Count == 0 ? string.Empty : "?" + string.Join("&", queryParams));
+            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<PartnershipStat>>(JsonOptions, ct).ConfigureAwait(false);
+            return (IReadOnlyList<PartnershipStat>)(list ?? new List<PartnershipStat>());
+        }, ct);
+
+    public Task<ApiPagedResult<PartnershipStat>> GetPartnershipLeaderboardPageAsync(
+        int skip,
+        string? query = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+    {
+        var queryParams = new List<string>
+        {
+            $"skip={Math.Max(0, skip)}",
+            $"take={ListPaging.PageSize}",
+            $"sort={Uri.EscapeDataString(string.IsNullOrWhiteSpace(sort) ? "PartnershipRuns" : sort)}",
+            $"ascending={(ascending ? "true" : "false")}"
+        };
+        if (!string.IsNullOrWhiteSpace(query))
+            queryParams.Add($"q={Uri.EscapeDataString(query.Trim())}");
+        if (fromUtc is DateTime from)
+            queryParams.Add($"fromUtc={Uri.EscapeDataString(from.ToString("O"))}");
+        if (toExclusiveUtc is DateTime to)
+            queryParams.Add($"toExclusiveUtc={Uri.EscapeDataString(to.ToString("O"))}");
+        if (venueId is Guid vid && vid != Guid.Empty)
+            queryParams.Add($"venueId={vid:D}");
+        AppendFormatIds(queryParams, formatIds);
+        AppendGuidIds(queryParams, "tournamentIds", tournamentIds);
+        AppendGuidIds(queryParams, "seriesIds", seriesIds);
+        AppendGuidIds(queryParams, "matchIds", matchIds);
+        return GetPagedAsync<PartnershipStat>("api/stats/partnerships/page?" + string.Join("&", queryParams), ct);
+    }
 
     public Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1626,6 +1835,40 @@ public sealed class ApiClient : IApiClient
         => RunAsync(async http =>
         {
             using var response = await http.DeleteAsync($"api/venuebookings/{id:D}", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<IReadOnlyList<ApiExpenseDto>> GetExpensesAsync(CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync("api/expenses", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            var list = await response.Content.ReadFromJsonAsync<List<ApiExpenseDto>>(JsonOptions, ct).ConfigureAwait(false);
+            return (IReadOnlyList<ApiExpenseDto>)(list ?? new List<ApiExpenseDto>());
+        }, ct);
+
+    public Task<ApiPagedResult<ApiExpenseDto>> GetExpensesPageAsync(int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiExpenseDto>("api/expenses/page" + ListPaging.Query(skip, ("q", q)), ct);
+
+    public Task<ApiExpenseDto?> GetExpenseAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/expenses/{id:D}", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiExpenseDto>(JsonOptions, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<ApiExpenseDto> CreateExpenseAsync(object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiExpenseDto>(HttpMethod.Post, "api/expenses", body, ct);
+
+    public Task<ApiExpenseDto> UpdateExpenseAsync(Guid id, object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiExpenseDto>(HttpMethod.Put, $"api/expenses/{id:D}", body, ct);
+
+    public Task DeleteExpenseAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.DeleteAsync($"api/expenses/{id:D}", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
 

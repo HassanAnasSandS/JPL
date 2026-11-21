@@ -33,6 +33,8 @@ public sealed class JplDbContext : DbContext
     public DbSet<Format> Formats => Set<Format>();
     public DbSet<VenueBooking> VenueBookings => Set<VenueBooking>();
     public DbSet<VenueBookingParticipant> VenueBookingParticipants => Set<VenueBookingParticipant>();
+    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<ExpenseContribution> ExpenseContributions => Set<ExpenseContribution>();
     public DbSet<Tournament> Tournaments => Set<Tournament>();
     public DbSet<TournamentTeam> TournamentTeams => Set<TournamentTeam>();
     public DbSet<TournamentFixture> TournamentFixtures => Set<TournamentFixture>();
@@ -255,6 +257,26 @@ public sealed class JplDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.Status).HasMaxLength(16).IsRequired();
             e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasIndex(x => x.PlayerId);
+        });
+
+        modelBuilder.Entity<Expense>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasIndex(x => x.CreatedAtUtc);
+            e.HasIndex(x => x.CreatedByUserId);
+            e.HasIndex(x => x.PurchasedByPlayerId);
+        });
+
+        modelBuilder.Entity<ExpenseContribution>(e =>
+        {
+            e.HasKey(x => new { x.ExpenseId, x.PlayerId });
+            e.HasOne(x => x.Expense).WithMany(x => x.Contributions)
+                .HasForeignKey(x => x.ExpenseId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Status).HasMaxLength(16).IsRequired().HasDefaultValue(ExpenseContributionStatus.Pending);
             e.HasIndex(x => x.PlayerId);
         });
 

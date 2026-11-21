@@ -36,19 +36,9 @@
 
                        TextColor="{StaticResource Primary}" />
 
-                <Label Text="{x:Static svc:BrandSlogans.Catalog}"
 
-                       FontSize="12"
 
-                       TextColor="{StaticResource TextSecondary}"
 
-                       LineBreakMode="WordWrap" />
-
-                <Label Text="{Binding CountLabel}"
-
-                       FontSize="12"
-
-                       TextColor="{StaticResource TextSecondary}" />
 
             </VerticalStackLayout>
 
@@ -174,13 +164,7 @@
 
                                TextColor="{StaticResource TextPrimary}" />
 
-                        <Label Text="Try another filter, or add a player"
 
-                               Style="{StaticResource MutedLabel}"
-
-                               HorizontalOptions="Center"
-
-                               HorizontalTextAlignment="Center" />
 
                     </VerticalStackLayout>
 

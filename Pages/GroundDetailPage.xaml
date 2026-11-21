@@ -95,9 +95,7 @@
                                                FontAttributes="Bold"
                                                LineBreakMode="TailTruncation"
                                                MaxLines="2" />
-                                        <Label Text="Tap to play"
-                                               FontSize="11"
-                                               TextColor="{StaticResource TextSecondary}" />
+                                        
                                     </VerticalStackLayout>
                                 </Grid>
                             </Border>

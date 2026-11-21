@@ -1,6 +1,9 @@
 namespace JPL.Services;
 
-public readonly record struct RankingPart(string Label, string Stat, double Pts);
+public readonly record struct RankingPart(string Label, string Stat, double Pts, string MatchTitle = "")
+{
+    public string PointsText => Pts.ToString("+0.#;-0.#;0", System.Globalization.CultureInfo.InvariantCulture);
+}
 
 /// <summary>
 /// Club ranking points from every stored stat. Positive for output, negative for real costs
@@ -18,11 +21,11 @@ public static class RankingPoints
             return list;
 
         Add(list, "Runs", $"{p.Runs} × 1", p.Runs);
-        Add(list, "Fours", $"{p.Fours} × 2", p.Fours * 2);
-        Add(list, "Sixes", $"{p.Sixes} × 4", p.Sixes * 4);
+        Add(list, "Fours bonus", $"{p.Fours} × 4", p.Fours * 4);
+        Add(list, "Sixes bonus", $"{p.Sixes} × 6", p.Sixes * 6);
         Add(list, "Fifties", $"{p.Fifties} × 12", p.Fifties * 12);
         Add(list, "Hundreds", $"{p.Hundreds} × 25", p.Hundreds * 25);
-        Add(list, "Not outs", $"{p.NotOuts} × 5", p.NotOuts * 5);
+        Add(list, "Not outs", $"{p.NotOuts} × 4", p.NotOuts * 4);
         Add(list, "Highest score", $"{p.HighestScore} × 0.5", p.HighestScore * 0.5);
 
         if (p.BallsFaced >= 6)
@@ -57,11 +60,8 @@ public static class RankingPoints
             return list;
 
         var overs = p.OversBowledBalls / 6.0;
-        Add(list, "Wickets", $"{p.Wickets} × 10", p.Wickets * 10);
-        Add(list, "Bowled wickets", $"{p.BowledWkts} × 3", p.BowledWkts * 3);
-        Add(list, "LBW wickets", $"{p.LbwWkts} × 2", p.LbwWkts * 2);
-        Add(list, "Stumped wickets", $"{p.StumpedWkts} × 2", p.StumpedWkts * 2);
-        Add(list, "Hit-wicket wickets", $"{p.HitWicketWkts} × 2", p.HitWicketWkts * 2);
+        Add(list, "Wickets", $"{p.Wickets} × 25", p.Wickets * 25);
+        Add(list, "Bowled wicket bonus", $"{p.BowledWkts} × 5", p.BowledWkts * 5);
         Add(list, "Maidens", $"{p.Maidens} × 8", p.Maidens * 8);
         Add(list, "Dot balls", $"{p.DotBallsBowled} × 0.35", p.DotBallsBowled * 0.35);
         Add(list, "Hat-tricks", $"{p.HatTricks} × 20", p.HatTricks * 20);
@@ -78,13 +78,8 @@ public static class RankingPoints
             var sr = p.OversBowledBalls / (double)p.Wickets;
             Add(list, "Bowling SR vs 18", $"{sr:0.#} balls/wkt", (18.0 - sr) * p.Wickets * 0.3);
         }
-        else if (p.Wickets == 0 && p.OversBowledBalls >= 6)
-        {
-            Add(list, "Wicketless spell", $"{overs:0.#} ov, 0 wkts", -overs);
-        }
-
-        Add(list, "Wide runs", $"{p.WidesBowled} × −1.5", p.WidesBowled * -1.5);
-        Add(list, "No-ball runs", $"{p.NoBallsBowled} × −2", p.NoBallsBowled * -2);
+        Add(list, "Wide runs", $"{p.WidesBowled} × −1", p.WidesBowled * -1);
+        Add(list, "No-ball runs", $"{p.NoBallsBowled} × −1", p.NoBallsBowled * -1);
         Add(list, "Byes", $"{p.ByesConceded} × −0.2", p.ByesConceded * -0.2);
         Add(list, "Leg byes", $"{p.LegByesConceded} × −0.2", p.LegByesConceded * -0.2);
         return list;
@@ -102,13 +97,6 @@ public static class RankingPoints
         Add(list, "Stumpings", $"{p.Stumpings} × 15", p.Stumpings * 15);
         if (p.DroppedCatches > 0)
             Add(list, "Dropped catches", $"{p.DroppedCatches} × −10", p.DroppedCatches * -10);
-
-        if (p.Matches >= 4 && actions > 0)
-        {
-            var expected = p.Matches * 0.25;
-            if (actions < expected)
-                Add(list, "Low dismissals / match", $"{actions} in {p.Matches} matches (par {expected:0.#})", (actions - expected) * 4);
-        }
 
         return list;
     }

@@ -66,11 +66,7 @@
                             <VerticalStackLayout Spacing="10">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <Label Text="{Binding Title}" Style="{StaticResource SectionLabel}" />
-                                    <Label Grid.Column="1"
-                                           Text="{Binding CountLabel}"
-                                           Style="{StaticResource MutedLabel}"
-                                           FontSize="12"
-                                           VerticalOptions="Center" />
+                                    
                                 </Grid>
                                 <Label Text="Type a team name for this group (not linked to Players/Teams)."
                                        Style="{StaticResource MutedLabel}"
@@ -130,9 +126,7 @@
                     IsVisible="{Binding ShowCustomBuilder}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Custom fixtures" Style="{StaticResource SectionLabel}" />
-                    <Label Text="Choose Manual or Auto. Each team plays the matches-per-team count you pick (e.g. 2 or 4). Auto can be run again anytime for a different schedule."
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="12" />
+                    
 
                     <Label Text="Matches per team" FontSize="12" Style="{StaticResource MutedLabel}" />
                     <Picker Title="Matches per team"
@@ -169,9 +163,7 @@
                     </VerticalStackLayout>
 
                     <VerticalStackLayout Spacing="6" IsVisible="{Binding IsCustomAuto}">
-                        <Label Text="Auto builds a full valid schedule (every team gets exactly the matches-per-team count). Tap again for a different draw."
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="12" />
+                        
                         <Button Text="{Binding AutoGenerateButtonText}"
                                 Style="{StaticResource GoldButton}"
                                 HeightRequest="44"

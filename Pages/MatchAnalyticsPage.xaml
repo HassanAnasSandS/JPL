@@ -72,7 +72,7 @@
                             </HorizontalStackLayout>
                         </Grid>
                         <Label Text="{Binding InningsSummary}" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                        <Label Text="Green = above innings RR. Red = below. Dots on a bar = wickets." FontSize="10" TextColor="{StaticResource TextSecondary}" />
+
                         <ctrl:BarChartView Bars="{Binding Manhattan}" HeightRequest="180" />
                     </VerticalStackLayout>
                 </Border>

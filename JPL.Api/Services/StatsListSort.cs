@@ -174,6 +174,9 @@ internal static class StatsListSort
         "PaymentPaidPct" => r.PaymentTotal <= 0
             ? double.MinValue
             : (double)(r.PaymentPaid / r.PaymentTotal) * 100,
+        "ExpensePurchased" => r.ExpensePurchased,
+        "ExpenseContributed" => r.ExpenseContributed,
+        "ExpenseRemaining" => r.ExpenseRemaining,
         _ => r.PlayerName
     };
 

@@ -42,6 +42,12 @@ public partial class MatchScorecardViewModel : ObservableObject
             IsDetailScorecardModalOpen = false;
             IsPlayerReportOpen = false;
             PlayerReport = null;
+            IsPlayerPointsOpen = false;
+            IsSelectedPlayerPointsOpen = false;
+            SelectedPlayerPoints = null;
+            PlayerPoints.Clear();
+            PlayerPointsError = string.Empty;
+            NotifyPlayerPointsState();
             _ = LoadAsync();
         }
     }
@@ -77,6 +83,22 @@ public partial class MatchScorecardViewModel : ObservableObject
     [ObservableProperty] private bool isPlayerReportOpen;
     [ObservableProperty] private bool isPlayerReportBusy;
     [ObservableProperty] private PlayerMatchReport? playerReport;
+    [ObservableProperty] private bool isPlayerPointsOpen;
+    [ObservableProperty] private bool isSelectedPlayerPointsOpen;
+    [ObservableProperty] private bool isPlayerPointsBusy;
+    [ObservableProperty] private MatchPointsRow? selectedPlayerPoints;
+    [ObservableProperty] private string playerPointsPotmName = string.Empty;
+    [ObservableProperty] private string playerPointsSelectionTitle = "PLAYER OF THE MATCH";
+    [ObservableProperty] private string playerPointsPotmTeam = string.Empty;
+    [ObservableProperty] private string playerPointsPotmPoints = "0";
+    [ObservableProperty] private string playerPointsPotmBreakdown = string.Empty;
+    [ObservableProperty] private string playerPointsPotmImpact = string.Empty;
+    [ObservableProperty] private string playerPointsError = string.Empty;
+
+    /// <summary>Every player's impact points for this match, highest first.</summary>
+    public ObservableCollection<MatchPointsRow> PlayerPoints { get; } = new();
+
+    public string PlayerPointsRules => MatchPointsCalculator.RulesText;
     [ObservableProperty] private string strikerName = "—";
     [ObservableProperty] private string strikerScore = "";
     [ObservableProperty] private string nonStrikerName = "—";
@@ -108,6 +130,12 @@ public partial class MatchScorecardViewModel : ObservableObject
     public bool ShowShellNavBar => !ShowLiveOverlay;
     public bool ShowDetailScorecardModal => IsDetailScorecardModalOpen && IsLiveStreamOpen;
     public bool HasPlayerReport => PlayerReport is not null;
+    public bool HasPlayerPoints => PlayerPoints.Count > 0;
+    public bool ShowPlayerPointsEmpty => !IsPlayerPointsBusy
+                                        && PlayerPoints.Count == 0
+                                        && string.IsNullOrWhiteSpace(PlayerPointsError);
+    public bool ShowPlayerPointsError => !IsPlayerPointsBusy
+                                         && !string.IsNullOrWhiteSpace(PlayerPointsError);
     public string ScorecardTapHint => "Tap for full scorecard";
     public string LiveBannerText => BrandSlogans.LiveScore;
 
@@ -169,6 +197,19 @@ public partial class MatchScorecardViewModel : ObservableObject
 
     partial void OnPlayerReportChanged(PlayerMatchReport? value)
         => OnPropertyChanged(nameof(HasPlayerReport));
+
+    partial void OnIsPlayerPointsBusyChanged(bool value)
+        => NotifyPlayerPointsState();
+
+    partial void OnPlayerPointsErrorChanged(string value)
+        => NotifyPlayerPointsState();
+
+    private void NotifyPlayerPointsState()
+    {
+        OnPropertyChanged(nameof(HasPlayerPoints));
+        OnPropertyChanged(nameof(ShowPlayerPointsEmpty));
+        OnPropertyChanged(nameof(ShowPlayerPointsError));
+    }
 
     partial void OnHasScorecardChanged(bool value)
     {
@@ -340,6 +381,90 @@ public partial class MatchScorecardViewModel : ObservableObject
     {
         IsPlayerReportOpen = false;
         PlayerReport = null;
+    }
+
+    [RelayCommand]
+    private async Task OpenPlayerPointsAsync()
+    {
+        if (!Guid.TryParse(MatchId, out var matchId))
+            return;
+
+        IsPlayerPointsOpen = true;
+        IsPlayerPointsBusy = true;
+        PlayerPointsError = string.Empty;
+        PlayerPoints.Clear();
+        NotifyPlayerPointsState();
+
+        try
+        {
+            var rows = await _matches.GetMatchPointsAsync(matchId).ConfigureAwait(true);
+            foreach (var row in rows)
+                PlayerPoints.Add(row);
+
+            var potm = rows.FirstOrDefault(r => r.IsPlayerOfTheMatch) ?? rows.FirstOrDefault();
+            if (potm is null)
+            {
+                PlayerPointsPotmName = "Player of the Match";
+                PlayerPointsSelectionTitle = "PLAYER OF THE MATCH";
+                PlayerPointsPotmTeam = string.Empty;
+                PlayerPointsPotmPoints = "—";
+                PlayerPointsPotmBreakdown = string.Empty;
+                PlayerPointsPotmImpact = string.Empty;
+                PlayerPointsError = "No ball-by-ball data for this match.";
+            }
+            else
+            {
+                PlayerPointsPotmName = potm.PlayerName;
+                PlayerPointsSelectionTitle = "PLAYER OF THE MATCH";
+                PlayerPointsPotmTeam = potm.TeamName;
+                PlayerPointsPotmPoints = potm.PointsText;
+                PlayerPointsPotmBreakdown = potm.PointsDetailText;
+                PlayerPointsPotmImpact = potm.ImpactText;
+            }
+        }
+        catch (Exception ex)
+        {
+            PlayerPointsError = ex.Message;
+        }
+        finally
+        {
+            IsPlayerPointsBusy = false;
+            NotifyPlayerPointsState();
+        }
+    }
+
+    [RelayCommand]
+    private void ClosePlayerPoints()
+    {
+        IsPlayerPointsOpen = false;
+        IsSelectedPlayerPointsOpen = false;
+        SelectedPlayerPoints = null;
+        PlayerPoints.Clear();
+        PlayerPointsError = string.Empty;
+        NotifyPlayerPointsState();
+    }
+
+    [RelayCommand]
+    private void SelectPlayerPoints(MatchPointsRow? row)
+    {
+        if (row is null)
+            return;
+
+        SelectedPlayerPoints = row;
+        IsSelectedPlayerPointsOpen = true;
+        PlayerPointsSelectionTitle = row.IsPlayerOfTheMatch ? "PLAYER OF THE MATCH" : "SELECTED PLAYER";
+        PlayerPointsPotmName = row.PlayerName;
+        PlayerPointsPotmTeam = row.TeamName;
+        PlayerPointsPotmPoints = row.PointsText;
+        PlayerPointsPotmImpact = row.ImpactText;
+        PlayerPointsPotmBreakdown = row.PointsDetailText;
+    }
+
+    [RelayCommand]
+    private void CloseSelectedPlayerPoints()
+    {
+        IsSelectedPlayerPointsOpen = false;
+        SelectedPlayerPoints = null;
     }
 
     [RelayCommand]

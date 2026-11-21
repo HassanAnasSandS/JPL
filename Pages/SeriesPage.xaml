@@ -17,13 +17,8 @@
                        FontSize="22"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
-                <Label Text="{x:Static svc:BrandSlogans.Catalog}"
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}"
-                       LineBreakMode="WordWrap" />
-                <Label Text="{Binding CountLabel}"
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}" />
+                
+                
                 <Label Text="Two teams · schedule first · play one by one"
                        Style="{StaticResource MutedLabel}"
                        FontSize="12" />

@@ -23,6 +23,7 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
 
     public ObservableCollection<SeriesStandingItem> Standings { get; } = new();
     public ObservableCollection<SeriesFixtureItem> Fixtures { get; } = new();
+    public EventAwardPointsViewModel AwardPoints { get; }
 
     [ObservableProperty] private string name = string.Empty;
     [ObservableProperty] private string statusText = string.Empty;
@@ -55,6 +56,7 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
         _series = series;
         _matches = matches;
         _auth = auth;
+        AwardPoints = new EventAwardPointsViewModel(matches, "Series");
     }
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
@@ -74,6 +76,7 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
             var detail = await _series.GetAsync(_id).ConfigureAwait(true)
                          ?? throw new InvalidOperationException("Series not found.");
             Bind(detail);
+            await LoadAwardPointsAsync(detail).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -81,6 +84,14 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
         }
         finally { IsBusy = false; }
     }
+
+    private Task LoadAwardPointsAsync(SeriesDetail detail)
+        => AwardPoints.LoadAsync(
+            detail.Fixtures.Select(f => (f.MatchId, f.Label, f.HasResult)),
+            detail.PlayerOfTheSeriesPlayerId,
+            detail.BestBatsmanPlayerId,
+            detail.BestBowlerPlayerId,
+            detail.BestFielderPlayerId);
 
     private void Bind(SeriesDetail detail)
     {
@@ -159,6 +170,7 @@ public partial class SeriesDetailViewModel : ObservableObject, IQueryAttributabl
             IsBusy = true;
             var detail = await _series.GenerateAsync(_id).ConfigureAwait(true);
             Bind(detail);
+            await LoadAwardPointsAsync(detail).ConfigureAwait(true);
         }
         catch (Exception ex)
         {

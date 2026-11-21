@@ -3079,11 +3079,42 @@ public sealed class StatsController : ControllerBase
                 return new StatsFilterOptionDto { Id = m.Id, Name = $"{title} · {when}" };
             }).ToList();
 
+            var captainMatches = await _db.Matches.AsNoTracking()
+                .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed)
+                .Select(m => new { m.TeamAId, m.TeamBId, m.TeamACaptainId, m.TeamBCaptainId })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var captainTeamIds = captainMatches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToArray();
+            var captainByTeam = captainTeamIds.Length == 0
+                ? new Dictionary<Guid, Guid?>()
+                : await _db.Teams.AsNoTracking()
+                    .Where(t => captainTeamIds.Contains(t.Id))
+                    .ToDictionaryAsync(t => t.Id, t => t.CaptainPlayerId, ct)
+                    .ConfigureAwait(false);
+            var captainIds = captainMatches.SelectMany(m => new[]
+                {
+                    m.TeamACaptainId ?? captainByTeam.GetValueOrDefault(m.TeamAId),
+                    m.TeamBCaptainId ?? captainByTeam.GetValueOrDefault(m.TeamBId)
+                })
+                .Where(id => id is Guid value && value != Guid.Empty)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToArray();
+            var captains = captainIds.Length == 0
+                ? new List<StatsFilterOptionDto>()
+                : await _db.Players.AsNoTracking()
+                    .Where(p => !p.IsDeleted && captainIds.Contains(p.Id))
+                    .OrderBy(p => p.FullName)
+                    .Select(p => new StatsFilterOptionDto { Id = p.Id, Name = p.FullName })
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false);
+
             return Ok(new StatsFilterOptionsDto
             {
                 Tournaments = tours,
                 Series = series,
-                Matches = matches
+                Matches = matches,
+                Captains = captains
             });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -3105,6 +3136,10 @@ public sealed class StatsController : ControllerBase
         [FromQuery] Guid[]? seriesIds,
         [FromQuery] Guid[]? matchIds,
         [FromQuery] bool attendanceFromDebut = false,
+        [FromQuery] bool asCaptain = false,
+        [FromQuery] Guid? captainPlayerId = null,
+        [FromQuery] bool captainOpponentSide = false,
+        [FromQuery] bool asPlayer = false,
         CancellationToken ct = default)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
@@ -3120,7 +3155,7 @@ public sealed class StatsController : ControllerBase
         return Ok(await StatsCalculator
             .BuildLeaderboardAsync(
                 _db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds,
-                attendanceFromDebut, ct)
+                attendanceFromDebut, asCaptain, captainPlayerId, captainOpponentSide, asPlayer, ct)
             .ConfigureAwait(false));
     }
 
@@ -3140,6 +3175,10 @@ public sealed class StatsController : ControllerBase
         [FromQuery] Guid[]? seriesIds = null,
         [FromQuery] Guid[]? matchIds = null,
         [FromQuery] bool attendanceFromDebut = false,
+        [FromQuery] bool asCaptain = false,
+        [FromQuery] Guid? captainPlayerId = null,
+        [FromQuery] bool captainOpponentSide = false,
+        [FromQuery] bool asPlayer = false,
         CancellationToken ct = default)
     {
         if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
@@ -3149,7 +3188,7 @@ public sealed class StatsController : ControllerBase
             ? await StatsCalculator.BuildNetsLeaderboardAsync(_db, fromUtc, toExclusiveUtc, ct).ConfigureAwait(false)
             : await StatsCalculator.BuildLeaderboardAsync(
                     _db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds,
-                    attendanceFromDebut, ct)
+                    attendanceFromDebut, asCaptain, captainPlayerId, captainOpponentSide, asPlayer, ct)
                 .ConfigureAwait(false);
 
         IEnumerable<PlayerCareerDto> filtered = board;
@@ -3366,6 +3405,82 @@ public sealed class StatsController : ControllerBase
         Guid playerId,
         CancellationToken ct)
         => Ok(await StatsCalculator.BuildCaptainVsAsync(_db, playerId, ct).ConfigureAwait(false));
+
+    [HttpGet("confrontations/{playerId:guid}/partnerships")]
+    public async Task<ActionResult<IReadOnlyList<PartnershipDto>>> Partnerships(Guid playerId, CancellationToken ct)
+        => Ok(await StatsCalculator.BuildPartnershipsAsync(_db, playerId, ct).ConfigureAwait(false));
+
+    [HttpGet("partnerships")]
+    public async Task<ActionResult<IReadOnlyList<PartnershipDto>>> AllPartnerships(
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toExclusiveUtc = null,
+        [FromQuery] Guid? venueId = null,
+        [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
+        [FromQuery] string? q = null,
+        CancellationToken ct = default)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before To date.");
+
+        var all = await StatsCalculator.BuildAllPartnershipsAsync(
+            _db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds, q, ct)
+            .ConfigureAwait(false);
+        return Ok(all.Take(100).ToList());
+    }
+
+    [HttpGet("partnerships/page")]
+    public async Task<ActionResult<PagedResult<PartnershipDto>>> AllPartnershipsPage(
+        int skip = 0,
+        int take = Paging.DefaultTake,
+        string? sort = null,
+        bool ascending = false,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toExclusiveUtc = null,
+        [FromQuery] Guid? venueId = null,
+        [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
+        [FromQuery] string? q = null,
+        CancellationToken ct = default)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before To date.");
+
+        var all = await StatsCalculator.BuildAllPartnershipsAsync(
+            _db, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds, q, ct)
+            .ConfigureAwait(false);
+        var ordered = StatsCalculator.OrderPartnerships(all, sort, ascending).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].Rank = i + 1;
+        return Ok(Paging.Slice(ordered, skip, take));
+    }
+
+    [HttpGet("partnerships/{playerId:guid}/{partnerId:guid}/matches")]
+    public async Task<ActionResult<IReadOnlyList<PartnershipMatchDto>>> PartnershipMatches(
+        Guid playerId,
+        Guid partnerId,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toExclusiveUtc = null,
+        [FromQuery] Guid? venueId = null,
+        [FromQuery] Guid[]? formatIds = null,
+        [FromQuery] Guid[]? tournamentIds = null,
+        [FromQuery] Guid[]? seriesIds = null,
+        [FromQuery] Guid[]? matchIds = null,
+        CancellationToken ct = default)
+    {
+        if (fromUtc is DateTime from && toExclusiveUtc is DateTime to && from >= to)
+            return BadRequest("From date must be before To date.");
+        if (playerId == partnerId)
+            return BadRequest("Partnership players must be different.");
+
+        return Ok(await StatsCalculator.BuildPartnershipMatchesAsync(
+            _db, playerId, partnerId, fromUtc, toExclusiveUtc, venueId, formatIds,
+            tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false));
+    }
 
     private static bool IsNetsSource(string? source)
         => string.Equals(source, "nets", StringComparison.OrdinalIgnoreCase);
@@ -4581,6 +4696,198 @@ public sealed class VenueBookingsController : ControllerBase
                 Amount = p.Amount
             }).ToList()
         };
+}
+
+[ApiController]
+[Route("api/expenses")]
+public sealed class ExpensesController : ControllerBase
+{
+    private readonly ApiDbContext _db;
+    private readonly IApiDbFactory _dbs;
+
+    public ExpensesController(ApiDbContext db, IApiDbFactory dbs) { _db = db; _dbs = dbs; }
+
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<ExpenseDto>>> List(CancellationToken ct)
+    {
+        await EnsureCreatedByAdminAsync(ct).ConfigureAwait(false);
+        var list = await _db.Expenses.AsNoTracking().Where(x => !x.IsDeleted)
+            .Include(x => x.Contributions).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct).ConfigureAwait(false);
+        return Ok(await ToDtosAsync(list, ct).ConfigureAwait(false));
+    }
+
+    [HttpGet("page")]
+    public async Task<ActionResult<PagedResult<ExpenseDto>>> Page(int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
+    {
+        await EnsureCreatedByAdminAsync(ct).ConfigureAwait(false);
+        (skip, take) = Paging.Clamp(skip, take);
+        var query = _db.Expenses.AsNoTracking().Where(x => !x.IsDeleted);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            query = query.Where(x => EF.Functions.Like(x.Name, like)
+                || _db.Players.Any(p => p.Id == x.PurchasedByPlayerId && EF.Functions.Like(p.FullName, like)));
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var rows = await query.Include(x => x.Contributions).OrderByDescending(x => x.CreatedAtUtc)
+            .Skip(skip).Take(take).ToListAsync(ct).ConfigureAwait(false);
+        return Ok(new PagedResult<ExpenseDto>(await ToDtosAsync(rows, ct).ConfigureAwait(false), total, skip, take));
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ExpenseDto>> Get(Guid id, CancellationToken ct)
+    {
+        await EnsureCreatedByAdminAsync(ct).ConfigureAwait(false);
+        var row = await _db.Expenses.AsNoTracking().Include(x => x.Contributions)
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct).ConfigureAwait(false);
+        if (row is null) return NotFound();
+        return Ok((await ToDtosAsync(new[] { row }, ct).ConfigureAwait(false))[0]);
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<ExpenseDto>> Create([FromBody] ExpenseUpsertRequest request, CancellationToken ct)
+    {
+        if (!TryGetCaller(out var userId, out var role)) return Unauthorized();
+        if (!IsLeagueWriter(role)) return StatusCode(403, "Only admins can create expenses.");
+        var error = await ValidateAsync(request, ct).ConfigureAwait(false);
+        if (error is not null) return BadRequest(error);
+        var id = request.Id is Guid candidate && candidate != Guid.Empty ? candidate : Guid.NewGuid();
+        var now = DateTime.Now;
+        var row = new Expense
+        {
+            Id = id, CreatedByUserId = userId, Name = request.Name.Trim(),
+            PurchasedByPlayerId = request.PurchasedByPlayerId, Amount = request.Amount,
+            CreatedAtUtc = now, UpdatedAtUtc = now, Version = 1,
+            Contributions = Dedup(request.Contributions).Select(c => new ExpenseContribution
+                { ExpenseId = id, PlayerId = c.PlayerId, Amount = c.Amount, Status = ExpenseContributionStatus.Normalize(c.Status) }).ToList()
+        };
+        _db.Expenses.Add(row);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Ok((await ToDtosAsync(new[] { row }, ct).ConfigureAwait(false))[0]);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ExpenseDto>> Update(Guid id, [FromBody] ExpenseUpsertRequest request, CancellationToken ct)
+    {
+        if (!TryGetCaller(out var userId, out var role)) return Unauthorized();
+        if (!IsLeagueWriter(role)) return StatusCode(403, "Only admins can edit expenses.");
+        var error = await ValidateAsync(request, ct).ConfigureAwait(false);
+        if (error is not null) return BadRequest(error);
+        var row = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct).ConfigureAwait(false);
+        if (row is null) return NotFound();
+        if (row.CreatedByUserId != userId && !IsSuperAdminRole(role))
+            return StatusCode(403, "Only the admin who created this expense can edit it.");
+        row.Name = request.Name.Trim(); row.PurchasedByPlayerId = request.PurchasedByPlayerId;
+        row.Amount = request.Amount; row.UpdatedAtUtc = DateTime.Now; row.Version++;
+        await _db.ExpenseContributions.Where(x => x.ExpenseId == id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        foreach (var c in Dedup(request.Contributions))
+            _db.ExpenseContributions.Add(new ExpenseContribution
+            {
+                ExpenseId = id, PlayerId = c.PlayerId, Amount = c.Amount,
+                Status = ExpenseContributionStatus.Normalize(c.Status)
+            });
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await _db.Entry(row).Collection(x => x.Contributions).LoadAsync(ct).ConfigureAwait(false);
+        return Ok((await ToDtosAsync(new[] { row }, ct).ConfigureAwait(false))[0]);
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        if (!TryGetCaller(out var userId, out var role)) return Unauthorized();
+        if (!IsLeagueWriter(role)) return StatusCode(403, "Only admins can delete expenses.");
+        var row = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct).ConfigureAwait(false);
+        if (row is null) return NotFound();
+        if (row.CreatedByUserId != userId && !IsSuperAdminRole(role))
+            return StatusCode(403, "Only the admin who created this expense can delete it.");
+        row.IsDeleted = true; row.UpdatedAtUtc = DateTime.Now; row.Version++;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return NoContent();
+    }
+
+    private async Task<string?> ValidateAsync(ExpenseUpsertRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 160) return "Expense name is required (maximum 160 characters).";
+        if (request.PurchasedByPlayerId == Guid.Empty) return "Purchased By player is required.";
+        if (request.Amount < 0) return "Amount cannot be negative.";
+        if (!await _db.Players.AsNoTracking().AnyAsync(p => p.Id == request.PurchasedByPlayerId && !p.IsDeleted, ct).ConfigureAwait(false))
+            return "Selected purchaser was not found.";
+        var seen = new HashSet<Guid>();
+        foreach (var c in request.Contributions)
+        {
+            if (c.PlayerId == Guid.Empty || !seen.Add(c.PlayerId)) return "Each contributing player must be selected only once.";
+            if (c.Amount < 0) return "Contribution amounts cannot be negative.";
+            if (!ExpenseContributionStatus.IsValid(c.Status)) return "Contribution status must be Pending or Paid.";
+        }
+        var ids = request.Contributions.Select(c => c.PlayerId).Distinct().ToArray();
+        if (ids.Length > 0 && await _db.Players.AsNoTracking().CountAsync(p => ids.Contains(p.Id) && !p.IsDeleted, ct).ConfigureAwait(false) != ids.Length)
+            return "A contributing player was not found.";
+        return null;
+    }
+
+    private async Task<List<ExpenseDto>> ToDtosAsync(IReadOnlyList<Expense> rows, CancellationToken ct)
+    {
+        TryGetCaller(out var callerId, out var callerRole);
+        var canWrite = IsLeagueWriter(callerRole);
+        var playerIds = rows.SelectMany(x => x.Contributions.Select(c => c.PlayerId).Append(x.PurchasedByPlayerId)).Distinct().ToArray();
+        var players = playerIds.Length == 0 ? new Dictionary<Guid, string>() : await _db.Players.AsNoTracking()
+            .Where(p => playerIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FullName, ct).ConfigureAwait(false);
+        var userIds = rows.Select(x => x.CreatedByUserId).Distinct().ToArray();
+        await using var master = _dbs.CreateMaster();
+        var users = userIds.Length == 0 ? new Dictionary<Guid, string>() : await master.Users.AsNoTracking()
+            .Where(x => userIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Username, ct).ConfigureAwait(false);
+        return rows.Select(x =>
+        {
+            var paid = x.Contributions
+                .Where(c => string.Equals(c.Status, ExpenseContributionStatus.Paid, StringComparison.OrdinalIgnoreCase))
+                .Sum(c => c.Amount);
+            return new ExpenseDto
+            {
+                Id = x.Id, CreatedByUserId = x.CreatedByUserId, CreatedByUsername = users.GetValueOrDefault(x.CreatedByUserId, "Admin"),
+                Name = x.Name, PurchasedByPlayerId = x.PurchasedByPlayerId,
+                PurchasedByPlayerName = players.GetValueOrDefault(x.PurchasedByPlayerId, "?"), Amount = x.Amount,
+                ContributedAmount = paid, OutstandingAmount = Math.Max(0, x.Amount - paid), Version = x.Version,
+                CreatedAtUtc = x.CreatedAtUtc, UpdatedAtUtc = x.UpdatedAtUtc, IsDeleted = x.IsDeleted,
+                CanEdit = canWrite && (IsSuperAdminRole(callerRole) || callerId == x.CreatedByUserId),
+                Contributions = x.Contributions.Select(c => new ExpenseContributionDto
+                {
+                    PlayerId = c.PlayerId, PlayerName = players.GetValueOrDefault(c.PlayerId, "?"),
+                    Amount = c.Amount, Status = ExpenseContributionStatus.Normalize(c.Status)
+                }).ToList()
+            };
+        }).ToList();
+    }
+
+    private async Task EnsureCreatedByAdminAsync(CancellationToken ct)
+    {
+        await using var master = _dbs.CreateMaster();
+        var adminId = await master.Users.AsNoTracking().Where(x => x.Username == PlatformAdmin.Username)
+            .Select(x => x.Id).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (adminId == Guid.Empty) return;
+        var stale = await _db.Expenses.Where(x => !x.IsDeleted && x.CreatedByUserId != adminId).ToListAsync(ct).ConfigureAwait(false);
+        if (stale.Count == 0) return;
+        foreach (var x in stale) x.CreatedByUserId = adminId;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private bool TryGetCaller(out Guid userId, out string role)
+    {
+        userId = Guid.Empty; role = string.Empty;
+        if (HttpContext.Items.TryGetValue("JplUserId", out var id) && id is Guid g) userId = g;
+        else if (!Guid.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out userId)) return false;
+        if (HttpContext.Items.TryGetValue("JplRole", out var roleObj) && roleObj is string r) role = r;
+        else role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
+        return userId != Guid.Empty && role.Length > 0;
+    }
+    private bool IsLeagueWriter(string role)
+    {
+        if (IsSuperAdminRole(role)) return true;
+        if (!string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase)) return false;
+        if (!HttpContext.Items.TryGetValue("JplHomeLeagueId", out var homeObj) || homeObj is not Guid home || home == Guid.Empty) return false;
+        if (HttpContext.Request.Headers.TryGetValue("X-League-Id", out var header) && Guid.TryParse(header.ToString(), out var selected) && selected != Guid.Empty)
+            return selected == home;
+        return true;
+    }
+    private static bool IsSuperAdminRole(string role) => string.Equals(role, nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase);
+    private static IEnumerable<ExpenseContributionRequest> Dedup(IEnumerable<ExpenseContributionRequest> rows) => rows.GroupBy(x => x.PlayerId).Select(g => g.Last());
 }
 
 [ApiController]

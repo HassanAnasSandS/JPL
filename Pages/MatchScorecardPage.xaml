@@ -5,6 +5,7 @@
              xmlns:svc="clr-namespace:JPL.Services"
              xmlns:ctrl="clr-namespace:JPL.Controls"
              x:Class="JPL.Pages.MatchScorecardPage"
+             x:Name="ScorecardRoot"
              x:DataType="vm:MatchScorecardViewModel"
              Title="Scorecard"
              Shell.NavBarIsVisible="{Binding ShowShellNavBar}"
@@ -32,10 +33,11 @@
                     BackgroundColor="{StaticResource Primary}"
                     Padding="12,8"
                     StrokeShape="RoundRectangle 14">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Command="{Binding ToggleDetailScorecardCommand}" />
-                </Border.GestureRecognizers>
                 <VerticalStackLayout Spacing="5">
+                    <VerticalStackLayout Spacing="5">
+                        <VerticalStackLayout.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding ToggleDetailScorecardCommand}" />
+                        </VerticalStackLayout.GestureRecognizers>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <Label Text="{Binding Title}"
                                FontSize="14"
@@ -258,9 +260,16 @@
                            LineBreakMode="TailTruncation"
                            MaxLines="1"
                            IsVisible="{Binding HasCurrentInningsLine}" />
+                    </VerticalStackLayout>
 
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                    <!-- Player of the Match — tap for the full points table. Kept as a sibling of
+                         the tappable info stack so the two tap targets never overlap. -->
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
+                          Padding="0,2"
                           IsVisible="{Binding HasPlayerOfTheMatch}">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding OpenPlayerPointsCommand}" />
+                        </Grid.GestureRecognizers>
                         <Border StrokeThickness="0"
                                 BackgroundColor="{StaticResource Secondary}"
                                 WidthRequest="22"
@@ -280,6 +289,12 @@
                                TextColor="White"
                                VerticalOptions="Center"
                                LineBreakMode="TailTruncation" />
+                        <Label Grid.Column="2"
+                               Text="Points ›"
+                               FontSize="10"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}"
+                               VerticalOptions="Center" />
                     </Grid>
 
                     <Border StrokeThickness="0"
@@ -446,13 +461,22 @@
                                        TextColor="{StaticResource Secondary}"
                                        HorizontalTextAlignment="Center"
                                        LineBreakMode="WordWrap" />
-                                <Label Text="{Binding PlayerOfTheMatchText}"
-                                       FontSize="13"
-                                       FontAttributes="Bold"
-                                       TextColor="White"
-                                       HorizontalTextAlignment="Center"
-                                       IsVisible="{Binding HasPlayerOfTheMatch}"
-                                       LineBreakMode="WordWrap" />
+                                <Grid IsVisible="{Binding HasPlayerOfTheMatch}">
+                                    <Label Text="{Binding PlayerOfTheMatchText}"
+                                           FontSize="13"
+                                           FontAttributes="Bold"
+                                           TextColor="White"
+                                           HorizontalTextAlignment="Center"
+                                           LineBreakMode="WordWrap" />
+                                    <Button Text=""
+                                            BackgroundColor="#01000000"
+                                            BorderWidth="0"
+                                            Padding="0"
+                                            MinimumHeightRequest="0"
+                                            MinimumWidthRequest="0"
+                                            Command="{Binding OpenPlayerPointsCommand}"
+                                            SemanticProperties.Description="Show Player of the Match points for every player" />
+                                </Grid>
                             </VerticalStackLayout>
                         </Border>
 
@@ -828,6 +852,421 @@
                                     </BindableLayout.ItemTemplate>
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Player of the Match impact points — opened by tapping the ★ line. -->
+        <Grid IsVisible="{Binding IsPlayerPointsOpen}"
+              InputTransparent="False"
+              ZIndex="75"
+              VerticalOptions="Fill"
+              HorizontalOptions="Fill">
+            <BoxView Color="#CC000000"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ClosePlayerPointsCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}"
+                    StrokeShape="RoundRectangle 16"
+                    Margin="10,28,10,12"
+                    Padding="0"
+                    VerticalOptions="Fill">
+                <Grid RowDefinitions="Auto,Auto,*">
+                    <!-- Player of the Match headline -->
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10"
+                          Padding="12,10" BackgroundColor="{StaticResource Primary}">
+                        <VerticalStackLayout Spacing="1" VerticalOptions="Center">
+                            <Label Text="{Binding PlayerPointsSelectionTitle}"
+                                   FontSize="9"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1"
+                                   TextColor="{StaticResource Secondary}" />
+                            <Label Text="{Binding PlayerPointsPotmName}"
+                                   FontSize="17"
+                                   FontAttributes="Bold"
+                                   TextColor="White"
+                                   LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding PlayerPointsPotmTeam}"
+                                   FontSize="10"
+                                   TextColor="#B8C4D4"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1" Spacing="0" VerticalOptions="Center"
+                                             HorizontalOptions="End">
+                            <Label Text="{Binding PlayerPointsPotmPoints}"
+                                   FontSize="28"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="End"
+                                   TextColor="{StaticResource Secondary}" />
+                            <Label Text="POINTS"
+                                   FontSize="8"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1"
+                                   HorizontalTextAlignment="End"
+                                   TextColor="#B8C4D4" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="2"
+                                Text="✕"
+                                Style="{StaticResource GoldButton}"
+                                Padding="10,6"
+                                FontSize="13"
+                                VerticalOptions="Center"
+                                Command="{Binding ClosePlayerPointsCommand}" />
+                    </Grid>
+
+                    <VerticalStackLayout Grid.Row="1" Spacing="2" Padding="14,10,14,4">
+                        <Label Text="{Binding PlayerPointsPotmImpact}"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}" />
+                        <Label Text="HOW POINTS WERE EARNED"
+                               FontSize="9"
+                               FontAttributes="Bold"
+                               CharacterSpacing="0.7"
+                               TextColor="#8A9BB0" />
+                        <Label Text="{Binding PlayerPointsPotmBreakdown}"
+                               FontSize="11"
+                               Style="{StaticResource MutedLabel}"
+                               LineBreakMode="WordWrap" />
+                    </VerticalStackLayout>
+
+                    <ScrollView Grid.Row="2" Padding="12,4,12,14">
+                        <VerticalStackLayout Spacing="10">
+                            <Label Text="Loading…"
+                                   IsVisible="{Binding IsPlayerPointsBusy}"
+                                   Style="{StaticResource MutedLabel}" />
+
+                            <Label Text="{Binding PlayerPointsError}"
+                                   IsVisible="{Binding ShowPlayerPointsError}"
+                                   TextColor="{StaticResource Danger}"
+                                   FontSize="12"
+                                   LineBreakMode="WordWrap" />
+
+                            <Label Text="No player has earned points in this match yet."
+                                   IsVisible="{Binding ShowPlayerPointsEmpty}"
+                                   Style="{StaticResource MutedLabel}" />
+
+                            <VerticalStackLayout Spacing="8" IsVisible="{Binding HasPlayerPoints}">
+                                <Label Text="ALL PLAYERS · MATCH POINTS"
+                                       FontSize="10"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1"
+                                       TextColor="{StaticResource Secondary}" />
+
+
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlayerPoints}"
+                                                     Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:MatchPointsRow">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="#152A3F"
+                                                    Padding="10,8"
+                                                    StrokeShape="RoundRectangle 10">
+                                                <Grid ColumnDefinitions="26,*,Auto" ColumnSpacing="8">
+                                                    <Border StrokeThickness="0"
+                                                            BackgroundColor="#243447"
+                                                            WidthRequest="26"
+                                                            HeightRequest="26"
+                                                            StrokeShape="RoundRectangle 13"
+                                                            VerticalOptions="Center">
+                                                        <Label Text="{Binding RankText}"
+                                                               FontSize="11"
+                                                               FontAttributes="Bold"
+                                                               HorizontalOptions="Center"
+                                                               VerticalOptions="Center"
+                                                               TextColor="{StaticResource Secondary}" />
+                                                    </Border>
+                                                    <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                                            <Label Text="{Binding PlayerName}"
+                                                                   FontSize="13"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="White"
+                                                                   LineBreakMode="TailTruncation" />
+                                                            <Label Grid.Column="1"
+                                                                   Text="★"
+                                                                   FontSize="11"
+                                                                   TextColor="{StaticResource Secondary}"
+                                                                   VerticalOptions="Center"
+                                                                   IsVisible="{Binding IsPlayerOfTheMatch}" />
+                                                        </Grid>
+                                                        <Label Text="{Binding BreakdownText}"
+                                                               FontSize="10"
+                                                               TextColor="#B8C4D4"
+                                                               LineBreakMode="TailTruncation" />
+                                                    </VerticalStackLayout>
+                                                    <VerticalStackLayout Grid.Column="2" Spacing="0" VerticalOptions="Center">
+                                                        <Label Text="{Binding PointsText}"
+                                                               FontSize="18"
+                                                               FontAttributes="Bold"
+                                                               HorizontalTextAlignment="End"
+                                                               TextColor="{StaticResource Secondary}" />
+                                                        <Label Text="pts"
+                                                               FontSize="8"
+                                                               HorizontalTextAlignment="End"
+                                                               TextColor="#8A9BB0" />
+                                                    </VerticalStackLayout>
+                                                    <Button Grid.ColumnSpan="3"
+                                                            Text=""
+                                                            BackgroundColor="#01000000"
+                                                            BorderWidth="0"
+                                                            Padding="0"
+                                                            MinimumHeightRequest="0"
+                                                            MinimumWidthRequest="0"
+                                                            Clicked="OnPlayerPointsRowClicked"
+                                                            SemanticProperties.Description="Show this player's match points breakdown" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <Label Text="{Binding PlayerPointsRules}"
+                                       FontSize="9"
+                                       TextColor="#8A9BB0"
+                                       LineBreakMode="WordWrap"
+                                       Margin="0,4,0,0" />
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Player-specific points dialog, opened from any row in the match list. -->
+        <Grid IsVisible="{Binding IsSelectedPlayerPointsOpen}"
+              ZIndex="90"
+              InputTransparent="False"
+              HorizontalOptions="Fill"
+              VerticalOptions="Fill">
+            <BoxView Color="#CC000000"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding CloseSelectedPlayerPointsCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}"
+                    StrokeShape="RoundRectangle 18"
+                    Padding="0"
+                    Margin="12"
+                    MaximumWidthRequest="560"
+                    MaximumHeightRequest="620"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12"
+                          Padding="18,14"
+                          BackgroundColor="{StaticResource Primary}">
+                        <VerticalStackLayout Spacing="3" VerticalOptions="Center">
+                            <Label Text="{Binding PlayerPointsSelectionTitle}"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1"
+                                   TextColor="{StaticResource Secondary}" />
+                            <Label Text="{Binding SelectedPlayerPoints.PlayerName}"
+                                   FontSize="20"
+                                   FontAttributes="Bold"
+                                   TextColor="White"
+                                   LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding SelectedPlayerPoints.TeamName}"
+                                   FontSize="12"
+                                   TextColor="#B8C4D4" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                Style="{StaticResource GoldButton}"
+                                Padding="10,6"
+                                FontSize="13"
+                                VerticalOptions="Start"
+                                Command="{Binding CloseSelectedPlayerPointsCommand}" />
+                    </Grid>
+                    <ScrollView Grid.Row="1" Padding="16,14">
+                        <VerticalStackLayout Spacing="12">
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    StrokeShape="RoundRectangle 12"
+                                    Padding="14,10">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                    <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                        <Label Text="TOTAL MATCH POINTS"
+                                               FontSize="10"
+                                               FontAttributes="Bold"
+                                               CharacterSpacing="0.8"
+                                               TextColor="#B8C4D4" />
+                                        <Label Text="{Binding SelectedPlayerPoints.ImpactText}"
+                                               FontSize="12"
+                                               FontAttributes="Bold"
+                                               TextColor="White"
+                                               LineBreakMode="WordWrap" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="1"
+                                           Text="{Binding SelectedPlayerPoints.PointsText}"
+                                           FontSize="30"
+                                           FontAttributes="Bold"
+                                           VerticalOptions="Center"
+                                           TextColor="{StaticResource Secondary}" />
+                                </Grid>
+                            </Border>
+
+                            <Border Stroke="#D8E0EA"
+                                    StrokeThickness="1"
+                                    BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                    StrokeShape="RoundRectangle 12"
+                                    Padding="12">
+                                <VerticalStackLayout Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Text="Batting"
+                                               FontSize="14"
+                                               FontAttributes="Bold"
+                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding SelectedPlayerPoints.BattingPointsText}"
+                                               FontSize="13"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Grid>
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedPlayerPoints.BattingFactors}"
+                                                         Spacing="5">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="svc:RankingPart">
+                                                <Border BackgroundColor="{AppThemeBinding Light=#F3F6FA, Dark=#20364B}"
+                                                        StrokeThickness="0"
+                                                        StrokeShape="RoundRectangle 8"
+                                                        Padding="10,7">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                        <VerticalStackLayout Spacing="1">
+                                                            <Label Text="{Binding Label}"
+                                                                   FontSize="12"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                            <Label Text="{Binding Stat}"
+                                                                   FontSize="10"
+                                                                   TextColor="#718096" />
+                                                        </VerticalStackLayout>
+                                                        <Label Grid.Column="1"
+                                                               Text="{Binding PointsText}"
+                                                               FontSize="12"
+                                                               FontAttributes="Bold"
+                                                               VerticalOptions="Center"
+                                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Border Stroke="#D8E0EA"
+                                    StrokeThickness="1"
+                                    BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                    StrokeShape="RoundRectangle 12"
+                                    Padding="12">
+                                <VerticalStackLayout Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Text="Bowling"
+                                               FontSize="14"
+                                               FontAttributes="Bold"
+                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding SelectedPlayerPoints.BowlingPointsText}"
+                                               FontSize="13"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Grid>
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedPlayerPoints.BowlingFactors}"
+                                                         Spacing="5">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="svc:RankingPart">
+                                                <Border BackgroundColor="{AppThemeBinding Light=#F3F6FA, Dark=#20364B}"
+                                                        StrokeThickness="0"
+                                                        StrokeShape="RoundRectangle 8"
+                                                        Padding="10,7">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                        <VerticalStackLayout Spacing="1">
+                                                            <Label Text="{Binding Label}"
+                                                                   FontSize="12"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                            <Label Text="{Binding Stat}"
+                                                                   FontSize="10"
+                                                                   TextColor="#718096" />
+                                                        </VerticalStackLayout>
+                                                        <Label Grid.Column="1"
+                                                               Text="{Binding PointsText}"
+                                                               FontSize="12"
+                                                               FontAttributes="Bold"
+                                                               VerticalOptions="Center"
+                                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Border Stroke="#D8E0EA"
+                                    StrokeThickness="1"
+                                    BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                    StrokeShape="RoundRectangle 12"
+                                    Padding="12">
+                                <VerticalStackLayout Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Text="Fielding"
+                                               FontSize="14"
+                                               FontAttributes="Bold"
+                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding SelectedPlayerPoints.FieldingPointsText}"
+                                               FontSize="13"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource Secondary}" />
+                                    </Grid>
+                                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedPlayerPoints.FieldingFactors}"
+                                                         Spacing="5">
+                                        <BindableLayout.ItemTemplate>
+                                            <DataTemplate x:DataType="svc:RankingPart">
+                                                <Border BackgroundColor="{AppThemeBinding Light=#F3F6FA, Dark=#20364B}"
+                                                        StrokeThickness="0"
+                                                        StrokeShape="RoundRectangle 8"
+                                                        Padding="10,7">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                        <VerticalStackLayout Spacing="1">
+                                                            <Label Text="{Binding Label}"
+                                                                   FontSize="12"
+                                                                   FontAttributes="Bold"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                            <Label Text="{Binding Stat}"
+                                                                   FontSize="10"
+                                                                   TextColor="#718096" />
+                                                        </VerticalStackLayout>
+                                                        <Label Grid.Column="1"
+                                                               Text="{Binding PointsText}"
+                                                               FontSize="12"
+                                                               FontAttributes="Bold"
+                                                               VerticalOptions="Center"
+                                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </BindableLayout.ItemTemplate>
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Label Text="{Binding PlayerPointsRules}"
+                                   FontSize="10"
+                                   TextColor="#8A9BB0"
+                                   LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
                     </ScrollView>
                 </Grid>

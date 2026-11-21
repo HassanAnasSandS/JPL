@@ -98,6 +98,74 @@ public sealed class CaptainVsStat
     public string SeriesWinPctText => Series == 0 ? "-" : SeriesWinPct.ToString("0.#") + "%";
 }
 
+public sealed class PartnershipStat
+{
+    public int Rank { get; set; }
+    public bool IsAltRow { get; set; }
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public Guid PartnerId { get; set; }
+    public string PartnerName { get; set; } = string.Empty;
+    public string PairName => $"{PlayerName} & {PartnerName}";
+    public int PairRowHeight
+    {
+        get
+        {
+            var longestName = Math.Max(PlayerName.Length, PartnerName.Length);
+            var playerRowHeight = Math.Max(44, (int)Math.Ceiling(longestName / 24d) * 20 + 4);
+            return playerRowHeight * 2;
+        }
+    }
+    public int Innings { get; set; }
+    public int Runs { get; set; }
+    public int Balls { get; set; }
+    public int Outs { get; set; }
+    public int PlayerRuns { get; set; }
+    public int PlayerBalls { get; set; }
+    public int PartnerRuns { get; set; }
+    public int PartnerBalls { get; set; }
+    public int PlayerOuts { get; set; }
+    public int PartnerOuts { get; set; }
+    public int NotOut { get; set; }
+    public double Average => Outs == 0 ? 0 : Math.Round((double)Runs / Outs, 1);
+    public string AverageText => Outs == 0 ? "-" : Average.ToString("0.0");
+    public double PartnershipStrikeRate => Balls == 0 ? 0 : Math.Round(Runs * 100d / Balls, 1);
+    public double PlayerAverage => PlayerOuts == 0 ? PlayerRuns : Math.Round((double)PlayerRuns / PlayerOuts, 1);
+    public double PartnerAverage => PartnerOuts == 0 ? PartnerRuns : Math.Round((double)PartnerRuns / PartnerOuts, 1);
+    public double PlayerStrikeRate => PlayerBalls == 0 ? 0 : Math.Round(PlayerRuns * 100d / PlayerBalls, 1);
+    public double PartnerStrikeRate => PartnerBalls == 0 ? 0 : Math.Round(PartnerRuns * 100d / PartnerBalls, 1);
+    public string PlayerAverageText => PlayerOuts == 0 ? "-" : PlayerAverage.ToString("0.0");
+    public string PartnerAverageText => PartnerOuts == 0 ? "-" : PartnerAverage.ToString("0.0");
+    public string PlayerContributionText => $"{PlayerName}: {PlayerRuns} runs · {PlayerBalls} balls · SR {PlayerStrikeRate:0.0} · Avg {PlayerAverageText} · Out {PlayerOuts}";
+    public string PartnerContributionText => $"{PartnerName}: {PartnerRuns} runs · {PartnerBalls} balls · SR {PartnerStrikeRate:0.0} · Avg {PartnerAverageText} · Out {PartnerOuts}";
+}
+
+public sealed class PartnershipMatchStat
+{
+    public Guid MatchId { get; set; }
+    public string MatchName { get; set; } = string.Empty;
+    public DateTime MatchDateUtc { get; set; }
+    public int InningsNumber { get; set; }
+    public string BattingTeamName { get; set; } = string.Empty;
+    public int Runs { get; set; }
+    public int Balls { get; set; }
+    public int Outs { get; set; }
+    public int PlayerRuns { get; set; }
+    public int PlayerBalls { get; set; }
+    public int PlayerOuts { get; set; }
+    public int PartnerRuns { get; set; }
+    public int PartnerBalls { get; set; }
+    public int PartnerOuts { get; set; }
+    public double Average => Outs == 0 ? 0 : Math.Round((double)Runs / Outs, 1);
+    public string AverageText => Outs == 0 ? "-" : Average.ToString("0.0");
+    public double StrikeRate => Balls == 0 ? 0 : Math.Round(Runs * 100d / Balls, 1);
+    public string StrikeRateText => StrikeRate.ToString("0.0");
+    public string MatchDateText => MatchDateUtc == default ? string.Empty : MatchDateUtc.ToLocalTime().ToString("dd MMM yyyy");
+    public string InningsSummary => string.IsNullOrWhiteSpace(BattingTeamName)
+        ? $"Innings {InningsNumber}"
+        : $"Innings {InningsNumber} · {BattingTeamName}";
+}
+
 /// <summary>Full leaderboard row: Match · Batting · Bowling · Fielding · Attendance.</summary>
 public sealed class PlayerCareerSummary
 {
@@ -265,6 +333,13 @@ public sealed class PlayerCareerSummary
     public string PaymentPaidText => PaymentPaid.ToString("0.##");
     public string PaymentRemainingText => PaymentRemaining.ToString("0.##");
     public string PaymentPaidPctText => PaymentTotal <= 0 ? "-" : PaymentPaidPct.ToString("0.#") + "%";
+
+    public decimal ExpensePurchased { get; set; }
+    public decimal ExpenseContributed { get; set; }
+    public decimal ExpenseRemaining { get; set; }
+    public string ExpensePurchasedText => ExpensePurchased.ToString("0.##");
+    public string ExpenseContributedText => ExpenseContributed.ToString("0.##");
+    public string ExpenseRemainingText => ExpenseRemaining.ToString("0.##");
 
     // Batting milestones
     public int HighestScore { get; set; }
@@ -463,6 +538,7 @@ public sealed class RankingFactorLine
 {
     public string Label { get; init; } = string.Empty;
     public string Stat { get; init; } = string.Empty;
+    public string MatchTitle { get; init; } = string.Empty;
     public string PointsText { get; init; } = string.Empty;
     public bool IsPositive { get; init; }
     public Color PointsColor => IsPositive ? Color.FromArgb("#15803D") : Color.FromArgb("#C62828");

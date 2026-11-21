@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
 using JPL.Services;
 
 namespace JPL.ViewModels;
@@ -12,11 +13,13 @@ public sealed partial class EventScopeFilterViewModel : ObservableObject
 {
     private readonly IStatsService _stats;
     private readonly ILeagueContext _league;
+    private readonly StatsFilterOptionDto _allCaptains = new() { Id = Guid.Empty, Name = "All" };
     private Guid? _loadedLeagueId;
 
     public NamedIdMultiSelectFilterViewModel TournamentFilter { get; }
     public NamedIdMultiSelectFilterViewModel SeriesFilter { get; }
     public NamedIdMultiSelectFilterViewModel MatchFilter { get; }
+    public ObservableCollection<StatsFilterOptionDto> Captains { get; } = new();
 
     /// <summary>0=none, 1=tournament, 2=series, 3=matches.</summary>
     [ObservableProperty] private int mode;
@@ -53,6 +56,7 @@ public sealed partial class EventScopeFilterViewModel : ObservableObject
         MatchFilter = new NamedIdMultiSelectFilterViewModel(
             "Match", "All matches", "match", "matches",
             "Select one or more completed matches");
+        Captains.Add(_allCaptains);
 
         Wire(TournamentFilter);
         Wire(SeriesFilter);
@@ -128,6 +132,7 @@ public sealed partial class EventScopeFilterViewModel : ObservableObject
         TournamentFilter.SetOptions(Array.Empty<(Guid, string)>());
         SeriesFilter.SetOptions(Array.Empty<(Guid, string)>());
         MatchFilter.SetOptions(Array.Empty<(Guid, string)>());
+        ResetCaptains();
         OnPropertyChanged(nameof(HasSelection));
 
         try
@@ -136,11 +141,20 @@ public sealed partial class EventScopeFilterViewModel : ObservableObject
             TournamentFilter.SetOptions(options.Tournaments.Select(t => (t.Id, t.Name)));
             SeriesFilter.SetOptions(options.Series.Select(s => (s.Id, s.Name)));
             MatchFilter.SetOptions(options.Matches.Select(m => (m.Id, m.Name)));
+            ResetCaptains();
+            foreach (var captain in options.Captains.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+                Captains.Add(captain);
             _loadedLeagueId = leagueId;
         }
         catch
         {
             /* dropdowns optional */
         }
+    }
+
+    private void ResetCaptains()
+    {
+        Captains.Clear();
+        Captains.Add(_allCaptains);
     }
 }

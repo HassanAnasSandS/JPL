@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.ExpenseEditPage" x:DataType="vm:ExpenseEditViewModel"
+             Title="{Binding Title}" HideSoftInputOnTapped="True">
+    <ScrollView VerticalOptions="Fill" VerticalScrollBarVisibility="Default" HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="14" VerticalOptions="Start">
+            <Label Text="{Binding OwnerLine}" FontSize="12" TextColor="{StaticResource Primary}" />
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Expense details" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="Name (e.g. Bat, Ball, Tape, Grip)" Text="{Binding ExpenseName}" MaxLength="160" IsEnabled="{Binding CanEdit}" />
+                    <Label Text="Who purchased it?" Style="{StaticResource SectionLabel}" />
+                    <Picker Title="Select player" ItemsSource="{Binding PlayerOptions}" ItemDisplayBinding="{Binding FullName}" SelectedItem="{Binding SelectedPurchaser}" IsEnabled="{Binding CanEdit}" />
+                    <Label Text="Total amount" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="0" Text="{Binding AmountText}" Keyboard="Numeric" FontSize="16" IsEnabled="{Binding CanEdit}" />
+                </VerticalStackLayout>
+            </Border>
+            <Border Style="{StaticResource CardBorder}" IsVisible="{Binding ShowViewContributions}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Player payment status" Style="{StaticResource SectionLabel}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding AddedContributions}" Spacing="2">
+                        <BindableLayout.EmptyView><Label Text="No player contributions recorded" Style="{StaticResource MutedLabel}" /></BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate><DataTemplate x:DataType="vm:ExpenseContributionEditor">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Padding="2,7">
+                                <Label Text="{Binding PlayerName}" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="{Binding AmountDisplay}" FontAttributes="Bold" TextColor="{StaticResource Success}" VerticalOptions="Center">
+                                    <Label.Triggers><DataTrigger TargetType="Label" Binding="{Binding IsPaid}" Value="False"><Setter Property="TextColor" Value="{StaticResource Danger}" /></DataTrigger></Label.Triggers>
+                                </Label>
+                                <Border Grid.Column="2" Padding="9,5" StrokeThickness="0" BackgroundColor="#E8EEF5" VerticalOptions="Center">
+                                    <Border.Triggers><DataTrigger TargetType="Border" Binding="{Binding IsPaid}" Value="True"><Setter Property="BackgroundColor" Value="{StaticResource Success}" /></DataTrigger></Border.Triggers>
+                                    <Label Text="{Binding StatusToggleLabel}" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource Primary}">
+                                        <Label.Triggers><DataTrigger TargetType="Label" Binding="{Binding IsPaid}" Value="True"><Setter Property="TextColor" Value="White" /></DataTrigger></Label.Triggers>
+                                    </Label>
+                                </Border>
+                            </Grid>
+                        </DataTemplate></BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+            <Border Style="{StaticResource CardBorder}" IsVisible="{Binding ShowEditContributions}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Add players, amount due, and payment status" Style="{StaticResource SectionLabel}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding ContributionCandidates}" Spacing="4">
+                        <BindableLayout.EmptyView><Label Text="No players available" Style="{StaticResource MutedLabel}" /></BindableLayout.EmptyView>
+                        <BindableLayout.ItemTemplate><DataTemplate x:DataType="vm:ExpenseContributionEditor">
+                            <VerticalStackLayout Spacing="5" Padding="0,5">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                    <Label Text="{Binding PlayerName}" VerticalOptions="Center" />
+                                    <Button Grid.Column="1" Padding="12,6" FontSize="12" Clicked="OnTogglePlayer" CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="True"><Setter Property="Text" Value="Added" /><Setter Property="BackgroundColor" Value="{StaticResource Success}" /><Setter Property="TextColor" Value="White" /></DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsSelected}" Value="False"><Setter Property="Text" Value="Add" /><Setter Property="Style" Value="{StaticResource GhostButton}" /></DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                    <Button Grid.Column="2" Text="{Binding StatusToggleLabel}" Padding="10,6" FontSize="12" MinimumHeightRequest="36"
+                                            IsVisible="{Binding IsSelected}" Clicked="OnToggleStatus" CommandParameter="{Binding .}">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsPaid}" Value="True"><Setter Property="BackgroundColor" Value="{StaticResource Success}" /><Setter Property="TextColor" Value="White" /></DataTrigger>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsPaid}" Value="False"><Setter Property="BackgroundColor" Value="#E8EEF5" /><Setter Property="TextColor" Value="{StaticResource Primary}" /></DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" IsVisible="{Binding IsSelected}">
+                                    <Label Text="Amount due" VerticalOptions="Center" Style="{StaticResource MutedLabel}" />
+                                    <Entry Grid.Column="1" Placeholder="0" Text="{Binding AmountText, Mode=TwoWay}" Keyboard="Numeric" FontSize="16" />
+                                </Grid>
+                            </VerticalStackLayout>
+                        </DataTemplate></BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+            <Button Text="Save expense" Style="{StaticResource GoldButton}" IsVisible="{Binding CanEdit}" Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

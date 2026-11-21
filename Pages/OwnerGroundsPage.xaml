@@ -11,8 +11,8 @@
         <Grid ColumnDefinitions="*,Auto">
             <VerticalStackLayout VerticalOptions="Center">
                 <Label Text="My Grounds" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
-                <Label Text="{x:Static svc:BrandSlogans.Grounds}" FontSize="12" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
-                <Label Text="{Binding CountLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                
+                
             </VerticalStackLayout>
             <Button Grid.Column="1" Text="+ Add" Style="{StaticResource GoldButton}" Command="{Binding AddCommand}" />
         </Grid>

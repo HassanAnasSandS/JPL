@@ -212,6 +212,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IStatsService, StatsService>();
         builder.Services.AddSingleton<IUserService, UserService>();
         builder.Services.AddSingleton<IVenueBookingService, VenueBookingService>();
+        builder.Services.AddSingleton<IExpenseService, ExpenseService>();
         builder.Services.AddSingleton<IVenueService, VenueService>();
         builder.Services.AddSingleton<ITournamentService, TournamentService>();
         builder.Services.AddSingleton<ISeriesService, SeriesService>();
@@ -248,6 +249,8 @@ public static class MauiProgram
         builder.Services.AddTransient<UserEditViewModel>();
         builder.Services.AddSingleton<VenueBookingsViewModel>();
         builder.Services.AddTransient<VenueBookingEditViewModel>();
+        builder.Services.AddSingleton<ExpensesViewModel>();
+        builder.Services.AddTransient<ExpenseEditViewModel>();
         builder.Services.AddSingleton<VenuesViewModel>();
         builder.Services.AddTransient<VenueEditViewModel>();
         builder.Services.AddSingleton<FormatsViewModel>();
@@ -308,6 +311,8 @@ public static class MauiProgram
         builder.Services.AddTransient<UserEditPage>();
         builder.Services.AddTransient<VenueBookingsPage>();
         builder.Services.AddTransient<VenueBookingEditPage>();
+        builder.Services.AddTransient<ExpensesPage>();
+        builder.Services.AddTransient<ExpenseEditPage>();
         builder.Services.AddTransient<VenuesPage>();
         builder.Services.AddTransient<VenueEditPage>();
         builder.Services.AddTransient<FormatsPage>();

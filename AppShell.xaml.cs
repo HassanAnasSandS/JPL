@@ -33,7 +33,7 @@ public partial class AppShell : Shell
     {
         ("players", "Players & Team", "people", ["players", "teams"]),
         ("events", "Matches, Tournaments & Series", "matches", ["matches", "tournaments", "series"]),
-        ("venues", "Venues & Bookings", "calendar", ["venues", "venuebookings"]),
+        ("venues", "Venues, Bookings & Expenses", "calendar", ["venues", "venuebookings", "expenses"]),
         ("stats", "Statistics & Rankings", "stats", ["rankings", "stats"]),
     };
 #if WINDOWS
@@ -125,6 +125,7 @@ public partial class AppShell : Shell
             {
                 Items.Add(CreateFlyout("Venues", "venues", "venueshome", () => services.GetRequiredService<VenuesPage>()));
                 Items.Add(CreateFlyout("Venue Bookings", "venuebookings", "venuebookingshome", () => services.GetRequiredService<VenueBookingsPage>()));
+                Items.Add(CreateFlyout("Expenses", "expenses", "expenseshome", () => services.GetRequiredService<ExpensesPage>()));
                 Items.Add(CreateFlyout("Formats", "formats", "formatshome", () => services.GetRequiredService<FormatsPage>()));
             }
             Items.Add(CreateFlyout("Statistics", "stats", "statshome", () => services.GetRequiredService<StatsPage>()));
@@ -337,6 +338,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(AuctionReportPage), new DiRouteFactory<AuctionReportPage>(services));
         Routing.RegisterRoute(nameof(UserEditPage), new DiRouteFactory<UserEditPage>(services));
         Routing.RegisterRoute(nameof(VenueBookingEditPage), new DiRouteFactory<VenueBookingEditPage>(services));
+        Routing.RegisterRoute(nameof(ExpenseEditPage), new DiRouteFactory<ExpenseEditPage>(services));
         Routing.RegisterRoute(nameof(VenueEditPage), new DiRouteFactory<VenueEditPage>(services));
         Routing.RegisterRoute(nameof(FormatEditPage), new DiRouteFactory<FormatEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentEditPage), new DiRouteFactory<TournamentEditPage>(services));
@@ -521,8 +523,6 @@ public partial class AppShell : Shell
         var groupedRoutes = new HashSet<string>(
             SidebarGroups.SelectMany(g => g.Routes),
             StringComparer.OrdinalIgnoreCase);
-        var emittedGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var item in flyouts)
         {
             var route = item.Route ?? string.Empty;
@@ -530,16 +530,7 @@ public partial class AppShell : Shell
                 g.Routes.Any(r => string.Equals(r, route, StringComparison.OrdinalIgnoreCase)));
             if (group.Key is not null)
             {
-                if (!emittedGroups.Add(group.Key))
-                    continue;
-                var children = group.Routes
-                    .Select(r => byRoute.TryGetValue(r, out var flyout) ? flyout : null)
-                    .Where(f => f is not null)
-                    .Cast<FlyoutItem>()
-                    .ToList();
-                if (children.Count == 0)
-                    continue;
-                menu.Children.Add(CreateFlyoutGroup(group.Key, group.Title, group.Icon, children));
+                menu.Children.Add(CreateSidebarButton(item.Route, item.Title, isSubItem: true));
                 continue;
             }
 
@@ -1135,6 +1126,15 @@ public partial class AppShell : Shell
             if (item is null || string.IsNullOrWhiteSpace(item.Route))
                 return;
 
+            // Close the flyout before Shell constructs the destination page. StatsPage
+            // has a large visual tree and its first load can take several seconds;
+            // keeping the pane open makes that work look like a frozen sidebar.
+            if (PlatformFlyoutBehavior != FlyoutBehavior.Locked)
+            {
+                FlyoutIsPresented = false;
+                await Task.Yield();
+            }
+
             try
             {
                 await GoToAsync($"//{item.Route}").ConfigureAwait(true);
@@ -1149,8 +1149,6 @@ public partial class AppShell : Shell
 
             UpdateSidebarSelection();
             EnsureDesktopSidebar();
-            if (PlatformFlyoutBehavior != FlyoutBehavior.Locked)
-                FlyoutIsPresented = false;
         }
         finally
         {

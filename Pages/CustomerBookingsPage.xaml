@@ -9,8 +9,8 @@
              Title="My bookings">
     <Grid RowDefinitions="Auto,*" Padding="14" RowSpacing="8">
         <VerticalStackLayout Spacing="2">
-            <Label Text="{x:Static svc:BrandSlogans.Grounds}" FontSize="13" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
-            <Label Text="{Binding CountLabel}" FontSize="13" TextColor="{StaticResource TextSecondary}" />
+            
+            
         </VerticalStackLayout>
         <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding ReloadCommand}">
         <CollectionView ItemsSource="{Binding Items}"

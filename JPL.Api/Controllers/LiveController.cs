@@ -18,66 +18,102 @@ public sealed class LiveController : ControllerBase
     [HttpGet("matches")]
     public async Task<ActionResult<IReadOnlyList<MatchSummaryDto>>> GetLiveMatches(CancellationToken ct)
     {
-        var matches = await _db.Matches.AsNoTracking()
-            .Where(m => !m.IsDeleted && (m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress))
-            .OrderByDescending(m => m.UpdatedAtUtc)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        if (matches.Count == 0)
-            return Ok(Array.Empty<MatchSummaryDto>());
-
-        var matchIds = matches.Select(m => m.Id).ToList();
-        var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
-
-        var teams = await _db.Teams.AsNoTracking()
-            .Where(t => teamIds.Contains(t.Id))
-            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
-            .ConfigureAwait(false);
-
-        var innings = await _db.Innings.AsNoTracking()
-            .Where(i => matchIds.Contains(i.MatchId))
-            .Include(i => i.Deliveries)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-        var innsByMatch = innings.GroupBy(i => i.MatchId).ToDictionary(g => g.Key, g => g.ToList());
-
-        var list = matches.Select(m =>
+        try
         {
-            innsByMatch.TryGetValue(m.Id, out var matchInns);
-            matchInns ??= new List<Innings>();
-            var teamA = teams.GetValueOrDefault(m.TeamAId, "?");
-            var teamB = teams.GetValueOrDefault(m.TeamBId, "?");
-            var (aRuns, aWkts) = TeamTotals(matchInns, m.TeamAId);
-            var (bRuns, bWkts) = TeamTotals(matchInns, m.TeamBId);
-            var live = m.Status == MatchStatus.InProgress;
-            return new MatchSummaryDto(
-                m.Id,
-                m.Title,
-                m.TeamAId,
-                m.TeamBId,
-                teamA,
-                teamB,
-                (byte)m.Status,
-                (byte)m.Format,
-                m.MatchDateUtc,
-                m.OversLimit,
-                m.Venue,
-                aRuns,
-                aWkts,
-                bRuns,
-                bWkts,
-                live ? "LIVE" : "Upcoming",
-                null,
-                null,
-                null,
-                (byte)m.OversMode,
-                m.TournamentId,
-                m.SeriesId,
-                m.LiveStreamUrl);
-        }).ToList();
+            var matches = await _db.Matches.AsNoTracking()
+                .Where(m => !m.IsDeleted && (m.Status == MatchStatus.Setup || m.Status == MatchStatus.InProgress))
+                .OrderByDescending(m => m.UpdatedAtUtc)
+                .Select(m => new
+                {
+                    m.Id,
+                    m.Title,
+                    m.TeamAId,
+                    m.TeamBId,
+                    m.Status,
+                    m.Format,
+                    m.MatchDateUtc,
+                    m.OversLimit,
+                    m.Venue,
+                    m.OversMode,
+                    m.TournamentId,
+                    m.SeriesId,
+                    m.LiveStreamUrl
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
-        return Ok(list);
+            if (matches.Count == 0)
+                return Ok(Array.Empty<MatchSummaryDto>());
+
+            var matchIds = matches.Select(m => m.Id).ToList();
+            var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
+
+            var teams = await _db.Teams.AsNoTracking()
+                .Where(t => teamIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+                .ConfigureAwait(false);
+
+            // Aggregate in SQL. Avoid loading every innings and delivery just to show
+            // the current score in the match list.
+            var scoreTotals = await (
+                from innings in _db.Innings.AsNoTracking()
+                join delivery in _db.Deliveries.AsNoTracking() on innings.Id equals delivery.InningsId
+                where matchIds.Contains(innings.MatchId)
+                group delivery by new { innings.MatchId, innings.BattingTeamId } into g
+                select new
+                {
+                    g.Key.MatchId,
+                    g.Key.BattingTeamId,
+                    Runs = g.Sum(d => d.RunsOffBat + d.ExtraRuns),
+                    Wickets = g.Sum(d => d.IsWicket ? 1 : 0)
+                })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var scoresByMatchAndTeam = scoreTotals.ToDictionary(
+                x => (x.MatchId, x.BattingTeamId),
+                x => (x.Runs, x.Wickets));
+
+            var list = matches.Select(m =>
+            {
+                var teamA = teams.GetValueOrDefault(m.TeamAId, "?");
+                var teamB = teams.GetValueOrDefault(m.TeamBId, "?");
+                var (aRuns, aWkts) = scoresByMatchAndTeam.GetValueOrDefault((m.Id, m.TeamAId));
+                var (bRuns, bWkts) = scoresByMatchAndTeam.GetValueOrDefault((m.Id, m.TeamBId));
+                var live = m.Status == MatchStatus.InProgress;
+                return new MatchSummaryDto(
+                    m.Id,
+                    m.Title,
+                    m.TeamAId,
+                    m.TeamBId,
+                    teamA,
+                    teamB,
+                    (byte)m.Status,
+                    (byte)m.Format,
+                    m.MatchDateUtc,
+                    m.OversLimit,
+                    m.Venue,
+                    aRuns,
+                    aWkts,
+                    bRuns,
+                    bWkts,
+                    live ? "LIVE" : "Upcoming",
+                    null,
+                    null,
+                    null,
+                    (byte)m.OversMode,
+                    m.TournamentId,
+                    m.SeriesId,
+                    m.LiveStreamUrl);
+            }).ToList();
+
+            return Ok(list);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The client can leave the match list or time out while the DB is querying.
+            // This is a normal aborted request, not an API failure.
+            return new EmptyResult();
+        }
     }
 
     /// <summary>Setup / in-progress nets sessions in this league.</summary>
@@ -117,21 +153,6 @@ public sealed class LiveController : ControllerBase
         }).ToList();
 
         return Ok(list);
-    }
-
-    private static (int Runs, int Wickets) TeamTotals(IReadOnlyList<Innings> inns, Guid teamId)
-    {
-        var runs = 0;
-        var wickets = 0;
-        foreach (var inn in inns.Where(i => i.BattingTeamId == teamId))
-        {
-            foreach (var d in inn.Deliveries)
-            {
-                runs += d.RunsOffBat + d.ExtraRuns;
-                if (d.IsWicket) wickets++;
-            }
-        }
-        return (runs, wickets);
     }
 
     private static int CountRoster(string? json)

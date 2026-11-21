@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 22;
+    private const int SchemaVersion = 24;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
 
     public static string GetDatabasePath()
@@ -383,6 +383,45 @@ public static class DbBootstrap
             .ConfigureAwait(false);
         await EnsureColumnAsync(db, "VenueBookingParticipants", "Amount",
             """ALTER TABLE "VenueBookingParticipants" ADD COLUMN "Amount" TEXT NOT NULL DEFAULT '0';""", ct)
+            .ConfigureAwait(false);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "Expenses" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Expenses" PRIMARY KEY,
+                "CreatedByUserId" TEXT NOT NULL,
+                "Name" TEXT NOT NULL,
+                "PurchasedByPlayerId" TEXT NOT NULL,
+                "Amount" TEXT NOT NULL,
+                "Version" INTEGER NOT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL,
+                "IsDeleted" INTEGER NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "ExpenseContributions" (
+                "ExpenseId" TEXT NOT NULL,
+                "PlayerId" TEXT NOT NULL,
+                "Amount" TEXT NOT NULL,
+                "Status" TEXT NOT NULL DEFAULT 'Pending',
+                CONSTRAINT "PK_ExpenseContributions" PRIMARY KEY ("ExpenseId", "PlayerId"),
+                CONSTRAINT "FK_ExpenseContributions_Expenses_ExpenseId" FOREIGN KEY ("ExpenseId") REFERENCES "Expenses" ("Id") ON DELETE CASCADE
+            );
+            """, ct).ConfigureAwait(false);
+        await EnsureColumnAsync(db, "ExpenseContributions", "Status",
+            """ALTER TABLE "ExpenseContributions" ADD COLUMN "Status" TEXT NOT NULL DEFAULT 'Paid';""", ct)
+            .ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_Expenses_CreatedAtUtc" ON "Expenses" ("CreatedAtUtc");""", ct)
+            .ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_Expenses_CreatedByUserId" ON "Expenses" ("CreatedByUserId");""", ct)
+            .ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_Expenses_PurchasedByPlayerId" ON "Expenses" ("PurchasedByPlayerId");""", ct)
+            .ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_ExpenseContributions_PlayerId" ON "ExpenseContributions" ("PlayerId");""", ct)
             .ConfigureAwait(false);
 
         await EnsureColumnAsync(db, "Matches", "TournamentId",

@@ -12,7 +12,9 @@ public partial class StatsPage : ContentPage
         InitializeComponent();
         BindingContext = _vm = vm;
         InfiniteScroll.AttachScrollView(LeaderboardScroll);
+        InfiniteScroll.AttachScrollView(PartnershipLeaderboardScroll);
         ScrollSync.FreezeHeader(LeaderboardScroll, NameHeaderHost, StatsHeaderHost);
+        ScrollSync.FreezeHeader(PartnershipLeaderboardScroll, PartnershipNameHeaderHost, PartnershipStatsHeaderHost);
     }
 
     protected override void OnAppearing()
@@ -22,6 +24,17 @@ public partial class StatsPage : ContentPage
             return;
         PageSafe.Run(() => _vm.LoadCommand.ExecuteAsync(null));
     }
+
+    protected override bool OnBackButtonPressed()
+    {
+        if (_vm.ShowPartnershipModal)
+        {
+            _vm.ClosePartnershipDetailsCommand.Execute(null);
+            return true;
+        }
+        return base.OnBackButtonPressed();
+    }
+
 }
 
 public sealed class StatsTabTemplateSelector : DataTemplateSelector
@@ -35,6 +48,7 @@ public sealed class StatsTabTemplateSelector : DataTemplateSelector
     public DataTemplate Fielding { get; set; } = null!;
     public DataTemplate Captaincy { get; set; } = null!;
     public DataTemplate Attendance { get; set; } = null!;
+    public DataTemplate Expenses { get; set; } = null!;
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
     {
@@ -60,6 +74,8 @@ public sealed class StatsTabTemplateSelector : DataTemplateSelector
             5 => Fielding,
             6 => Captaincy,
             8 => Attendance,
+            10 => Attendance,
+            9 => Expenses,
             _ => Match
         };
     }

@@ -32,9 +32,7 @@
                             <Label Text="No overs limit"
                                    FontAttributes="Bold"
                                    Style="{StaticResource BodyLabel}" />
-                            <Label Text="Innings end only when the side is all out or you declare. Overs never end the innings."
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="12" />
+
                         </VerticalStackLayout>
                     </HorizontalStackLayout>
 
@@ -46,9 +44,7 @@
                                 <Label Text="Whole match overs"
                                        FontAttributes="Bold"
                                        Style="{StaticResource BodyLabel}" />
-                                <Label Text="On: one over pool for the entire match (all innings share it). Off: each innings has its own quota."
-                                       Style="{StaticResource MutedLabel}"
-                                       FontSize="12" />
+
                             </VerticalStackLayout>
                         </HorizontalStackLayout>
 

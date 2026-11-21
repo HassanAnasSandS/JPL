@@ -160,9 +160,7 @@
                                IsVisible="{Binding HasWhatsAppError}" />
                     </VerticalStackLayout>
                     <Label Text="Links" Style="{StaticResource SectionLabel}" />
-                    <Label Text="Website, Facebook, Instagram, or any web page. Optional — tap Add for each link."
-                           FontSize="12"
-                           TextColor="{StaticResource TextSecondary}" />
+                    
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding Links}" Spacing="8">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="vm:GroundLinkEdit">

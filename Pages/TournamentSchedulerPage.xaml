@@ -29,13 +29,8 @@
                        FontSize="{OnIdiom Phone=22, Default=20}"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
-                <Label Text="{Binding CountLabel}"
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}" />
-                <Label Text="Manual groups, round robin, and knockout — no live scoring"
-                       Style="{StaticResource MutedLabel}"
-                       FontSize="{OnIdiom Phone=12, Default=11}"
-                       IsVisible="{OnIdiom Phone=True, Default=False}" />
+                
+                
             </VerticalStackLayout>
             <Button Grid.Column="1"
                     Text="+ New"

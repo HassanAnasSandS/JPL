@@ -47,6 +47,8 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
             if (string.Equals(opt.Key, key, StringComparison.Ordinal))
                 return opt.IsVisible;
         }
+        if (_scopeKey is "attendance" or "payments")
+            return key.StartsWith("Payment", StringComparison.Ordinal) == (_scopeKey == "payments");
         return true;
     }
 
@@ -169,6 +171,8 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
             6 => "captaincy",
             7 => "team",
             8 => "attendance",
+            10 => "payments",
+            11 => "partnerships",
             _ => "match"
         };
 
@@ -336,16 +340,39 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
                 ("RunsFor", "RF", 48),
                 ("RunsAgainst", "RA", 48)
             ],
+            10 =>
+            [
+                ("PaymentTotal", "Total", 72),
+                ("PaymentPaid", "Paid", 72),
+                ("PaymentRemaining", "Remaining", 72),
+                ("PaymentPaidPct", "Paid %", 56)
+            ],
+            11 =>
+            [
+                ("PlayerRuns", "Batter runs", 48),
+                ("PlayerBalls", "Batter balls", 44),
+                ("PlayerStrikeRate", "Batter SR", 44),
+                ("PlayerAverage", "Batter avg", 48),
+                ("PlayerOuts", "Batter outs", 44),
+                ("PartnershipInnings", "Innings", 48),
+                ("PartnershipRuns", "Runs", 48),
+                ("PartnershipBalls", "Balls", 48),
+                ("PartnershipAverage", "Avg", 48),
+                ("PartnershipStrikeRate", "SR", 48),
+                ("PartnershipOuts", "Outs", 44)
+            ],
             8 =>
             [
                 ("AttendanceTotal", "Total", 56),
                 ("AttendancePresent", "Present", 64),
                 ("AttendanceAbsent", "Absent", 64),
-                ("AttendancePct", "Att %", 56),
-                ("PaymentTotal", "Total", 72),
-                ("PaymentPaid", "Paid", 72),
-                ("PaymentRemaining", "Remain", 72),
-                ("PaymentPaidPct", "Paid%", 56)
+                ("AttendancePct", "Att %", 56)
+            ],
+            9 =>
+            [
+                ("ExpensePurchased", "Purchased", 84),
+                ("ExpenseContributed", "Contrib.", 84),
+                ("ExpenseRemaining", "Remain", 78)
             ],
             _ =>
             [

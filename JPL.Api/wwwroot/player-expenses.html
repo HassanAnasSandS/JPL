@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>League Expenses · {{LEAGUE_NAME}}</title>
+  <style>
+    :root{color-scheme:dark;--bg:#06111a;--panel:#0c2030;--panel2:#10283b;--line:#294357;--gold:#e0b52f;--text:#edf4fa;--muted:#a5b7c8;--green:#27a76d;--red:#e26161}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#112638 0,#06111a 52%);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+    a{color:var(--gold);text-decoration:none}.top{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:14px;padding:12px max(18px,calc((100vw - 1080px)/2));border-bottom:1px solid var(--line);background:#07131eef;backdrop-filter:blur(12px)}.brand{font-weight:900;letter-spacing:.12em;color:var(--gold)}.back{margin-left:auto;font-weight:700}
+    main{max-width:1080px;margin:28px auto;padding:0 16px 52px}.hero{border:1px solid var(--line);border-radius:22px;padding:24px;background:linear-gradient(140deg,#122b3e,#0a1d2c);box-shadow:0 18px 48px #0003}.eyebrow{margin:0;color:var(--gold);font-size:12px;letter-spacing:.15em;font-weight:900;text-transform:uppercase}.hero h1{margin:6px 0;font-size:clamp(30px,5vw,42px)}.hero p:last-child{margin:0;color:var(--muted)}
+    .totals{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.tile{padding:16px;border:1px solid var(--line);border-radius:15px;background:#0c2030}.tile span{display:block;color:var(--muted);font-size:12px;font-weight:700}.tile strong{display:block;margin-top:4px;font-size:22px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:28px 2px 12px}.toolbar h2{margin:0;color:var(--gold);font-size:14px;letter-spacing:.1em;text-transform:uppercase}.toolbar input{width:min(320px,100%);padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:#0b1e2d;color:var(--text);font:inherit;outline:none}.toolbar input:focus{border-color:var(--gold)}.count{color:var(--muted);font-size:13px}
+    .list{display:grid;gap:11px}.card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;padding:17px;border:1px solid var(--line);border-radius:15px;background:#0c2030}.name{margin:0;font-size:18px;font-weight:800}.by{color:var(--muted);font-size:13px}.amount{text-align:right;align-self:start;color:var(--gold);font-size:22px;font-weight:800}.amount small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em}.stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.stat span{display:block;color:var(--muted);font-size:11px}.stat strong{font-size:14px}.contrib{grid-column:1/-1}.contrib-title{margin-bottom:5px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.people{display:flex;flex-wrap:wrap;gap:7px}.person{padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel2);font-size:12px;color:var(--text);font:inherit;cursor:pointer}.person:hover,.player-link:hover{border-color:var(--gold)}.person b{color:#62d99b}.player-link{padding:0;border:0;border-bottom:1px dotted var(--gold);background:transparent;color:var(--gold);font:inherit;font-weight:700;cursor:pointer}.empty,.error{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}.error{color:#ff9999}.footer{margin-top:24px;color:var(--muted);font-size:12px;text-align:center}
+    .table-wrap{overflow-x:auto;border:1px solid #dce4ed;border-radius:15px;background:#f1f4f8;color:#102030;box-shadow:0 14px 38px #0003}table{width:100%;border-collapse:collapse;table-layout:fixed}thead{background:#e6edf4;color:#677d94}th{padding:13px 12px;text-align:right;font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}th:first-child{width:44%;text-align:left}td{padding:14px 12px;border-top:1px solid #dce4ed;text-align:right;font:13px ui-monospace,monospace;font-variant-numeric:tabular-nums}td:first-child{text-align:left;font:700 14px system-ui,-apple-system,"Segoe UI",sans-serif}tbody tr{cursor:pointer}tbody tr:nth-child(even){background:#f8fafc}tbody tr:hover{background:#e8f0f7}tbody tr:focus-visible{outline:3px solid var(--gold);outline-offset:-3px}.table-player{color:#102030;font-weight:800}.table-green{color:#13824e;font-weight:800}.table-red{color:#c62828;font-weight:800}.state{padding:26px 12px;text-align:center;color:#6a7f95}
+    .modal[hidden]{display:none}.modal{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:14px;background:#000b}.dialog{width:min(700px,100%);max-height:88vh;overflow:hidden;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:19px;background:#edf2f7;color:var(--bg);box-shadow:0 22px 70px #0009}.dialog-head{display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--panel);color:var(--text)}.dialog-head h2{margin:0;font-size:20px}.dialog-head p{margin:3px 0 0;color:var(--muted);font-size:12px}.close{margin-left:auto;width:44px;height:44px;border:0;border-radius:12px;background:var(--gold);color:var(--bg);font:24px system-ui;cursor:pointer}.dialog-body{overflow:auto;padding:14px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;border-radius:13px;background:var(--panel);color:var(--text)}.summary span{display:block;color:var(--muted);font-size:11px}.summary strong{display:block;margin-top:3px;color:var(--gold);font-size:17px}.detail-section{margin:16px 0 7px;color:#526981;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.detail-list{display:grid;gap:7px}.detail-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;padding:11px;border:1px solid #dce4ed;border-radius:11px;background:white}.detail-row h3{margin:0;font-size:14px}.detail-row p{margin:2px 0 0;color:#6a7d92;font-size:12px}.detail-row strong{align-self:center;color:#13824e;white-space:nowrap}.detail-row strong.pending{color:#c62828}.empty-detail{padding:12px;border-radius:10px;background:white;color:#6a7d92;text-align:center;font-size:13px}
+    @media(max-width:600px){main{margin-top:16px;padding:0 10px 30px}.hero{padding:18px;border-radius:17px}.totals{grid-template-columns:1fr;gap:8px;margin:14px 0 20px}.tile{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:13px}.tile span{font-size:13px}.tile strong{margin:0;font-size:18px}.toolbar{display:grid;grid-template-columns:1fr;margin:20px 2px 10px}.toolbar input{width:100%}.table-wrap{border-radius:12px}th{padding:11px 5px;font-size:10px;letter-spacing:.025em}th:first-child{width:32%;text-align:left}td{padding:12px 5px;font-size:10px;white-space:nowrap}td:first-child{font-size:12px;white-space:normal;overflow-wrap:anywhere}.dialog{max-height:90vh;border-radius:15px}.dialog-head{padding:12px}.dialog-head h2{font-size:18px}.close{width:40px;height:40px}.dialog-body{padding:10px}.summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:10px}.summary strong{font-size:13px;overflow:hidden;text-overflow:ellipsis}.detail-row{padding:9px;gap:5px 8px}.detail-row h3{font-size:13px}.detail-row p{font-size:11px}.detail-row strong{font-size:12px}}
+  </style>
+</head>
+<body>
+  <nav class="top"><a class="brand" href="/p/{{LEAGUE_ID}}">CRIC360</a><a class="back" href="/p/{{LEAGUE_ID}}">← League players</a></nav>
+  <main>
+    <section class="hero"><p class="eyebrow">League expenses</p><h1 id="league">{{LEAGUE_NAME}}</h1><p>Equipment purchases, each player's amount due, and Paid / Pending status.</p></section>
+    <section class="totals" aria-label="Expense totals">
+      <div class="tile"><span>Total</span><strong id="total">—</strong></div>
+      <div class="tile"><span>Paid</span><strong id="contributed" style="color:var(--green)">—</strong></div>
+      <div class="tile"><span>Remaining</span><strong id="remaining" style="color:var(--red)">—</strong></div>
+    </section>
+    <div class="toolbar"><div><h2>Player expenses</h2><div class="count" id="count">Loading players…</div></div><input id="search" type="search" placeholder="Search player" autocomplete="off"></div>
+    <section class="list" id="list"><div class="empty">Loading expenses…</div></section>
+    <div class="footer">Amounts are shown in league currency units.</div>
+  </main>
+  <div id="playerModal" class="modal" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="modalName">
+      <header class="dialog-head"><div><h2 id="modalName">Player expense details</h2><p id="modalSub">Purchases and player contributions</p></div><button id="closeModal" class="close" type="button" aria-label="Close">×</button></header>
+      <div class="dialog-body"><div id="modalSummary" class="summary"></div><div id="modalContributions"></div></div>
+    </section>
+  </div>
+<script>
+  const leagueId='{{LEAGUE_ID}}';
+  const money=n=>new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(Number(n||0));
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const formatDate=value=>new Date(value).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
+  let rows=[];
+  function playerTotals(){
+    const players=new Map();
+    const get=(id,name)=>{if(!players.has(id))players.set(id,{playerId:id,playerName:name,total:0,paid:0,remaining:0});return players.get(id);};
+    for(const expense of rows){
+      for(const contribution of expense.contributions||[]){
+        const player=get(contribution.playerId,contribution.playerName);
+        const amount=Number(contribution.amount||0);
+        player.total+=amount;
+        if(String(contribution.status).toLowerCase()==='paid')player.paid+=amount;
+        else player.remaining+=amount;
+      }
+    }
+    return [...players.values()].sort((a,b)=>b.remaining-a.remaining||b.total-a.total||a.playerName.localeCompare(b.playerName));
+  }
+  function render(){
+    const q=document.getElementById('search').value.trim().toLowerCase();
+    const players=playerTotals();
+    const shown=players.filter(x=>!q||x.playerName.toLowerCase().includes(q));
+    document.getElementById('count').textContent=`${shown.length} ${shown.length===1?'player':'players'}`;
+    const list=document.getElementById('list');
+    if(!shown.length){list.innerHTML=`<div class="table-wrap"><div class="state">${players.length?'No players match your search.':'No expense records found.'}</div></div>`;return;}
+    list.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Player</th><th>Total</th><th>Paid</th><th>Remaining</th></tr></thead><tbody>${shown.map(p=>`<tr tabindex="0" role="button" aria-label="View expenses for ${esc(p.playerName)}" data-player-id="${esc(p.playerId)}" data-player-name="${esc(p.playerName)}"><td class="table-player">${esc(p.playerName)}</td><td>${money(p.total)}</td><td class="table-green">${money(p.paid)}</td><td class="table-red">${money(p.remaining)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  function openPlayer(playerId,playerName){
+    const contributions=rows.flatMap(x=>(x.contributions||[]).filter(c=>c.playerId===playerId).map(c=>({expense:x,amount:c.amount,status:c.status})));
+    const totalDue=contributions.reduce((sum,x)=>sum+Number(x.amount||0),0);
+    const paid=contributions.filter(x=>String(x.status).toLowerCase()==='paid').reduce((sum,x)=>sum+Number(x.amount||0),0);
+    const remaining=Math.max(0,totalDue-paid);
+    document.getElementById('modalName').textContent=playerName;
+    document.getElementById('modalSub').textContent='Your total due, paid amount, remaining balance, and purchaser';
+    document.getElementById('modalSummary').innerHTML=`<div><span>Total</span><strong>${money(totalDue)}</strong></div><div><span>Paid</span><strong style="color:#62d99b">${money(paid)}</strong></div><div><span>Remaining</span><strong style="color:#ff8585">${money(remaining)}</strong></div>`;
+    const contributionsView=document.getElementById('modalContributions');
+    contributionsView.innerHTML=`<h3 class="detail-section">Your expense shares</h3>${contributions.length?`<div class="detail-list">${contributions.map(x=>{const isPaid=String(x.status).toLowerCase()==='paid';return `<article class="detail-row"><div><h3>${esc(x.expense.name)}</h3><p>${formatDate(x.expense.createdAtUtc)} · Purchased by ${esc(x.expense.purchasedByPlayerName||'—')}</p></div><strong class="${isPaid?'':'pending'}">${isPaid?'Paid':'Pending'} ${money(x.amount)}</strong></article>`}).join('')}</div>`:'<div class="empty-detail">No expense shares recorded for this player.</div>'}`;
+    const modal=document.getElementById('playerModal');modal.hidden=false;document.body.style.overflow='hidden';document.getElementById('closeModal').focus();
+  }
+  document.getElementById('search').addEventListener('input',render);
+  document.getElementById('list').addEventListener('click',event=>{const player=event.target.closest('[data-player-id]');if(player)openPlayer(player.dataset.playerId,player.dataset.playerName);});
+  document.getElementById('list').addEventListener('keydown',event=>{const player=event.target.closest('tr[data-player-id]');if(player&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openPlayer(player.dataset.playerId,player.dataset.playerName);}});
+  const modal=document.getElementById('playerModal');
+  const closeModal=()=>{modal.hidden=true;document.body.style.overflow='';};
+  document.getElementById('closeModal').addEventListener('click',closeModal);
+  modal.addEventListener('click',event=>{if(event.target===modal)closeModal();});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!modal.hidden)closeModal();});
+  fetch(`/api/public/leagues/${leagueId}/expenses`,{cache:'no-store'}).then(response=>{if(!response.ok)throw new Error('Could not load expenses.');return response.json();}).then(data=>{
+    rows=data.expenses||[];document.getElementById('league').textContent=data.leagueName;
+    document.getElementById('total').textContent=money(rows.reduce((sum,x)=>sum+Number(x.amount||0),0));
+    document.getElementById('contributed').textContent=money(rows.reduce((sum,x)=>sum+Number(x.contributedAmount||0),0));
+    document.getElementById('remaining').textContent=money(rows.reduce((sum,x)=>sum+Number(x.outstandingAmount||0),0));render();
+  }).catch(error=>{document.getElementById('count').textContent='';document.getElementById('list').innerHTML=`<div class="error">${esc(error.message)}</div>`;});
+</script>
+</body>
+</html>

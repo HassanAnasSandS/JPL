@@ -441,6 +441,8 @@ public interface IMatchService
     /// <summary>Full batting/bowling scorecard for every innings (completed or local ongoing).</summary>
     Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default);
     Task<PlayerMatchReport?> GetPlayerMatchReportAsync(Guid matchId, Guid playerId, CancellationToken ct = default);
+    /// <summary>Impact points for every player in a match, highest first (POTM calculation table).</summary>
+    Task<IReadOnlyList<MatchPointsRow>> GetMatchPointsAsync(Guid matchId, CancellationToken ct = default);
     Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default);
     Task CompleteMatchAsync(Guid matchId, CancellationToken ct = default);
     /// <summary>Squad players for POTM picker (from match roster snapshot).</summary>
@@ -1802,6 +1804,102 @@ public sealed class MatchService : IMatchService
             names);
     }
 
+    public async Task<IReadOnlyList<MatchPointsRow>> GetMatchPointsAsync(Guid matchId, CancellationToken ct = default)
+    {
+        var rows = await TryBuildLocalMatchPointsAsync(matchId, ct).ConfigureAwait(false);
+        if (rows.Count > 0)
+            return rows;
+
+        // A completed match opened on a device that never scored it: pull the raw
+        // Match/Innings/Delivery graph once, then rebuild the table from SQLite.
+        if (await EnsureLocalMatchAsync(matchId, reclaimDeviceIfOwner: false, ct).ConfigureAwait(false))
+            rows = await TryBuildLocalMatchPointsAsync(matchId, ct).ConfigureAwait(false);
+
+        return rows;
+    }
+
+    private async Task<IReadOnlyList<MatchPointsRow>> TryBuildLocalMatchPointsAsync(
+        Guid matchId, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var match = await db.Matches.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct)
+            .ConfigureAwait(false);
+        if (match is null)
+            return Array.Empty<MatchPointsRow>();
+
+        var innings = await db.Innings.AsNoTracking()
+            .Where(i => i.MatchId == matchId)
+            .OrderBy(i => i.InningsNumber)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var inningsIds = innings.Select(i => i.Id).ToList();
+        var deliveries = await db.Deliveries.AsNoTracking()
+            .Where(d => inningsIds.Contains(d.InningsId))
+            .OrderBy(d => d.Sequence)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (deliveries.Count == 0)
+            return Array.Empty<MatchPointsRow>();
+
+        var roster = MatchRosterPayload.TryParse(match.SquadRosterJson);
+        var (playerNames, teamNames) = await LiveMasterNames.LoadAsync(_api, _dbFactory, ct)
+            .ConfigureAwait(false);
+        roster?.ApplyLiveNames(playerNames, teamNames);
+
+        var teamA = LiveMasterNames.Lookup(teamNames, match.TeamAId, roster?.TeamAName ?? "Team A");
+        var teamB = LiveMasterNames.Lookup(teamNames, match.TeamBId, roster?.TeamBName ?? "Team B");
+
+        var players = new Dictionary<Guid, MatchPointsCalculator.PlayerInfo>();
+        void AddPlayer(Guid id, string name, string team, bool isInPlayingXi = true)
+        {
+            if (id == Guid.Empty || players.ContainsKey(id))
+                return;
+            players[id] = new MatchPointsCalculator.PlayerInfo(
+                string.IsNullOrWhiteSpace(name) ? id.ToString("N")[..8] : name,
+                team,
+                isInPlayingXi);
+        }
+
+        if (roster is not null)
+        {
+            foreach (var p in roster.TeamAPlayers) AddPlayer(p.Id, p.FullName, teamA);
+            foreach (var p in roster.TeamASubstitutes) AddPlayer(p.Id, p.FullName, teamA, isInPlayingXi: false);
+            foreach (var p in roster.TeamBPlayers) AddPlayer(p.Id, p.FullName, teamB);
+            foreach (var p in roster.TeamBSubstitutes) AddPlayer(p.Id, p.FullName, teamB, isInPlayingXi: false);
+        }
+
+        // Any ball participant missing from the snapshot (older match, substitute
+        // fielder, roster trimmed) still belongs in the table.
+        foreach (var d in deliveries)
+        {
+            AddPlayer(d.BatterId, LiveName(d.BatterId), TeamOf(d.BatterId));
+            AddPlayer(d.BowlerId, LiveName(d.BowlerId), TeamOf(d.BowlerId));
+            if (d.FielderId is Guid fielderId)
+                AddPlayer(fielderId, LiveName(fielderId), TeamOf(fielderId));
+            if (d.DismissedPlayerId is Guid dismissedId)
+                AddPlayer(dismissedId, LiveName(dismissedId), TeamOf(dismissedId));
+        }
+
+        string LiveName(Guid id)
+            => playerNames.TryGetValue(id, out var live) && !string.IsNullOrWhiteSpace(live)
+                ? live
+                : id.ToString("N")[..8];
+
+        string TeamOf(Guid id)
+        {
+            if (roster is null)
+                return string.Empty;
+            if (roster.TeamAPlayers.Any(p => p.Id == id) || roster.TeamASubstitutes.Any(p => p.Id == id))
+                return teamA;
+            if (roster.TeamBPlayers.Any(p => p.Id == id) || roster.TeamBSubstitutes.Any(p => p.Id == id))
+                return teamB;
+            return string.Empty;
+        }
+
+        return MatchPointsCalculator.Calculate(deliveries, players, match.PlayerOfTheMatchPlayerId);
+    }
+
     public async Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default)
     {
         var local = await TryBuildLocalAnalyticsAsync(matchId, ct).ConfigureAwait(false);
@@ -2374,7 +2472,7 @@ public sealed class MatchService : IMatchService
         {
             var bowled = deliveries.Where(d => d.BowlerId == pid).ToList();
             var balls = bowled.Count(d => d.IsLegalDelivery);
-            var runsConceded = bowled.Sum(d => d.RunsOffBat + d.ExtraRuns);
+            var runsConceded = bowled.Sum(MatchPointsCalculator.BowlerRunsConceded);
             var wickets = bowled.Count(d =>
                 d.IsWicket && d.WicketType is not WicketType.RunOut and not WicketType.Retired and not WicketType.None);
             var maidens = CountMaidens(bowled);
@@ -2407,25 +2505,7 @@ public sealed class MatchService : IMatchService
     }
 
     private static int CountMaidens(List<Delivery> bowled)
-    {
-        var maidens = 0;
-        var legalInOver = 0;
-        var runsInOver = 0;
-        foreach (var d in bowled.OrderBy(x => x.Sequence))
-        {
-            runsInOver += d.RunsOffBat + d.ExtraRuns;
-            if (!d.IsLegalDelivery)
-                continue;
-            legalInOver++;
-            if (legalInOver < 6)
-                continue;
-            if (runsInOver == 0)
-                maidens++;
-            legalInOver = 0;
-            runsInOver = 0;
-        }
-        return maidens;
-    }
+        => MatchPointsCalculator.CountMaidens(bowled);
 
     private static string FormatDismissal(Delivery d, Func<Guid, string> nameOf, Func<Guid, string>? fielderOf = null)
     {
@@ -2496,59 +2576,20 @@ public sealed class MatchService : IMatchService
             ? null
             : roster.AllNamedPlayers().Select(p => p.Id).ToHashSet();
 
-        var points = new Dictionary<Guid, double>();
-        var runs = new Dictionary<Guid, int>();
-        var wickets = new Dictionary<Guid, int>();
+        // Same formula as the points table shown in the scorecard — one source of truth.
+        var best = MatchPointsCalculator.Calculate(deliveries)
+            .Where(r => squadIds is null || squadIds.Contains(r.PlayerId))
+            .OrderByDescending(r => r.TotalPoints)
+            .ThenByDescending(r => r.Wickets)
+            .ThenByDescending(r => r.Runs)
+            .ThenBy(r => r.Order)
+            .FirstOrDefault();
 
-        void Add(Guid id, double pts)
-        {
-            if (id == Guid.Empty) return;
-            if (squadIds is not null && !squadIds.Contains(id)) return;
-            points[id] = points.GetValueOrDefault(id) + pts;
-        }
-
-        foreach (var d in deliveries)
-        {
-            Add(d.BatterId, d.RunsOffBat);
-            runs[d.BatterId] = runs.GetValueOrDefault(d.BatterId) + d.RunsOffBat;
-            if (d.RunsOffBat == 4) Add(d.BatterId, 1);
-            if (d.RunsOffBat == 6) Add(d.BatterId, 2);
-
-            var bowlerWicket = d.IsWicket && d.WicketType is not WicketType.RunOut
-                               and not WicketType.Retired and not WicketType.None;
-            if (bowlerWicket)
-            {
-                Add(d.BowlerId, 25);
-                wickets[d.BowlerId] = wickets.GetValueOrDefault(d.BowlerId) + 1;
-            }
-
-            if (d.IsWicket && d.FielderId is Guid fielderId &&
-                d.WicketType is WicketType.Caught or WicketType.RunOut or WicketType.Stumped)
-            {
-                Add(fielderId, d.WicketType == WicketType.Caught ? 12 : 10);
-            }
-        }
-
-        // Maiden overs bonus.
-        foreach (var bowlerGroup in deliveries.GroupBy(d => d.BowlerId))
-        {
-            var maidens = CountMaidens(bowlerGroup.OrderBy(d => d.Sequence).ToList());
-            if (maidens > 0)
-                Add(bowlerGroup.Key, maidens * 8);
-        }
-
-        if (points.Count == 0)
+        if (best is null)
             return null;
 
-        var best = points
-            .OrderByDescending(kv => kv.Value)
-            .ThenByDescending(kv => wickets.GetValueOrDefault(kv.Key))
-            .ThenByDescending(kv => runs.GetValueOrDefault(kv.Key))
-            .Select(kv => kv.Key)
-            .First();
-
-        match.PlayerOfTheMatchPlayerId = best;
-        return best;
+        match.PlayerOfTheMatchPlayerId = best.PlayerId;
+        return best.PlayerId;
     }
 
     private static string? ResolveSquadPlayerName(Match match, Guid? playerId)

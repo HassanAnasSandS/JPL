@@ -12,6 +12,41 @@ public interface IStatsService
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid bowlerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<FieldingVsStat>> GetFieldingVsAsync(Guid fielderId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<CaptainVsStat>> GetCaptainVsAsync(Guid playerId, CancellationToken ct = default);
+    Task<IReadOnlyList<PartnershipStat>> GetPartnershipsAsync(Guid playerId, CancellationToken ct = default);
+    Task<IReadOnlyList<PartnershipMatchStat>> GetPartnershipMatchesAsync(
+        Guid playerId,
+        Guid partnerId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<PartnershipStat>> GetPartnershipLeaderboardAsync(
+        string? query = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
+    Task<ApiPagedResult<PartnershipStat>> GetPartnershipLeaderboardPageAsync(
+        int skip,
+        string? query = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
     Task<StatsFilterOptionsDto> GetFilterOptionsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PlayerCareerSummary>> GetLeaderboardAsync(
         DateTime? fromUtc = null,
@@ -23,6 +58,10 @@ public interface IStatsService
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default);
     Task<ApiPagedResult<PlayerCareerSummary>> GetLeaderboardPageAsync(
         int skip,
@@ -38,6 +77,10 @@ public interface IStatsService
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default);
     Task<IReadOnlyList<TeamCareerSummary>> GetTeamLeaderboardAsync(
         DateTime? fromUtc = null,
@@ -134,12 +177,16 @@ public sealed class StatsService : IStatsService
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
         return await _api.GetStatsLeaderboardAsync(
                 fromUtc, toExclusiveUtc, venueId, source, formatIds, tournamentIds, seriesIds, matchIds,
-                attendanceFromDebut, ct)
+                attendanceFromDebut, asCaptain, captainPlayerId, captainOpponentSide, asPlayer, ct)
             .ConfigureAwait(false);
     }
 
@@ -157,12 +204,17 @@ public sealed class StatsService : IStatsService
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIds = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
         return await _api.GetStatsLeaderboardPageAsync(
                 skip, q, sort, ascending, fromUtc, toExclusiveUtc, venueId, source, formatIds,
-                tournamentIds, seriesIds, matchIds, attendanceFromDebut, ct)
+                tournamentIds, seriesIds, matchIds, attendanceFromDebut, asCaptain,
+                captainPlayerId, captainOpponentSide, asPlayer, ct)
             .ConfigureAwait(false);
     }
 
@@ -248,6 +300,67 @@ public sealed class StatsService : IStatsService
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
         return await _api.GetCaptainVsAsync(playerId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<PartnershipStat>> GetPartnershipsAsync(Guid playerId, CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetPartnershipsAsync(playerId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<PartnershipMatchStat>> GetPartnershipMatchesAsync(
+        Guid playerId,
+        Guid partnerId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetPartnershipMatchesAsync(
+            playerId, partnerId, fromUtc, toExclusiveUtc, venueId,
+            formatIds, tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<PartnershipStat>> GetPartnershipLeaderboardAsync(
+        string? query = null,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetPartnershipLeaderboardAsync(
+            query, fromUtc, toExclusiveUtc, venueId, formatIds, tournamentIds, seriesIds, matchIds, ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<ApiPagedResult<PartnershipStat>> GetPartnershipLeaderboardPageAsync(
+        int skip,
+        string? query = null,
+        string? sort = null,
+        bool ascending = false,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+    {
+        await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        return await _api.GetPartnershipLeaderboardPageAsync(
+            skip, query, sort, ascending, fromUtc, toExclusiveUtc, venueId,
+            formatIds, tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false);
     }
 
     public async Task<RankingsBundle> GetRankingsAsync(

@@ -56,9 +56,7 @@
                                 <Label Text="Live telecast this match"
                                        FontAttributes="Bold"
                                        Style="{StaticResource BodyLabel}" />
-                                <Label Text="On: video stream + live score go to the server as you score (current live mechanism). Off: match stays on this phone and syncs when you complete it — faster scoring, less server load."
-                                       Style="{StaticResource MutedLabel}"
-                                       FontSize="12" />
+
                             </VerticalStackLayout>
                         </HorizontalStackLayout>
                         <VerticalStackLayout Spacing="8" IsVisible="{Binding ShowLiveStreamUrl}">

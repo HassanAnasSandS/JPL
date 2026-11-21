@@ -1,4 +1,6 @@
 using JPL.ViewModels;
+using JPL.Services;
+using Microsoft.Maui.Controls;
 
 namespace JPL.Pages;
 
@@ -21,6 +23,18 @@ public partial class MatchScorecardPage : ContentPage
 
     protected override bool OnBackButtonPressed()
     {
+        if (_vm.IsSelectedPlayerPointsOpen)
+        {
+            _vm.CloseSelectedPlayerPointsCommand.Execute(null);
+            return true;
+        }
+
+        if (_vm.IsPlayerPointsOpen)
+        {
+            _vm.ClosePlayerPointsCommand.Execute(null);
+            return true;
+        }
+
         if (_vm.IsPlayerReportOpen)
         {
             _vm.ClosePlayerReportCommand.Execute(null);
@@ -40,6 +54,12 @@ public partial class MatchScorecardPage : ContentPage
         }
 
         return base.OnBackButtonPressed();
+    }
+
+    private void OnPlayerPointsRowClicked(object? sender, EventArgs e)
+    {
+        if (sender is Button { BindingContext: MatchPointsRow row })
+            _vm.SelectPlayerPointsCommand.Execute(row);
     }
 
     protected override void OnSizeAllocated(double width, double height)

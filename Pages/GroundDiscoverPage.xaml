@@ -17,10 +17,7 @@
                    FontSize="22"
                    FontAttributes="Bold"
                    TextColor="{StaticResource Primary}" />
-            <Label Text="{x:Static svc:BrandSlogans.Grounds}"
-                   FontSize="12"
-                   TextColor="{StaticResource TextSecondary}"
-                   LineBreakMode="WordWrap" />
+            
             <ctrl:FilterDrawer HasActiveFilters="{Binding HasActiveFilters}"
                            ClearCommand="{Binding ClearFiltersCommand}"
                            ApplyCommand="{Binding SearchCommand}"
@@ -29,9 +26,7 @@
                 <SearchBar Placeholder="Search name"
                            Text="{Binding NameQuery}"
                            SearchCommand="{Binding SearchCommand}" />
-                <Label Text="{Binding CountLabel}"
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}" />
+                
                 <Label Text="Advanced filter"
                        FontAttributes="Bold"
                        FontSize="13"

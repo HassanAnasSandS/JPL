@@ -36,6 +36,11 @@ public partial class FilterDrawer : ContentView
     private Button? _openClearButton;
     private Button? _applyButton;
     private ContentView? _drawerHost;
+    private ContentPage? _modalPage;
+    private Page? _toolbarOwner;
+    private ToolbarItem? _toolbarFilter;
+    private View? _modalContent;
+    private object? _modalBindingContext;
     private bool _chromeReady;
 
     public FilterDrawer()
@@ -44,6 +49,12 @@ public partial class FilterDrawer : ContentView
         BuildChrome();
         AttachDrawerContent(DrawerContent);
         RefreshChrome();
+    }
+
+    protected override void OnParentSet()
+    {
+        base.OnParentSet();
+        UpdateToolbarFilter();
     }
 
     public bool IsOpen
@@ -85,9 +96,105 @@ public partial class FilterDrawer : ContentView
     private static void OnChromeChanged(BindableObject b, object? o, object? n)
         => ((FilterDrawer)b).RefreshChrome();
 
-    private void OnOpenClicked(object? sender, EventArgs e) => IsOpen = true;
+    private async void OnOpenClicked(object? sender, EventArgs e)
+    {
+        if (IsOpen || DrawerContent is null)
+            return;
 
-    private void OnCloseClicked(object? sender, EventArgs e) => IsOpen = false;
+        var owner = GetParentPage();
+        var navigation = owner?.Navigation ?? Shell.Current?.Navigation;
+        if (navigation is null)
+            return;
+
+        _modalContent = DrawerContent;
+        _modalBindingContext = BindingContext;
+        _modalContent.BindingContext = _modalBindingContext;
+
+        var title = new Label
+        {
+            Text = "Filters",
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 18,
+            VerticalOptions = LayoutOptions.Center,
+            TextColor = TryColor("Primary", Color.FromArgb("#0D1B2A"))
+        };
+        var close = new Button
+        {
+            Text = "Close",
+            Style = TryStyle("GhostButton"),
+            Padding = new Thickness(12, 8)
+        };
+        close.Clicked += OnCloseClicked;
+
+        var header = new Grid { ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) } };
+        header.Add(title);
+        header.Add(close, 1);
+
+        var scroll = new ScrollView { Content = _modalContent };
+        var clear = new Button
+        {
+            Text = "Clear",
+            Style = TryStyle("GhostButton"),
+            IsVisible = ClearCommand is not null
+        };
+        clear.Clicked += OnClearClicked;
+        var apply = GoldButton(string.IsNullOrWhiteSpace(ApplyButtonText) ? "Search" : ApplyButtonText, OnApplyClicked);
+        apply.IsVisible = ApplyCommand is not null;
+        var done = new Button { Text = "Done", Style = TryStyle("OutlineButton"), Padding = new Thickness(12, 8) };
+        done.Clicked += OnCloseClicked;
+
+        var footer = new Grid { ColumnSpacing = 8 };
+        footer.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        footer.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        footer.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        footer.Add(apply);
+        footer.Add(clear, 1);
+        footer.Add(done, 2);
+
+        var card = new Border
+        {
+            Style = TryStyle("CardBorder"),
+            Padding = 14,
+            VerticalOptions = LayoutOptions.Center,
+            HorizontalOptions = LayoutOptions.Fill,
+            Margin = new Thickness(18),
+            MaximumHeightRequest = DeviceDisplay.MainDisplayInfo.Height / DeviceDisplay.MainDisplayInfo.Density * 0.85,
+            Content = new VerticalStackLayout { Spacing = 12, Children = { header, scroll, footer } }
+        };
+        _modalPage = new ContentPage
+        {
+            BackgroundColor = Color.FromArgb("#99000000"),
+            BindingContext = _modalBindingContext,
+            Content = new Grid { Children = { card } }
+        };
+        _modalPage.Disappearing += OnModalDisappearing;
+        IsOpen = true;
+        _drawerHost!.Content = null;
+        try
+        {
+            await navigation.PushModalAsync(_modalPage);
+        }
+        catch
+        {
+            RestoreModalContent();
+            throw;
+        }
+    }
+
+    private async void OnCloseClicked(object? sender, EventArgs e)
+    {
+        if (_modalPage is null)
+        {
+            IsOpen = false;
+            return;
+        }
+
+        var page = _modalPage;
+        var navigation = page.Navigation;
+        if (navigation is not null)
+            await navigation.PopModalAsync();
+        RestoreModalContent();
+    }
 
     private void OnClearClicked(object? sender, EventArgs e)
     {
@@ -99,7 +206,7 @@ public partial class FilterDrawer : ContentView
     {
         if (ApplyCommand?.CanExecute(null) == true)
             ApplyCommand.Execute(null);
-        IsOpen = false;
+        OnCloseClicked(sender, e);
     }
 
     private void AttachDrawerContent(View? view)
@@ -117,7 +224,7 @@ public partial class FilterDrawer : ContentView
             Style = TryStyle("GhostButton"),
             Padding = new Thickness(16, 10),
             FontAttributes = FontAttributes.Bold,
-            HorizontalOptions = LayoutOptions.Fill
+            HorizontalOptions = LayoutOptions.End
         };
         _openButton.Clicked += OnOpenClicked;
 
@@ -133,8 +240,8 @@ public partial class FilterDrawer : ContentView
         _closedBar = new Grid { ColumnSpacing = 8 };
         _closedBar.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
         _closedBar.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-        _closedBar.Add(_openButton);
-        _closedBar.Add(_closedClearButton, 1);
+        _closedBar.Add(_closedClearButton);
+        _closedBar.Add(_openButton, 1);
 
         var title = new Label
         {
@@ -192,13 +299,8 @@ public partial class FilterDrawer : ContentView
         openStack.Add(body);
         openStack.Add(footer);
 
-        _openPanel = new Border
-        {
-            Style = TryStyle("CardBorder"),
-            Padding = 12,
-            IsVisible = false,
-            Content = openStack
-        };
+        // Filter content is hosted in a modal page so it does not consume list space.
+        _openPanel = new Border { IsVisible = false, Content = openStack };
 
         var root = new VerticalStackLayout { Spacing = 8 };
         root.Add(_closedBar);
@@ -224,8 +326,8 @@ public partial class FilterDrawer : ContentView
         if (!_chromeReady || _closedBar is null || _openPanel is null)
             return;
 
-        _closedBar.IsVisible = !IsOpen;
-        _openPanel.IsVisible = IsOpen;
+        _closedBar.IsVisible = _toolbarOwner is null && !IsOpen;
+        _openPanel.IsVisible = false;
         if (_closedClearButton is not null)
             _closedClearButton.IsVisible = !IsOpen && HasActiveFilters && ClearCommand is not null;
         if (_openClearButton is not null)
@@ -243,6 +345,8 @@ public partial class FilterDrawer : ContentView
         _openButton.TextColor = HasActiveFilters
             ? TryColor("Secondary", Color.FromArgb("#D4AF37"))
             : TryColor("Primary", Color.FromArgb("#0D1B2A"));
+        if (_toolbarFilter is not null)
+            _toolbarFilter.Text = HasActiveFilters ? "Filters · On" : "Filters";
     }
 
     private static Style? TryStyle(string key)
@@ -254,4 +358,63 @@ public partial class FilterDrawer : ContentView
         => Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Color color
             ? color
             : fallback;
+
+    private Page? GetParentPage()
+    {
+        Element? current = this;
+        while (current is not null)
+        {
+            if (current is Page page)
+                return page;
+            current = current.Parent;
+        }
+        return null;
+    }
+
+    private void UpdateToolbarFilter()
+    {
+        var page = GetParentPage();
+        if (ReferenceEquals(page, _toolbarOwner))
+            return;
+
+        if (_toolbarOwner is not null && _toolbarFilter is not null)
+        {
+            _toolbarFilter.Clicked -= OnOpenClicked;
+            _toolbarOwner.ToolbarItems.Remove(_toolbarFilter);
+        }
+
+        _toolbarOwner = page;
+        _toolbarFilter = null;
+        if (_toolbarOwner is not null)
+        {
+            _toolbarFilter = new ToolbarItem
+            {
+                Text = HasActiveFilters ? "Filters · On" : "Filters",
+                Order = ToolbarItemOrder.Primary,
+                Priority = 0
+            };
+            _toolbarFilter.Clicked += OnOpenClicked;
+            _toolbarOwner.ToolbarItems.Add(_toolbarFilter);
+        }
+        RefreshChrome();
+    }
+
+    private void RestoreModalContent()
+    {
+        if (_modalContent is not null)
+        {
+            _modalContent.BindingContext = _modalBindingContext;
+            _drawerHost!.Content = _modalContent;
+        }
+        _modalPage = null;
+        _modalContent = null;
+        _modalBindingContext = null;
+        IsOpen = false;
+    }
+
+    private void OnModalDisappearing(object? sender, EventArgs e)
+    {
+        if (_modalPage is not null)
+            RestoreModalContent();
+    }
 }

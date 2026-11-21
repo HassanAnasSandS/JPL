@@ -53,12 +53,7 @@
                            FontAttributes="Bold"
                            VerticalOptions="Center"
                            TextColor="{StaticResource Primary}" />
-                    <Label Grid.Column="1"
-                           Text="{x:Static svc:BrandSlogans.Analytics}"
-                           FontSize="11"
-                           VerticalOptions="Center"
-                           LineBreakMode="TailTruncation"
-                           TextColor="{StaticResource TextSecondary}" />
+                    
                     <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
                         <Button Text="Teams"
                                 Command="{Binding UseTeamModeCommand}"
@@ -245,9 +240,7 @@
                         <Border Stroke="{StaticResource Gray200}" StrokeThickness="1" Padding="6" StrokeShape="RoundRectangle 8">
                             <VerticalStackLayout Spacing="3">
                                 <Label Text="List A" FontSize="11" FontAttributes="Bold" TextColor="#1565C0" />
-                                <Label Text="Tap C — one captain per list"
-                                       FontSize="10"
-                                       TextColor="{StaticResource TextSecondary}" />
+                                
                                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding ListA}" Spacing="2">
                                     <BindableLayout.EmptyView>
                                         <Label Text="Empty" FontSize="10" TextColor="{StaticResource TextSecondary}" />
@@ -292,9 +285,7 @@
                         <Border Grid.Column="1" Stroke="{StaticResource Gray200}" StrokeThickness="1" Padding="6" StrokeShape="RoundRectangle 8">
                             <VerticalStackLayout Spacing="3">
                                 <Label Text="List B" FontSize="11" FontAttributes="Bold" TextColor="#C62828" />
-                                <Label Text="Tap C — one captain per list"
-                                       FontSize="10"
-                                       TextColor="{StaticResource TextSecondary}" />
+                                
                                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding ListB}" Spacing="2">
                                     <BindableLayout.EmptyView>
                                         <Label Text="Empty" FontSize="10" TextColor="{StaticResource TextSecondary}" />

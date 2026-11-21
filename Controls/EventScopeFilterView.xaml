@@ -7,9 +7,6 @@
              x:DataType="vm:EventScopeFilterViewModel">
     <VerticalStackLayout Spacing="8">
         <VerticalStackLayout Spacing="4">
-            <Label Text="Filter by"
-                   FontSize="12"
-                   Style="{StaticResource MutedLabel}" />
             <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
                 <HorizontalStackLayout Spacing="8">
                     <Button Text="All"
@@ -82,10 +79,6 @@
                     </Button>
                 </HorizontalStackLayout>
             </ScrollView>
-            <Label Text="Pick Tournament, Series, or Matches — then multi-select below"
-                   FontSize="11"
-                   Style="{StaticResource MutedLabel}"
-                   IsVisible="{Binding IsModeNone}" />
         </VerticalStackLayout>
         <VerticalStackLayout IsVisible="{Binding ShowTournamentDropdown}">
             <ctrl:IdMultiSelectFilterView BindingContext="{Binding TournamentFilter}" />

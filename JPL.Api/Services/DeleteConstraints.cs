@@ -87,6 +87,15 @@ internal static class DeleteConstraints
         if (participant)
             return "Cannot delete this player because they are a venue booking participant.";
 
+        if (await db.Expenses.AnyAsync(x => !x.IsDeleted && x.PurchasedByPlayerId == id, ct).ConfigureAwait(false))
+            return "Cannot delete this player because they are listed as the purchaser of an expense.";
+
+        if (await (from c in db.ExpenseContributions
+                   join e in db.Expenses on c.ExpenseId equals e.Id
+                   where c.PlayerId == id && !e.IsDeleted
+                   select c.PlayerId).AnyAsync(ct).ConfigureAwait(false))
+            return "Cannot delete this player because they contributed to an expense.";
+
         var key = id.ToString("D");
         if (await db.Matches.AnyAsync(m =>
                 !m.IsDeleted

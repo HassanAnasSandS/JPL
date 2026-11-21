@@ -11,6 +11,7 @@ public partial class StatsViewModel : ObservableObject
     private readonly ITeamService _teams;
     private readonly IVenueService _venues;
     private readonly ILeagueContext _league;
+    public ExpensesViewModel Expenses { get; }
     public FormatFilterViewModel FormatFilter { get; }
     public EventScopeFilterViewModel EventScope { get; }
     public StatsColumnVisibilityViewModel Columns { get; }
@@ -22,6 +23,10 @@ public partial class StatsViewModel : ObservableObject
     private int _loadBusy;
     private int _filterGen;
     private int _detailGen;
+    private int _partnershipLoadGen;
+    private int _partnershipDetailsLoadGen;
+    private int _partnershipPageBusy;
+    private bool _partnershipLoadPending;
 
     public ObservableCollection<PlayerCareerSummary> Leaderboard { get; } = new();
     public ObservableCollection<TeamCareerSummary> TeamLeaderboard { get; } = new();
@@ -30,7 +35,10 @@ public partial class StatsViewModel : ObservableObject
     public ObservableCollection<ConfrontationStat> Confrontations { get; } = new();
     public ObservableCollection<FieldingVsStat> FieldingVs { get; } = new();
     public ObservableCollection<CaptainVsStat> CaptainVs { get; } = new();
+    public ObservableCollection<PartnershipStat> Partnerships { get; } = new();
+    public ObservableCollection<PartnershipMatchStat> PartnershipMatchDetails { get; } = new();
     public ObservableCollection<VenueListItem> VenueOptions { get; } = new();
+    public IReadOnlyList<string> PlayerRoleOptions { get; } = new[] { "All", "As a Captain", "As a Player" };
 
     [ObservableProperty] private PlayerCareerSummary? selectedCareer;
     [ObservableProperty] private TeamCareerSummary? selectedTeam;
@@ -48,6 +56,9 @@ public partial class StatsViewModel : ObservableObject
     [ObservableProperty] private string backButtonText = "\u2190 Back to leaderboard";
     [ObservableProperty] private string playerNameFilter = string.Empty;
     [ObservableProperty] private VenueListItem? selectedVenue;
+    [ObservableProperty] private StatsFilterOptionDto? selectedCaptain;
+    [ObservableProperty] private string captainPlayerScope = "own";
+    [ObservableProperty] private string selectedPlayerRole = "All";
     [ObservableProperty] private bool filterByDate;
     [ObservableProperty] private DateTime fromDate = DateTime.Today.AddMonths(-1);
     [ObservableProperty] private DateTime toDate = DateTime.Today;
@@ -58,20 +69,36 @@ public partial class StatsViewModel : ObservableObject
     [ObservableProperty] private bool showFilters;
     /// <summary>Attendance only: Total/Absent counted from each player's debut date.</summary>
     [ObservableProperty] private bool attendanceFromDebut;
+    [ObservableProperty] private bool showPartnershipModal;
+    [ObservableProperty] private bool isLoadingPartnershipDetails;
+    [ObservableProperty] private string? partnershipDetailsError;
+    [ObservableProperty] private PartnershipStat? selectedPartnershipPair;
 
     public bool ShowTable => !ShowDetail;
     public bool ShowLoading => IsBusy || IsSorting;
     public string LoadingMessage => IsSorting ? "Sorting…" : "Loading…";
-    public string CountLabel => TotalCount <= 0 ? "No stats" : $"{(IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count)} of {TotalCount}";
+    public bool HasPartnershipDetailsError => !string.IsNullOrWhiteSpace(PartnershipDetailsError);
+    public bool ShowPartnershipDetailsList => !IsLoadingPartnershipDetails && !HasPartnershipDetailsError;
+    public string PartnershipDetailsCountText => PartnershipMatchDetails.Count switch
+    {
+        0 => "No partnership innings",
+        1 => "1 partnership innings",
+        var count => $"{count} partnership innings"
+    };
+    public string CountLabel => TotalCount <= 0
+        ? "No stats"
+        : $"{(IsPartnershipStats ? Partnerships.Count : IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count)} of {TotalCount}";
     public bool IsBattingTab => HeadToHeadMode == 0;
     public bool IsBowlingTab => HeadToHeadMode == 1;
     public bool IsFieldingTab => HeadToHeadMode == 2;
     public bool IsCaptainTab => HeadToHeadMode == 3;
+    public bool IsPartnershipTab => HeadToHeadMode == 4;
     public bool ShowConfrontationsList => HeadToHeadMode is 0 or 1;
     public bool IsMatchStats => SelectedCategory == 0;
     public bool IsTournamentStats => SelectedCategory == 1;
     public bool IsSeriesStats => SelectedCategory == 2;
     public bool IsBattingStats => SelectedCategory == 3;
+    public bool IsPartnershipStats => SelectedCategory == 11;
     public bool IsMatchBattingStats => IsBattingStats && IsMatchesSource;
     public bool IsNetsBattingStats => IsBattingStats && IsNetsSource;
     public bool IsBowlingStats => SelectedCategory == 4;
@@ -79,13 +106,34 @@ public partial class StatsViewModel : ObservableObject
     public bool IsCaptaincyStats => SelectedCategory == 6;
     public bool IsTeamStats => SelectedCategory == 7;
     public bool IsAttendanceStats => SelectedCategory == 8;
-    /// <summary>Teams / Captaincy / Attendance use an extra group-header row above column sort buttons.</summary>
-    public bool HasGroupedColumnHeader => IsTeamStats || IsCaptaincyStats || IsAttendanceStats;
+    public bool IsPaymentsStats => SelectedCategory == 10;
+    public bool IsAttendanceOrPaymentsStats => IsAttendanceStats || IsPaymentsStats;
+    public bool IsExpenseStats => SelectedCategory == 9;
+    /// <summary>Teams / Captaincy / Attendance / Expenses use an extra group-header row above column sort buttons.</summary>
+    public bool HasGroupedColumnHeader => IsTeamStats || IsCaptaincyStats || IsPartnershipStats;
     public bool HasFlatColumnHeader => !HasGroupedColumnHeader;
+    public bool ShowColumnPicker => ShowPlayerLeaderboard || IsPartnershipStats;
+    public bool ShowPartnershipGroup => Columns.IsVisible("PartnershipInnings")
+        || Columns.IsVisible("PartnershipRuns") || Columns.IsVisible("PartnershipBalls")
+        || Columns.IsVisible("PartnershipAverage") || Columns.IsVisible("PartnershipStrikeRate")
+        || Columns.IsVisible("PartnershipOuts");
+    public bool ShowPlayerContributionGroup => Columns.IsVisible("PlayerRuns")
+        || Columns.IsVisible("PlayerBalls") || Columns.IsVisible("PlayerStrikeRate")
+        || Columns.IsVisible("PlayerAverage") || Columns.IsVisible("PlayerOuts");
+    public bool ShowPartnerContributionGroup => Columns.IsVisible("PartnerRuns")
+        || Columns.IsVisible("PartnerBalls") || Columns.IsVisible("PartnerStrikeRate")
+        || Columns.IsVisible("PartnerAverage") || Columns.IsVisible("PartnerOuts");
     public bool ShowPlayerDetail => ShowDetail && SelectedCareer is not null && SelectedTeam is null;
     public bool ShowTeamDetail => ShowDetail && SelectedTeam is not null;
-    public bool ShowPlayerLeaderboard => !IsTeamStats;
+    public bool ShowPlayerLeaderboard => !IsTeamStats && !IsExpenseStats && !IsPartnershipStats;
     public bool ShowMatchCategories => !IsNetsSource;
+    public bool ShowMatchSpecificFilters => ShowMatchCategories && !IsExpenseStats;
+    public bool ShowAsCaptainFilter => !IsNetsSource && (SelectedCategory is >= 0 and <= 8 or 10);
+    public bool ShowCaptainFilter => ShowAsCaptainFilter;
+    public bool ShowCaptainPlayerScope => ShowCaptainFilter && SelectedCaptain is { Id: var captainId } && captainId != Guid.Empty;
+    public bool CaptainOpponentSide => string.Equals(CaptainPlayerScope, "opposition", StringComparison.Ordinal);
+    private bool FilterAsCaptain => string.Equals(SelectedPlayerRole, "As a Captain", StringComparison.Ordinal);
+    private bool FilterAsPlayer => string.Equals(SelectedPlayerRole, "As a Player", StringComparison.Ordinal);
     public bool IsMatchesSource => !IsNetsSource;
     public string StatsSourceLabel => IsNetsSource ? "Nets" : "Matches";
     public string ConfrontationSectionTitle => IsNetsSource ? "Nets 1 vs 1" : "Head to head";
@@ -94,12 +142,16 @@ public partial class StatsViewModel : ObservableObject
         : HasActiveFilters ? "Filters on" : "Filters";
     public string EmptyStatsHint => IsNetsSource
         ? "No nets stats yet — complete a session first."
-        : IsTeamStats
+        : IsPartnershipStats
+            ? "No partnership records match these filters."
+        : IsExpenseStats
+            ? "No expense records yet — add a purchase and player contributions first."
+            : IsTeamStats
             ? "No team stats yet — complete a match first."
             : "No stats yet — complete a match first.";
-    public string SearchPlaceholder => IsTeamStats ? "Search team" : "Search player";
-    public string NameColumnTitle => IsTeamStats ? "Team" : "Player";
-    public string NameSortParameter => IsTeamStats ? "TeamName" : "PlayerName";
+    public string SearchPlaceholder => IsExpenseStats ? "Filter expense or purchaser" : IsTeamStats ? "Search team" : IsPartnershipStats ? "Search player or pair" : "Search player";
+    public string NameColumnTitle => IsTeamStats ? "Team" : IsPartnershipStats ? "Partnership" : "Player";
+    public string NameSortParameter => IsTeamStats ? "TeamName" : IsPartnershipStats ? "PartnershipName" : "PlayerName";
     public string TableHint => IsTeamStats
         ? "Tap a team for 1 vs 1 stats"
         : "Tap a player for 1 vs 1 stats";
@@ -137,18 +189,28 @@ public partial class StatsViewModel : ObservableObject
         !string.IsNullOrWhiteSpace(PlayerNameFilter)
         || (SelectedVenue is not null && SelectedVenue.Id != Guid.Empty)
         || FilterByDate
+        || (ShowAsCaptainFilter && !string.Equals(SelectedPlayerRole, "All", StringComparison.Ordinal))
+        || (ShowCaptainFilter && SelectedCaptain is { Id: var captainId } && captainId != Guid.Empty)
         || FormatFilter.HasSelection
         || EventScope.HasSelection;
 
-    public StatsViewModel(IStatsService stats, ITeamService teams, IVenueService venues, IFormatService formats, ILeagueContext league)
+    public StatsViewModel(IStatsService stats, ITeamService teams, IVenueService venues, IFormatService formats, ILeagueContext league, ExpensesViewModel expenses)
     {
         _stats = stats;
         _teams = teams;
         _venues = venues;
         _league = league;
+        Expenses = expenses;
         FormatFilter = new FormatFilterViewModel(formats);
         EventScope = new EventScopeFilterViewModel(stats, league);
+        SelectedCaptain = EventScope.Captains.FirstOrDefault();
         Columns = new StatsColumnVisibilityViewModel();
+        Columns.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(ShowPartnershipGroup));
+            OnPropertyChanged(nameof(ShowPlayerContributionGroup));
+            OnPropertyChanged(nameof(ShowPartnerContributionGroup));
+        };
         FormatFilter.Committed += (_, _) => _ = LoadAsync();
         FormatFilter.PropertyChanged += (_, e) =>
         {
@@ -172,7 +234,7 @@ public partial class StatsViewModel : ObservableObject
                 OnPropertyChanged(nameof(FiltersToggleText));
             }
         };
-        VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All venues" });
+        VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All" });
         SelectedVenue = VenueOptions[0];
         ApplyCategory();
     }
@@ -212,10 +274,24 @@ public partial class StatsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasActiveFilters));
         OnPropertyChanged(nameof(FiltersToggleText));
+        if (IsExpenseStats)
+        {
+            Expenses.NameFilter = value;
+            return;
+        }
         _ = ReloadDebouncedAsync();
     }
 
     partial void OnTotalCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
+
+    partial void OnIsLoadingPartnershipDetailsChanged(bool value)
+        => OnPropertyChanged(nameof(ShowPartnershipDetailsList));
+
+    partial void OnPartnershipDetailsErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasPartnershipDetailsError));
+        OnPropertyChanged(nameof(ShowPartnershipDetailsList));
+    }
 
     partial void OnSelectedVenueChanged(VenueListItem? value)
     {
@@ -225,6 +301,23 @@ public partial class StatsViewModel : ObservableObject
 
     partial void OnFilterByDateChanged(bool value)
     {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        OnPropertyChanged(nameof(FiltersToggleText));
+    }
+
+    partial void OnSelectedPlayerRoleChanged(string value)
+    {
+        if (!string.Equals(value, "All", StringComparison.Ordinal) && SelectedCaptain is { Id: var captainId } && captainId != Guid.Empty)
+            SelectedCaptain = EventScope.Captains.FirstOrDefault(c => c.Id == Guid.Empty);
+        OnPropertyChanged(nameof(HasActiveFilters));
+        OnPropertyChanged(nameof(FiltersToggleText));
+    }
+
+    partial void OnSelectedCaptainChanged(StatsFilterOptionDto? value)
+    {
+        if (value is { Id: var captainId } && captainId != Guid.Empty && !string.Equals(SelectedPlayerRole, "All", StringComparison.Ordinal))
+            SelectedPlayerRole = "All";
+        OnPropertyChanged(nameof(ShowCaptainPlayerScope));
         OnPropertyChanged(nameof(HasActiveFilters));
         OnPropertyChanged(nameof(FiltersToggleText));
     }
@@ -243,6 +336,9 @@ public partial class StatsViewModel : ObservableObject
     partial void OnIsNetsSourceChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowMatchCategories));
+        OnPropertyChanged(nameof(ShowMatchSpecificFilters));
+        OnPropertyChanged(nameof(ShowAsCaptainFilter));
+        OnPropertyChanged(nameof(ShowCaptainFilter));
         OnPropertyChanged(nameof(IsMatchesSource));
         OnPropertyChanged(nameof(StatsSourceLabel));
         OnPropertyChanged(nameof(ConfrontationSectionTitle));
@@ -252,17 +348,24 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsNetsBattingStats));
         if (value && HeadToHeadMode == 3)
             HeadToHeadMode = 0;
-        if (value && SelectedCategory is 0 or 1 or 2 or 6 or 7 or 8)
+        if (value && SelectedCategory is 0 or 1 or 2 or 6 or 7 or 8 or 9 or 10 or 11)
             SelectedCategory = 3;
         else
             ApplyCategory();
         if (value)
+        {
+            SelectedPlayerRole = "All";
+            SelectedCaptain = EventScope.Captains.FirstOrDefault(c => c.Id == Guid.Empty);
             EventScope.Clear();
+        }
         _ = ReloadAsync();
     }
 
     partial void OnSelectedCategoryChanged(int oldValue, int newValue)
     {
+        if (oldValue == 11 && newValue != 11)
+            Interlocked.Increment(ref _partnershipLoadGen);
+
         OnPropertyChanged(nameof(IsMatchStats));
         OnPropertyChanged(nameof(IsTournamentStats));
         OnPropertyChanged(nameof(IsSeriesStats));
@@ -273,9 +376,21 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFieldingStats));
         OnPropertyChanged(nameof(IsCaptaincyStats));
         OnPropertyChanged(nameof(IsAttendanceStats));
+        OnPropertyChanged(nameof(IsPaymentsStats));
+        OnPropertyChanged(nameof(IsAttendanceOrPaymentsStats));
+        OnPropertyChanged(nameof(IsExpenseStats));
+        OnPropertyChanged(nameof(IsPartnershipStats));
+        OnPropertyChanged(nameof(ShowPlayerLeaderboard));
+        OnPropertyChanged(nameof(ShowMatchSpecificFilters));
+        OnPropertyChanged(nameof(ShowAsCaptainFilter));
+        OnPropertyChanged(nameof(ShowCaptainFilter));
         OnPropertyChanged(nameof(IsTeamStats));
         OnPropertyChanged(nameof(HasGroupedColumnHeader));
         OnPropertyChanged(nameof(HasFlatColumnHeader));
+        OnPropertyChanged(nameof(ShowColumnPicker));
+        OnPropertyChanged(nameof(ShowPartnershipGroup));
+        OnPropertyChanged(nameof(ShowPlayerContributionGroup));
+        OnPropertyChanged(nameof(ShowPartnerContributionGroup));
         OnPropertyChanged(nameof(ShowPlayerLeaderboard));
         OnPropertyChanged(nameof(EmptyStatsHint));
         OnPropertyChanged(nameof(SearchPlaceholder));
@@ -283,6 +398,11 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(NameSortParameter));
         OnPropertyChanged(nameof(TableHint));
         ApplyCategory();
+        if (!ShowAsCaptainFilter)
+        {
+            SelectedPlayerRole = "All";
+            SelectedCaptain = EventScope.Captains.FirstOrDefault(c => c.Id == Guid.Empty);
+        }
         if ((oldValue == 7 || newValue == 7) && ShowDetail)
         {
             ShowDetail = false;
@@ -320,11 +440,14 @@ public partial class StatsViewModel : ObservableObject
             "tournament" => 1,
             "series" => 2,
             "batting" => 3,
+            "partnerships" => 11,
             "bowling" => 4,
             "fielding" => 5,
             "captaincy" => 6,
             "teams" => 7,
             "attendance" => 8,
+            "expenses" => 9,
+            "payments" => 10,
             _ => 0
         };
     }
@@ -350,6 +473,11 @@ public partial class StatsViewModel : ObservableObject
                     : "Runs, highest score, ducks, golden ducks, balls, scoring shots, dismissals, partner RO, SR, average";
                 SetDefaultSort("Runs");
                 break;
+            case 11:
+                CategoryTitle = "Partnerships";
+                CategoryHint = "Combined pairs, batting contributions and partnership record";
+                SetDefaultSort("PartnershipRuns");
+                break;
             case 4:
                 CategoryTitle = "Bowling";
                 CategoryHint = "Wickets, best figures, hat-tricks, duck / golden duck wickets, 4s/6s conceded, runs, extras, SR, economy";
@@ -374,6 +502,16 @@ public partial class StatsViewModel : ObservableObject
                 CategoryTitle = "Attendance";
                 CategoryHint = "Present, absent · total, paid, remaining";
                 SetDefaultSort("AttendancePct");
+                break;
+            case 10:
+                CategoryTitle = "Payments";
+                CategoryHint = "Total, paid, remaining";
+                SetDefaultSort("PaymentTotal");
+                break;
+            case 9:
+                CategoryTitle = "Expenses";
+                CategoryHint = "Player who purchased, player contributions, and remaining amount";
+                SetDefaultSort("ExpensePurchased");
                 break;
             default:
                 CategoryTitle = "Match";
@@ -404,11 +542,118 @@ public partial class StatsViewModel : ObservableObject
     {
         if (ShowDetail)
             return;
+        if (IsPartnershipStats)
+        {
+            await ReloadPartnershipsAsync().ConfigureAwait(true);
+            return;
+        }
+        if (IsExpenseStats)
+        {
+            Expenses.NameFilter = PlayerNameFilter;
+            await Expenses.LoadAsync().ConfigureAwait(true);
+            return;
+        }
         HasMore = true;
         Leaderboard.Clear();
         TeamLeaderboard.Clear();
         OnPropertyChanged(nameof(CountLabel));
         await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadPartnershipsAsync()
+    {
+        Interlocked.Increment(ref _partnershipLoadGen);
+        Partnerships.Clear();
+        TotalCount = 0;
+        HasMore = true;
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMorePartnershipsAsync().ConfigureAwait(true);
+    }
+
+    private async Task LoadMorePartnershipsAsync()
+    {
+        if (!IsPartnershipStats || !HasMore)
+            return;
+
+        if (Interlocked.Exchange(ref _partnershipPageBusy, 1) == 1)
+        {
+            _partnershipLoadPending = true;
+            return;
+        }
+
+        var generation = Volatile.Read(ref _partnershipLoadGen);
+        try
+        {
+            _partnershipLoadPending = false;
+            if (Partnerships.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
+            ErrorMessage = null;
+            await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
+            await EventScope.EnsureLoadedAsync().ConfigureAwait(true);
+            await EnsureVenuesLoadedForCurrentLeagueAsync().ConfigureAwait(true);
+
+            if (!TryDateRange(out var from, out var toExclusive, out var dateError))
+            {
+                ErrorMessage = dateError;
+                HasMore = false;
+                return;
+            }
+
+            Guid? venueId = SelectedVenue is { Id: var id } && id != Guid.Empty ? id : null;
+            var page = await _stats.GetPartnershipLeaderboardPageAsync(
+                    Partnerships.Count,
+                    PlayerNameFilter,
+                    _sortColumn,
+                    _sortAscending,
+                    from,
+                    toExclusive,
+                    venueId,
+                    FormatFilter.SelectedIds,
+                    EventScope.TournamentIds,
+                    EventScope.SeriesIds,
+                    EventScope.MatchIds)
+                .ConfigureAwait(true);
+
+            if (generation != Volatile.Read(ref _partnershipLoadGen) || !IsPartnershipStats)
+                return;
+
+            TotalCount = page.TotalCount;
+            foreach (var pair in page.Items)
+            {
+                pair.IsAltRow = pair.Rank % 2 == 0;
+                Partnerships.Add(pair);
+            }
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
+            UpdateSortedByText();
+        }
+        catch (Exception ex)
+        {
+            if (generation == Volatile.Read(ref _partnershipLoadGen))
+            {
+                ErrorMessage = NetworkUi.IsNetworkFailure(ex)
+                    ? "Offline — partnership stats need internet."
+                    : ex.Message;
+                HasMore = false;
+            }
+        }
+        finally
+        {
+            if (generation == Volatile.Read(ref _partnershipLoadGen) || IsPartnershipStats)
+            {
+                IsBusy = false;
+                IsLoadingMore = false;
+            }
+            Interlocked.Exchange(ref _partnershipPageBusy, 0);
+            var reloadAfterCurrentPage = generation != Volatile.Read(ref _partnershipLoadGen)
+                && IsPartnershipStats && HasMore;
+            var loadQueuedPage = _partnershipLoadPending && IsPartnershipStats && HasMore;
+            _partnershipLoadPending = false;
+            if (reloadAfterCurrentPage || loadQueuedPage)
+                await LoadMorePartnershipsAsync().ConfigureAwait(true);
+        }
     }
 
     private async Task ReloadDebouncedAsync()
@@ -425,6 +670,11 @@ public partial class StatsViewModel : ObservableObject
     {
         if (ShowDetail)
             return;
+        if (IsPartnershipStats)
+        {
+            await LoadMorePartnershipsAsync().ConfigureAwait(true);
+            return;
+        }
         if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
             return;
 
@@ -481,7 +731,11 @@ public partial class StatsViewModel : ObservableObject
             var board = await _stats.GetLeaderboardPageAsync(
                     skip, PlayerNameFilter, _sortColumn, _sortAscending, from, toExclusive, venueId, source, formatIds,
                     tournamentIds, seriesIds, matchIds,
-                    attendanceFromDebut: IsAttendanceStats && AttendanceFromDebut)
+                    attendanceFromDebut: IsAttendanceStats && AttendanceFromDebut,
+                    asCaptain: ShowAsCaptainFilter && FilterAsCaptain,
+                    captainPlayerId: ShowCaptainFilter && SelectedCaptain is { Id: var captainId } && captainId != Guid.Empty ? captainId : null,
+                    captainOpponentSide: ShowCaptainPlayerScope && CaptainOpponentSide,
+                    asPlayer: ShowAsCaptainFilter && FilterAsPlayer)
                 .ConfigureAwait(true);
             if (IsTeamStats)
                 return;
@@ -558,6 +812,9 @@ public partial class StatsViewModel : ObservableObject
     {
         PlayerNameFilter = string.Empty;
         FilterByDate = false;
+        SelectedPlayerRole = "All";
+        SelectedCaptain = EventScope.Captains.FirstOrDefault(c => c.Id == Guid.Empty);
+        CaptainPlayerScope = "own";
         FromDate = DateTime.Today.AddMonths(-1);
         ToDate = DateTime.Today;
         SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == Guid.Empty) ?? VenueOptions.FirstOrDefault();
@@ -578,7 +835,7 @@ public partial class StatsViewModel : ObservableObject
             var venues = await _venues.GetAllAsync().ConfigureAwait(true);
             var keep = _venuesLeagueId == leagueId ? SelectedVenue?.Id ?? Guid.Empty : Guid.Empty;
             VenueOptions.Clear();
-            VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All venues" });
+            VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All" });
             foreach (var v in venues)
                 VenueOptions.Add(v);
             SelectedVenue = VenueOptions.FirstOrDefault(v => v.Id == keep) ?? VenueOptions[0];
@@ -589,7 +846,7 @@ public partial class StatsViewModel : ObservableObject
             /* venue list optional offline */
             if (VenueOptions.Count == 0)
             {
-                VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All venues" });
+                VenueOptions.Add(new VenueListItem { Id = Guid.Empty, Name = "All" });
                 SelectedVenue = VenueOptions[0];
             }
         }
@@ -619,6 +876,20 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(SortColumn));
         OnPropertyChanged(nameof(SortAscending));
 
+        if (IsPartnershipStats)
+        {
+            IsSorting = true;
+            try
+            {
+                await ReloadAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                IsSorting = false;
+            }
+            return;
+        }
+
         IsSorting = true;
         try
         {
@@ -634,6 +905,23 @@ public partial class StatsViewModel : ObservableObject
 
     private static string DisplayName(string column) => column switch
     {
+        "PartnershipName" => "Partnership",
+        "PartnershipInnings" => "Partnership innings",
+        "PartnershipRuns" => "Partnership runs",
+        "PartnershipBalls" => "Partnership balls",
+        "PartnershipAverage" => "Partnership average",
+        "PartnershipStrikeRate" => "Partnership SR",
+        "PartnershipOuts" => "Partnership outs",
+        "PlayerRuns" => "Player runs",
+        "PlayerBalls" => "Player balls",
+        "PlayerStrikeRate" => "Player SR",
+        "PlayerAverage" => "Player average",
+        "PlayerOuts" => "Player outs",
+        "PartnerRuns" => "Partner runs",
+        "PartnerBalls" => "Partner balls",
+        "PartnerStrikeRate" => "Partner SR",
+        "PartnerAverage" => "Partner average",
+        "PartnerOuts" => "Partner outs",
         "PlayerName" => "Player",
         "TeamName" => "Team",
         "Sessions" => "Sessions",
@@ -754,6 +1042,78 @@ public partial class StatsViewModel : ObservableObject
     };
 
     [RelayCommand]
+    private async Task OpenPartnershipDetailsAsync(PartnershipStat? pair)
+    {
+        if (pair is null || pair.PlayerId == Guid.Empty || pair.PartnerId == Guid.Empty)
+            return;
+
+        var generation = Interlocked.Increment(ref _partnershipDetailsLoadGen);
+        SelectedPartnershipPair = pair;
+        PartnershipMatchDetails.Clear();
+        OnPropertyChanged(nameof(PartnershipDetailsCountText));
+        PartnershipDetailsError = null;
+        ShowPartnershipModal = true;
+        IsLoadingPartnershipDetails = true;
+        try
+        {
+            await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
+            await EventScope.EnsureLoadedAsync().ConfigureAwait(true);
+            await EnsureVenuesLoadedForCurrentLeagueAsync().ConfigureAwait(true);
+
+            if (!TryDateRange(out var from, out var toExclusive, out var dateError))
+            {
+                PartnershipDetailsError = dateError;
+                return;
+            }
+
+            if (generation != Volatile.Read(ref _partnershipDetailsLoadGen) || !ShowPartnershipModal)
+                return;
+
+            Guid? venueId = SelectedVenue is { Id: var id } && id != Guid.Empty ? id : null;
+            var details = await _stats.GetPartnershipMatchesAsync(
+                    pair.PlayerId,
+                    pair.PartnerId,
+                    from,
+                    toExclusive,
+                    venueId,
+                    FormatFilter.SelectedIds,
+                    EventScope.TournamentIds,
+                    EventScope.SeriesIds,
+                    EventScope.MatchIds)
+                .ConfigureAwait(true);
+
+            if (generation != Volatile.Read(ref _partnershipDetailsLoadGen) || !ShowPartnershipModal)
+                return;
+
+            foreach (var item in details)
+                PartnershipMatchDetails.Add(item);
+            OnPropertyChanged(nameof(PartnershipDetailsCountText));
+        }
+        catch (Exception ex)
+        {
+            if (generation == Volatile.Read(ref _partnershipDetailsLoadGen))
+                PartnershipDetailsError = NetworkUi.IsNetworkFailure(ex)
+                    ? "Offline — partnership details need internet."
+                    : ex.Message;
+        }
+        finally
+        {
+            if (generation == Volatile.Read(ref _partnershipDetailsLoadGen))
+                IsLoadingPartnershipDetails = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ClosePartnershipDetails()
+    {
+        Interlocked.Increment(ref _partnershipDetailsLoadGen);
+        ShowPartnershipModal = false;
+        IsLoadingPartnershipDetails = false;
+        PartnershipDetailsError = null;
+        SelectedPartnershipPair = null;
+    }
+
+    [RelayCommand]
     private async Task OpenPlayerAsync(PlayerCareerSummary? row)
     {
         if (row is null) return;
@@ -872,6 +1232,7 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBowlingTab));
         OnPropertyChanged(nameof(IsFieldingTab));
         OnPropertyChanged(nameof(IsCaptainTab));
+        OnPropertyChanged(nameof(IsPartnershipTab));
         OnPropertyChanged(nameof(ShowConfrontationsList));
         if (ShowDetail)
             _ = LoadPlayerDetailsAsync();
@@ -893,6 +1254,15 @@ public partial class StatsViewModel : ObservableObject
             Confrontations.Clear();
             FieldingVs.Clear();
             CaptainVs.Clear();
+            Partnerships.Clear();
+            if (IsPartnershipTab)
+            {
+                ConfrontationHeader = $"Partnerships — {SelectedCareer.PlayerName}";
+                var partnershipRows = await _stats.GetPartnershipsAsync(playerId).ConfigureAwait(true);
+                if (gen != _detailGen) return;
+                foreach (var row in partnershipRows) Partnerships.Add(row);
+                return;
+            }
             if (captain)
             {
                 ConfrontationHeader = $"Captain vs captain — {SelectedCareer.PlayerName}";
@@ -938,6 +1308,7 @@ public partial class StatsViewModel : ObservableObject
             Confrontations.Clear();
             FieldingVs.Clear();
             CaptainVs.Clear();
+            Partnerships.Clear();
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — statistics need internet."
                 : $"Stats require API (server DB). {ex.Message}";
@@ -962,6 +1333,9 @@ public partial class StatsViewModel : ObservableObject
 
     [RelayCommand]
     private void ShowCaptainVs() => HeadToHeadMode = 3;
+
+    [RelayCommand]
+    private void ShowPartnerships() => HeadToHeadMode = 4;
 
     private async Task LoadTeamSquadAsync(Guid teamId)
     {

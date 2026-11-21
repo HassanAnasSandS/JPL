@@ -11,7 +11,7 @@
         <Grid ColumnDefinitions="*,Auto">
             <VerticalStackLayout VerticalOptions="Center">
                 <Label Text="Bookings" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Primary}" />
-                <Label Text="{Binding CountLabel}" FontSize="12" TextColor="{StaticResource TextSecondary}" />
+                
             </VerticalStackLayout>
             <Button Grid.Column="1" Text="+ Book" Style="{StaticResource GoldButton}" Command="{Binding AddCommand}" />
         </Grid>

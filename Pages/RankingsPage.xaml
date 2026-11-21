@@ -53,16 +53,9 @@
                        FontSize="{OnIdiom Phone=18, Default=22}"
                        FontAttributes="Bold"
                        TextColor="{StaticResource Primary}" />
-                <Label Text="{x:Static svc:BrandSlogans.Statistics}"
-                       FontSize="12"
-                       TextColor="{StaticResource TextSecondary}"
-                       LineBreakMode="WordWrap" />
+                
             </VerticalStackLayout>
-            <Label Grid.Column="1"
-                   VerticalOptions="End"
-                   Text="{Binding CountLabel}"
-                   FontSize="12"
-                   TextColor="{StaticResource TextSecondary}" />
+            
         </Grid>
 
         <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">

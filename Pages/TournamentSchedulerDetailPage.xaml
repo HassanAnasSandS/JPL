@@ -60,18 +60,9 @@
 
                     <VerticalStackLayout Spacing="8" IsVisible="{Binding HasStandings}">
                         <Label Text="Points table" Style="{StaticResource SectionLabel}" />
-                        <Label Text="Won = 2 · Tied = 1 · Loss = 0"
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="11"
-                               Margin="0,-6,0,0" />
-                        <Label Text="Q = Qualified · E = Eliminated (shown when certain)"
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="11"
-                               Margin="0,-4,0,0" />
-                        <Label Text="Tap a team to see their schedule and results"
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="11"
-                               Margin="0,-4,0,0" />
+
+
+
 
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding StandingGroups}" Spacing="14">
                             <BindableLayout.ItemTemplate>
@@ -160,11 +151,7 @@
 
                     <VerticalStackLayout Spacing="8">
                         <Label Text="Fixtures" Style="{StaticResource SectionLabel}" />
-                        <Label Text="Tap Result to mark the winner. Knockouts cannot be tied."
-                               IsVisible="{Binding ShowResultHint}"
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="11"
-                               Margin="0,-6,0,0" />
+
                         <Label Text="Fixtures and results are display-only in this view."
                                IsVisible="{Binding ShowViewOnlyBanner}"
                                Style="{StaticResource MutedLabel}"

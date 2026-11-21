@@ -47,6 +47,8 @@
     .social { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; font-weight: 700; }
     .social a { color: var(--gold); white-space: nowrap; opacity: .92; }
     .social a:hover { opacity: 1; }
+    .payments-link { padding:7px 11px; border:1px solid var(--line-strong); border-radius:9px; color:var(--gold); font-size:12px; font-weight:800; white-space:nowrap; }
+    .expenses-link { padding:7px 11px; border:1px solid var(--line-strong); border-radius:9px; color:var(--gold); font-size:12px; font-weight:800; white-space:nowrap; }
     .wrap { max-width: 1120px; margin: 0 auto; padding: 18px 16px 48px; }
 
     .hero {
@@ -210,6 +212,8 @@
 <body>
   <div class="top">
     <a class="brand" href="/p/{{LEAGUE_ID}}">CRIC360</a>
+    <a class="payments-link" href="/p/{{LEAGUE_ID}}/payments">Player payments</a>
+    <a class="expenses-link" href="/p/{{LEAGUE_ID}}/expenses">Expenses</a>
     <span class="social">
       <a href="https://www.facebook.com/profile.php?id=61593997581019" target="_blank" rel="noopener">Facebook</a>
       <a href="https://wa.me/923222857730" target="_blank" rel="noopener">WhatsApp</a>

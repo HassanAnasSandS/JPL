@@ -200,6 +200,7 @@ public sealed class LeagueDatabaseManager
         var connection = ToConnection(dbName);
         await using var db = CreateContext(connection, leagueId);
         await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+        await EnsureLiveMatchIndexAsync(db, ct).ConfigureAwait(false);
         await EnsureMatchSquadColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureTeamPlayerPlayingColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureOversModeColumnsAsync(dbName, ct).ConfigureAwait(false);
@@ -218,6 +219,7 @@ public sealed class LeagueDatabaseManager
         await EnsurePlayerIdentityColumnsAsync(dbName, ct).ConfigureAwait(false);
         await EnsureTeamImagePathColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureVenueBookingParticipantAmountColumnAsync(dbName, ct).ConfigureAwait(false);
+        await EnsureExpenseTablesAsync(dbName, ct).ConfigureAwait(false);
         await DropSportsLeagueIdColumnsAsync(dbName, ct).ConfigureAwait(false);
         await DropLeagueDirectoryTablesAsync(dbName, ct).ConfigureAwait(false);
     }
@@ -435,6 +437,92 @@ public sealed class LeagueDatabaseManager
         }
     }
 
+    private async Task EnsureExpenseTablesAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            if (!SafeName.IsMatch(dbName))
+                return;
+            await using var conn = new SqlConnection(ToConnection(dbName));
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.Expenses', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.Expenses (
+                        Id uniqueidentifier NOT NULL CONSTRAINT PK_Expenses PRIMARY KEY,
+                        CreatedByUserId uniqueidentifier NOT NULL,
+                        Name nvarchar(160) NOT NULL,
+                        PurchasedByPlayerId uniqueidentifier NOT NULL,
+                        Amount decimal(18,2) NOT NULL,
+                        Version bigint NOT NULL,
+                        CreatedAtUtc datetime2 NOT NULL,
+                        UpdatedAtUtc datetime2 NOT NULL,
+                        IsDeleted bit NOT NULL
+                    );
+                    CREATE INDEX IX_Expenses_CreatedAtUtc ON dbo.Expenses (CreatedAtUtc);
+                    CREATE INDEX IX_Expenses_CreatedByUserId ON dbo.Expenses (CreatedByUserId);
+                    CREATE INDEX IX_Expenses_PurchasedByPlayerId ON dbo.Expenses (PurchasedByPlayerId);
+                END;
+                IF OBJECT_ID(N'dbo.ExpenseContributions', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.ExpenseContributions (
+                        ExpenseId uniqueidentifier NOT NULL,
+                        PlayerId uniqueidentifier NOT NULL,
+                        Amount decimal(18,2) NOT NULL,
+                        Status nvarchar(16) NOT NULL CONSTRAINT DF_ExpenseContributions_Status DEFAULT N'Pending',
+                        CONSTRAINT PK_ExpenseContributions PRIMARY KEY (ExpenseId, PlayerId),
+                        CONSTRAINT FK_ExpenseContributions_Expenses_ExpenseId FOREIGN KEY (ExpenseId)
+                            REFERENCES dbo.Expenses (Id) ON DELETE CASCADE
+                    );
+                    CREATE INDEX IX_ExpenseContributions_PlayerId ON dbo.ExpenseContributions (PlayerId);
+                END;
+                IF COL_LENGTH(N'dbo.ExpenseContributions', N'Status') IS NULL
+                    ALTER TABLE dbo.ExpenseContributions ADD Status nvarchar(16) NOT NULL
+                        CONSTRAINT DF_ExpenseContributions_Status DEFAULT N'Paid' WITH VALUES;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        await using var db = CreateContext(ToConnection(dbName), Guid.Empty);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "Expenses" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Expenses" PRIMARY KEY,
+                "CreatedByUserId" TEXT NOT NULL,
+                "Name" TEXT NOT NULL,
+                "PurchasedByPlayerId" TEXT NOT NULL,
+                "Amount" TEXT NOT NULL,
+                "Version" INTEGER NOT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL,
+                "IsDeleted" INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS "ExpenseContributions" (
+                "ExpenseId" TEXT NOT NULL,
+                "PlayerId" TEXT NOT NULL,
+                "Amount" TEXT NOT NULL,
+                "Status" TEXT NOT NULL DEFAULT 'Pending',
+                CONSTRAINT "PK_ExpenseContributions" PRIMARY KEY ("ExpenseId", "PlayerId"),
+                CONSTRAINT "FK_ExpenseContributions_Expenses_ExpenseId" FOREIGN KEY ("ExpenseId") REFERENCES "Expenses" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS "IX_Expenses_CreatedAtUtc" ON "Expenses" ("CreatedAtUtc");
+            CREATE INDEX IF NOT EXISTS "IX_Expenses_CreatedByUserId" ON "Expenses" ("CreatedByUserId");
+            CREATE INDEX IF NOT EXISTS "IX_Expenses_PurchasedByPlayerId" ON "Expenses" ("PurchasedByPlayerId");
+            CREATE INDEX IF NOT EXISTS "IX_ExpenseContributions_PlayerId" ON "ExpenseContributions" ("PlayerId");
+            """, ct).ConfigureAwait(false);
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """ALTER TABLE "ExpenseContributions" ADD COLUMN "Status" TEXT NOT NULL DEFAULT 'Paid';""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* existing tenant already has the status column */
+        }
+    }
+
     private async Task EnsureTeamPlayerPlayingColumnAsync(string dbName, CancellationToken ct)
     {
         if (_sqlServer)
@@ -493,6 +581,14 @@ public sealed class LeagueDatabaseManager
         {
             /* already exists */
         }
+    }
+
+    private async Task EnsureLiveMatchIndexAsync(ApiDbContext db, CancellationToken ct)
+    {
+        var sql = _sqlServer
+            ? "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Matches_LiveList' AND object_id = OBJECT_ID(N'dbo.Matches')) CREATE INDEX [IX_Matches_LiveList] ON [dbo].[Matches] ([IsDeleted], [Status], [UpdatedAtUtc] DESC);"
+            : "CREATE INDEX IF NOT EXISTS \"IX_Matches_LiveList\" ON \"Matches\" (\"IsDeleted\", \"Status\", \"UpdatedAtUtc\" DESC);";
+        await db.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false);
     }
 
     private async Task EnsureIsLiveTelecastColumnAsync(string dbName, CancellationToken ct)
@@ -1264,7 +1360,7 @@ public sealed class LeagueDatabaseManager
         var tables = new[]
         {
             "Deliveries", "Innings", "SeriesFixtures", "Series", "TournamentFixtures", "TournamentTeams", "Tournaments",
-            "VenueBookingParticipants", "VenueBookings", "AuctionLots", "AuctionCaptains", "Auctions",
+            "ExpenseContributions", "Expenses", "VenueBookingParticipants", "VenueBookings", "AuctionLots", "AuctionCaptains", "Auctions",
             "TeamPlayers", "Matches", "Teams", "Players", "Venues", "SyncReceipts"
         };
 

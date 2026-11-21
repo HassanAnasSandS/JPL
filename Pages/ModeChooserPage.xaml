@@ -23,26 +23,11 @@
                     Padding="16,12"
                     StrokeShape="RoundRectangle 16">
                 <VerticalStackLayout Spacing="8">
-                    <Label Text="{x:Static svc:BrandSlogans.Catalog}"
-                           TextColor="#E8F0FA"
-                           FontSize="13"
-                           LineBreakMode="WordWrap" />
-                    <Label Text="{x:Static svc:BrandSlogans.LiveScore}"
-                           TextColor="#E8F0FA"
-                           FontSize="13"
-                           LineBreakMode="WordWrap" />
-                    <Label Text="{x:Static svc:BrandSlogans.Analytics}"
-                           TextColor="#E8F0FA"
-                           FontSize="13"
-                           LineBreakMode="WordWrap" />
-                    <Label Text="{x:Static svc:BrandSlogans.Statistics}"
-                           TextColor="#E8F0FA"
-                           FontSize="13"
-                           LineBreakMode="WordWrap" />
-                    <Label Text="{x:Static svc:BrandSlogans.Grounds}"
-                           TextColor="#E8F0FA"
-                           FontSize="13"
-                           LineBreakMode="WordWrap" />
+                    
+                    
+                    
+                    
+                    
                 </VerticalStackLayout>
             </Border>
             <Label Text="Where do you want to go?"
@@ -87,8 +72,7 @@
             <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Tournament Scheduler" TextColor="White" FontAttributes="Bold" FontSize="20" />
-                    <Label Text="Manual groups, round robin, points table, and knockout — independent of live scoring."
-                           TextColor="#B8C4D4" FontSize="13" />
+                    
                     <Button Text="Open Scheduler"
                             BackgroundColor="#B6FF3B"
                             TextColor="#0D1B2A"

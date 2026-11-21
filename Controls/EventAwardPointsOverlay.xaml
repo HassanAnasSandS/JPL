@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:svc="clr-namespace:JPL.Services"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Controls.EventAwardPointsOverlay"
+             x:DataType="vm:EventAwardPointsViewModel"
+             HorizontalOptions="Fill"
+             VerticalOptions="Fill">
+    <Grid IsVisible="{Binding IsOpen}"
+          ZIndex="80"
+          InputTransparent="False">
+        <BoxView Color="#B8000000">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <Border BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 18"
+                Margin="12,24"
+                MaximumWidthRequest="650"
+                MaximumHeightRequest="760"
+                HorizontalOptions="Center"
+                VerticalOptions="Center">
+            <Grid RowDefinitions="Auto,Auto,*">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12"
+                      Padding="18,14"
+                      BackgroundColor="{StaticResource Primary}">
+                    <VerticalStackLayout Spacing="3" VerticalOptions="Center">
+                        <Label Text="{Binding Title}"
+                               FontSize="18"
+                               FontAttributes="Bold"
+                               TextColor="White" />
+                        <Label Text="{Binding Subtitle}"
+                               FontSize="11"
+                               TextColor="#B8C4D4" />
+                    </VerticalStackLayout>
+                    <Button Grid.Column="1"
+                            Text="✕"
+                            Style="{StaticResource GoldButton}"
+                            Padding="10,6"
+                            FontSize="13"
+                            VerticalOptions="Center"
+                            Command="{Binding CloseCommand}" />
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="38,*,Auto"
+                      Padding="12,8"
+                      BackgroundColor="{AppThemeBinding Light=#EAF0F6, Dark=#20364B}">
+                    <Label Text="#" FontSize="10" FontAttributes="Bold" TextColor="#718096" HorizontalTextAlignment="Center" />
+                    <Label Grid.Column="1" Text="{Binding CategoryColumnsLabel}" FontSize="10" FontAttributes="Bold" CharacterSpacing="0.5" TextColor="#718096" />
+                    <Label Grid.Column="2" Text="POINTS" FontSize="10" FontAttributes="Bold" CharacterSpacing="0.5" TextColor="#718096" />
+                </Grid>
+
+                <ScrollView Grid.Row="2" Padding="12,10">
+                    <VerticalStackLayout Spacing="8">
+                        <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                           IsVisible="{Binding IsBusy}"
+                                           HorizontalOptions="Center"
+                                           Color="{StaticResource Secondary}" />
+                        <Label Text="{Binding ErrorText}"
+                               IsVisible="{Binding ShowError}"
+                               TextColor="{StaticResource Danger}"
+                               FontSize="12" />
+                        <Label Text="{Binding EmptyText}"
+                               IsVisible="{Binding ShowEmpty}"
+                               Style="{StaticResource MutedLabel}"
+                               HorizontalTextAlignment="Center"
+                               Margin="0,18" />
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Rows}"
+                                             Spacing="6">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:MatchPointsRow">
+                                    <Border BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                            Stroke="#D8E0EA"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 10"
+                                            Padding="10,8">
+                                        <Grid ColumnDefinitions="32,*,Auto" ColumnSpacing="9">
+                                            <Border BackgroundColor="{AppThemeBinding Light=#EDF2F7, Dark=#26394D}"
+                                                    StrokeThickness="0"
+                                                    WidthRequest="28"
+                                                    HeightRequest="28"
+                                                    StrokeShape="RoundRectangle 14"
+                                                    VerticalOptions="Center">
+                                                <Label Text="{Binding RankText}"
+                                                       FontSize="11"
+                                                       FontAttributes="Bold"
+                                                       HorizontalOptions="Center"
+                                                       VerticalOptions="Center"
+                                                       TextColor="{StaticResource Secondary}" />
+                                            </Border>
+                                            <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
+                                                    <Label Text="{Binding PlayerName}"
+                                                           FontSize="12"
+                                                           FontAttributes="Bold"
+                                                           TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}"
+                                                           LineBreakMode="TailTruncation"
+                                                           MaxLines="1" />
+                                                    <Label Grid.Column="1"
+                                                           Text="★ WINNER"
+                                                           FontSize="8"
+                                                           FontAttributes="Bold"
+                                                           TextColor="{StaticResource Secondary}"
+                                                           IsVisible="{Binding IsPlayerOfTheMatch}" />
+                                                </Grid>
+                                                <Label Text="{Binding BreakdownText}"
+                                                       FontSize="10"
+                                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#B8C4D4}"
+                                                       LineBreakMode="TailTruncation" />
+                                            </VerticalStackLayout>
+                                            <Label Grid.Column="2"
+                                                   Text="{Binding PointsText}"
+                                                   FontSize="18"
+                                                   FontAttributes="Bold"
+                                                   VerticalOptions="Center"
+                                                   TextColor="{StaticResource Secondary}" />
+                                            <Button Grid.ColumnSpan="3"
+                                                    Text=""
+                                                    BackgroundColor="#01000000"
+                                                    BorderWidth="0"
+                                                    Padding="0"
+                                                    MinimumHeightRequest="0"
+                                                    MinimumWidthRequest="0"
+                                                    Clicked="OnPlayerRowClicked"
+                                                    SemanticProperties.Description="Show this player's award points breakdown" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </ScrollView>
+            </Grid>
+        </Border>
+
+        <!-- The selected player's award point breakdown. -->
+        <Grid IsVisible="{Binding IsDetailOpen}"
+              ZIndex="90"
+              InputTransparent="False">
+            <BoxView Color="#CC000000">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding CloseDetailCommand}" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 18"
+                    Margin="12"
+                    MaximumWidthRequest="560"
+                    MaximumHeightRequest="680"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10"
+                          Padding="16,12"
+                          BackgroundColor="{StaticResource Primary}">
+                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Label Text="{Binding SelectedPointsLabel}"
+                                   FontSize="9"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="0.7"
+                                   TextColor="{StaticResource Secondary}" />
+                            <Label Text="{Binding SelectedPlayer.PlayerName}"
+                                   FontSize="19"
+                                   FontAttributes="Bold"
+                                   TextColor="White" />
+                            <Label Text="{Binding SelectedPlayer.TeamName}"
+                                   FontSize="11"
+                                   TextColor="#B8C4D4" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                Style="{StaticResource GoldButton}"
+                                Padding="10,6"
+                                FontSize="13"
+                                VerticalOptions="Start"
+                                Command="{Binding CloseDetailCommand}" />
+                    </Grid>
+                    <ScrollView Grid.Row="1" Padding="14,12">
+                        <VerticalStackLayout Spacing="10">
+                            <Border BackgroundColor="{StaticResource Primary}"
+                                    StrokeThickness="0"
+                                    StrokeShape="RoundRectangle 12"
+                                    Padding="12,9">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                        <Label Text="EVENT POINTS BREAKDOWN"
+                                               FontSize="9"
+                                               FontAttributes="Bold"
+                                               CharacterSpacing="0.7"
+                                               TextColor="#B8C4D4" />
+                                        <Label Text="{Binding SelectedPlayer.ImpactText}"
+                                               FontSize="11"
+                                               FontAttributes="Bold"
+                                               TextColor="White"
+                                               LineBreakMode="WordWrap" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="1"
+                                           Text="{Binding SelectedPlayer.PointsText}"
+                                           FontSize="28"
+                                           FontAttributes="Bold"
+                                           VerticalOptions="Center"
+                                           TextColor="{StaticResource Secondary}" />
+                                </Grid>
+                            </Border>
+
+                            <VerticalStackLayout Spacing="6"
+                                                 IsVisible="{Binding SelectedPlayer.HasAwardPositiveFactors}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Earned"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#15803D" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding SelectedPlayer.AwardPositiveTotalText}"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#15803D" />
+                                </Grid>
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedPlayer.AwardPositiveFactors}"
+                                                     Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:RankingFactorLine">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="#EAF7EE"
+                                                    Padding="10,8"
+                                                    StrokeShape="RoundRectangle 10">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <VerticalStackLayout Spacing="2">
+                                                        <Label Text="{Binding MatchTitle}" FontSize="9" TextColor="#718096" />
+                                                        <Label Text="{Binding Label}" FontSize="12" FontAttributes="Bold"
+                                                               TextColor="{StaticResource TextPrimary}" />
+                                                        <Label Text="{Binding Stat}" FontSize="10" TextColor="#64748B" />
+                                                    </VerticalStackLayout>
+                                                    <Label Grid.Column="1" Text="{Binding PointsText}" FontSize="13"
+                                                           FontAttributes="Bold" VerticalOptions="Center"
+                                                           TextColor="{Binding PointsColor}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+
+                            <VerticalStackLayout Spacing="6"
+                                                 IsVisible="{Binding SelectedPlayer.HasAwardNegativeFactors}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Negative / shortfall"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#C62828" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding SelectedPlayer.AwardNegativeTotalText}"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#C62828" />
+                                </Grid>
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding SelectedPlayer.AwardNegativeFactors}"
+                                                     Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="svc:RankingFactorLine">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="#FDECEC"
+                                                    Padding="10,8"
+                                                    StrokeShape="RoundRectangle 10">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <VerticalStackLayout Spacing="2">
+                                                        <Label Text="{Binding MatchTitle}" FontSize="9" TextColor="#718096" />
+                                                        <Label Text="{Binding Label}" FontSize="12" FontAttributes="Bold"
+                                                               TextColor="{StaticResource TextPrimary}" />
+                                                        <Label Text="{Binding Stat}" FontSize="10" TextColor="#64748B" />
+                                                    </VerticalStackLayout>
+                                                    <Label Grid.Column="1" Text="{Binding PointsText}" FontSize="13"
+                                                           FontAttributes="Bold" VerticalOptions="Center"
+                                                           TextColor="{Binding PointsColor}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+
+                            <Label Text="No points in this award category."
+                                   IsVisible="{Binding SelectedPlayer.NoAwardFactors}"
+                                   Style="{StaticResource MutedLabel}"
+                                   HorizontalTextAlignment="Center"
+                                   Margin="0,10" />
+
+                            <Label Text="BATTING"
+                                   IsVisible="False"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="0.7"
+                                   TextColor="{StaticResource Secondary}" />
+                            <VerticalStackLayout IsVisible="False" BindableLayout.ItemsSource="{Binding SelectedPlayer.BattingFactors}" Spacing="5">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:RankingPart">
+                                        <Border BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                                Stroke="#D8E0EA" StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 8" Padding="9,6">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <VerticalStackLayout Spacing="1">
+                                                    <Label Text="{Binding MatchTitle}" FontSize="9" TextColor="#718096" />
+                                                    <Label Text="{Binding Label}" FontSize="11" FontAttributes="Bold"
+                                                           TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                    <Label Text="{Binding Stat}" FontSize="10" TextColor="#718096" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="1" Text="{Binding PointsText}" FontSize="12" FontAttributes="Bold"
+                                                       VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label Text="BOWLING"
+                                   IsVisible="False"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="0.7"
+                                   TextColor="{StaticResource Secondary}" />
+                            <VerticalStackLayout IsVisible="False" BindableLayout.ItemsSource="{Binding SelectedPlayer.BowlingFactors}" Spacing="5">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:RankingPart">
+                                        <Border BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                                Stroke="#D8E0EA" StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 8" Padding="9,6">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <VerticalStackLayout Spacing="1">
+                                                    <Label Text="{Binding MatchTitle}" FontSize="9" TextColor="#718096" />
+                                                    <Label Text="{Binding Label}" FontSize="11" FontAttributes="Bold"
+                                                           TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                    <Label Text="{Binding Stat}" FontSize="10" TextColor="#718096" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="1" Text="{Binding PointsText}" FontSize="12" FontAttributes="Bold"
+                                                       VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label Text="FIELDING"
+                                   IsVisible="False"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="0.7"
+                                   TextColor="{StaticResource Secondary}" />
+                            <VerticalStackLayout IsVisible="False" BindableLayout.ItemsSource="{Binding SelectedPlayer.FieldingFactors}" Spacing="5">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:RankingPart">
+                                        <Border BackgroundColor="{AppThemeBinding Light=White, Dark=#152A3F}"
+                                                Stroke="#D8E0EA" StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 8" Padding="9,6">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <VerticalStackLayout Spacing="1">
+                                                    <Label Text="{Binding MatchTitle}" FontSize="9" TextColor="#718096" />
+                                                    <Label Text="{Binding Label}" FontSize="11" FontAttributes="Bold"
+                                                           TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                                    <Label Text="{Binding Stat}" FontSize="10" TextColor="#718096" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="1" Text="{Binding PointsText}" FontSize="12" FontAttributes="Bold"
+                                                       VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=White}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label Text="{Binding RulesText}"
+                                   FontSize="10"
+                                   TextColor="#8A9BB0"
+                                   LineBreakMode="WordWrap" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentView>

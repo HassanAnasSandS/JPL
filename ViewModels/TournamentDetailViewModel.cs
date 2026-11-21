@@ -33,6 +33,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
     public ObservableCollection<TournamentFixtureGroup> FixtureGroups { get; } = new();
     public ObservableCollection<TournamentTeamItem> Teams { get; } = new();
     public ObservableCollection<TeamScheduleMatchItem> TeamScheduleMatches { get; } = new();
+    public EventAwardPointsViewModel AwardPoints { get; }
 
     [ObservableProperty] private string name = string.Empty;
     [ObservableProperty] private string statusText = string.Empty;
@@ -81,6 +82,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
         _tournaments = tournaments;
         _matches = matches;
         _auth = auth;
+        AwardPoints = new EventAwardPointsViewModel(matches, "Tournament");
     }
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
@@ -100,6 +102,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
             var detail = await _tournaments.GetAsync(_id).ConfigureAwait(true)
                          ?? throw new InvalidOperationException("Tournament not found.");
             Bind(detail);
+            await LoadAwardPointsAsync(detail).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -107,6 +110,14 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
         }
         finally { IsBusy = false; }
     }
+
+    private Task LoadAwardPointsAsync(TournamentDetail detail)
+        => AwardPoints.LoadAsync(
+            detail.Fixtures.Select(f => (f.MatchId, f.Label, f.HasResult)),
+            detail.PlayerOfTheTournamentPlayerId,
+            detail.BestBatsmanPlayerId,
+            detail.BestBowlerPlayerId,
+            detail.BestFielderPlayerId);
 
     private void Bind(TournamentDetail detail)
     {
@@ -385,6 +396,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
             IsBusy = true;
             var detail = await _tournaments.GenerateAsync(_id).ConfigureAwait(true);
             Bind(detail);
+            await LoadAwardPointsAsync(detail).ConfigureAwait(true);
         }
         catch (Exception ex)
         {

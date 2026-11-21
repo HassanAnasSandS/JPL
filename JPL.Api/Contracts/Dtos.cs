@@ -323,6 +323,7 @@ public sealed class StatsFilterOptionsDto
     public List<StatsFilterOptionDto> Tournaments { get; set; } = new();
     public List<StatsFilterOptionDto> Series { get; set; } = new();
     public List<StatsFilterOptionDto> Matches { get; set; } = new();
+    public List<StatsFilterOptionDto> Captains { get; set; } = new();
 }
 
 public sealed class TrophyRowDto
@@ -490,6 +491,49 @@ public sealed class VenueBookingParticipantDto
     public string PlayerName { get; set; } = string.Empty;
     public string Status { get; set; } = "Pending";
     public decimal Amount { get; set; }
+}
+
+public sealed class ExpenseUpsertRequest
+{
+    public Guid? Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid PurchasedByPlayerId { get; set; }
+    public decimal Amount { get; set; }
+    public List<ExpenseContributionRequest> Contributions { get; set; } = new();
+}
+
+public sealed class ExpenseContributionRequest
+{
+    public Guid PlayerId { get; set; }
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = "Pending";
+}
+
+public sealed class ExpenseDto
+{
+    public Guid Id { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string CreatedByUsername { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public Guid PurchasedByPlayerId { get; set; }
+    public string PurchasedByPlayerName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal ContributedAmount { get; set; }
+    public decimal OutstandingAmount { get; set; }
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public bool IsDeleted { get; set; }
+    public bool CanEdit { get; set; }
+    public List<ExpenseContributionDto> Contributions { get; set; } = new();
+}
+
+public sealed class ExpenseContributionDto
+{
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = "Pending";
 }
 
 public sealed class TournamentUpsertRequest

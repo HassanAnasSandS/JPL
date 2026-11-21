@@ -128,6 +128,12 @@ public sealed class PlayerCareerDto
     public string PaymentPaidText => PaymentPaid.ToString("0.##");
     public string PaymentRemainingText => PaymentRemaining.ToString("0.##");
     public string PaymentPaidPctText => PaymentTotal <= 0 ? "-" : PaymentPaidPct.ToString("0.#") + "%";
+    public decimal ExpensePurchased { get; set; }
+    public decimal ExpenseContributed { get; set; }
+    public decimal ExpenseRemaining { get; set; }
+    public string ExpensePurchasedText => ExpensePurchased.ToString("0.##");
+    public string ExpenseContributedText => ExpenseContributed.ToString("0.##");
+    public string ExpenseRemainingText => ExpenseRemaining.ToString("0.##");
 
     // Batting milestones (per innings)
     public int HighestScore { get; set; }
@@ -246,6 +252,44 @@ public sealed class CaptainVsDto
     public string SeriesWinPctText => Series == 0 ? "-" : SeriesWinPct.ToString("0.#") + "%";
 }
 
+public sealed class PartnershipDto
+{
+    public int Rank { get; set; }
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public Guid PartnerId { get; set; }
+    public string PartnerName { get; set; } = string.Empty;
+    public int Innings { get; set; }
+    public int Runs { get; set; }
+    public int Balls { get; set; }
+    public int Outs { get; set; }
+    public int PlayerRuns { get; set; }
+    public int PlayerBalls { get; set; }
+    public int PartnerRuns { get; set; }
+    public int PartnerBalls { get; set; }
+    public int PlayerOuts { get; set; }
+    public int PartnerOuts { get; set; }
+    public int NotOut { get; set; }
+}
+
+public sealed class PartnershipMatchDto
+{
+    public Guid MatchId { get; set; }
+    public string MatchName { get; set; } = string.Empty;
+    public DateTime MatchDateUtc { get; set; }
+    public int InningsNumber { get; set; }
+    public string BattingTeamName { get; set; } = string.Empty;
+    public int Runs { get; set; }
+    public int Balls { get; set; }
+    public int Outs { get; set; }
+    public int PlayerRuns { get; set; }
+    public int PlayerBalls { get; set; }
+    public int PlayerOuts { get; set; }
+    public int PartnerRuns { get; set; }
+    public int PartnerBalls { get; set; }
+    public int PartnerOuts { get; set; }
+}
+
 public sealed class RankingRowDto
 {
     public int Rank { get; set; }
@@ -346,6 +390,280 @@ public sealed class RankingsDto
 
 public static class StatsCalculator
 {
+    public static async Task<IReadOnlyList<PartnershipDto>> BuildAllPartnershipsAsync(
+        ApiDbContext db,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        string? query = null,
+        CancellationToken ct = default)
+    {
+        var matchQuery = db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted);
+        if (fromUtc is DateTime from)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc >= from);
+        if (toExclusiveUtc is DateTime to)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc < to);
+        if (venueId is Guid selectedVenueId)
+        {
+            var venueName = await db.Venues.AsNoTracking()
+                .Where(v => v.Id == selectedVenueId && !v.IsDeleted)
+                .Select(v => v.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(venueName))
+                matchQuery = matchQuery.Where(_ => false);
+            else
+            {
+                var normalizedVenueName = venueName.Trim().ToLower();
+                matchQuery = matchQuery.Where(m => m.Venue != null && m.Venue.ToLower() == normalizedVenueName);
+            }
+        }
+        var formatIdList = NormalizeFormatIds(formatIds);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIds);
+        var completed = await matchQuery.Select(m => m.Id).ToHashSetAsync(ct).ConfigureAwait(false);
+        var deliveries = await db.Deliveries.AsNoTracking().Where(d => completed.Contains(d.MatchId))
+            .OrderBy(d => d.MatchId).ThenBy(d => d.InningsId).ThenBy(d => d.Sequence)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var inningsRows = new Dictionary<(Guid First, Guid Second, Guid Innings), PartnershipDto>();
+        foreach (var d in deliveries)
+        {
+            if (d.BatterId == Guid.Empty || d.NonStrikerId == Guid.Empty || d.BatterId == d.NonStrikerId) continue;
+            var first = d.BatterId.CompareTo(d.NonStrikerId) < 0 ? d.BatterId : d.NonStrikerId;
+            var second = first == d.BatterId ? d.NonStrikerId : d.BatterId;
+            var key = (first, second, d.InningsId);
+            if (!inningsRows.TryGetValue(key, out var row)) inningsRows[key] = row = new PartnershipDto { PlayerId = first, PartnerId = second };
+            row.Runs += d.RunsOffBat + d.ExtraRuns;
+            if (d.IsLegalDelivery) row.Balls++;
+            if (d.BatterId == first) { row.PlayerRuns += d.RunsOffBat; if (d.IsLegalDelivery) row.PlayerBalls++; }
+            else { row.PartnerRuns += d.RunsOffBat; if (d.IsLegalDelivery) row.PartnerBalls++; }
+            if (d.IsWicket && d.DismissedPlayerId == first) row.PlayerOuts++;
+            if (d.IsWicket && d.DismissedPlayerId == second) row.PartnerOuts++;
+        }
+        var names = await PlayerNamesAsync(db, inningsRows.Keys.SelectMany(k => new[] { k.First, k.Second }).Distinct(), ct).ConfigureAwait(false);
+        IEnumerable<PartnershipDto> pairs = inningsRows.Values.GroupBy(p => (p.PlayerId, p.PartnerId)).Select(g => new PartnershipDto
+        {
+            PlayerId = g.Key.PlayerId, PlayerName = names.GetValueOrDefault(g.Key.PlayerId, "?"),
+            PartnerId = g.Key.PartnerId, PartnerName = names.GetValueOrDefault(g.Key.PartnerId, "?"),
+            Innings = g.Count(), Runs = g.Sum(x => x.Runs), Balls = g.Sum(x => x.Balls),
+            PlayerRuns = g.Sum(x => x.PlayerRuns), PlayerBalls = g.Sum(x => x.PlayerBalls),
+            PartnerRuns = g.Sum(x => x.PartnerRuns), PartnerBalls = g.Sum(x => x.PartnerBalls),
+            PlayerOuts = g.Sum(x => x.PlayerOuts), PartnerOuts = g.Sum(x => x.PartnerOuts),
+            Outs = g.Sum(x => x.PlayerOuts + x.PartnerOuts), NotOut = g.Count(x => x.PlayerOuts + x.PartnerOuts == 0)
+        });
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var filter = query.Trim();
+            pairs = pairs.Where(p =>
+                p.PlayerName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || p.PartnerName.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Keep the full filtered result set here. The paged endpoint slices it so the
+        // client can scroll beyond the first 100 pairs without downloading all rows.
+        var rankedPairs = pairs.OrderByDescending(p => p.Runs)
+            .ThenBy(p => p.PlayerName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(p => p.PartnerName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        for (var i = 0; i < rankedPairs.Count; i++)
+            rankedPairs[i].Rank = i + 1;
+        return rankedPairs;
+    }
+
+    public static async Task<IReadOnlyList<PartnershipMatchDto>> BuildPartnershipMatchesAsync(
+        ApiDbContext db,
+        Guid playerId,
+        Guid partnerId,
+        DateTime? fromUtc = null,
+        DateTime? toExclusiveUtc = null,
+        Guid? venueId = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+    {
+        if (playerId == Guid.Empty || partnerId == Guid.Empty || playerId == partnerId)
+            return Array.Empty<PartnershipMatchDto>();
+
+        var matchQuery = db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted);
+        if (fromUtc is DateTime from)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc >= from);
+        if (toExclusiveUtc is DateTime to)
+            matchQuery = matchQuery.Where(m => m.MatchDateUtc < to);
+        if (venueId is Guid selectedVenueId)
+        {
+            var venueName = await db.Venues.AsNoTracking()
+                .Where(v => v.Id == selectedVenueId && !v.IsDeleted)
+                .Select(v => v.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(venueName))
+                matchQuery = matchQuery.Where(_ => false);
+            else
+            {
+                var normalizedVenueName = venueName.Trim().ToLower();
+                matchQuery = matchQuery.Where(m => m.Venue != null && m.Venue.ToLower() == normalizedVenueName);
+            }
+        }
+        var formatIdList = NormalizeFormatIds(formatIds);
+        if (formatIdList is not null)
+            matchQuery = matchQuery.Where(m => formatIdList.Contains(m.FormatId ?? Guid.Empty));
+        matchQuery = ApplyEventMatchFilter(matchQuery, tournamentIds, seriesIds, matchIds);
+
+        var matches = await matchQuery
+            .Select(m => new { m.Id, m.Title, m.MatchDateUtc, m.TeamAId, m.TeamBId })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (matches.Count == 0)
+            return Array.Empty<PartnershipMatchDto>();
+
+        var matchLookup = matches.ToDictionary(m => m.Id);
+        var completedMatchIds = matches.Select(m => m.Id).ToHashSet();
+        var deliveries = await db.Deliveries.AsNoTracking()
+            .Where(d => completedMatchIds.Contains(d.MatchId)
+                        && ((d.BatterId == playerId && d.NonStrikerId == partnerId)
+                            || (d.BatterId == partnerId && d.NonStrikerId == playerId)))
+            .OrderBy(d => d.MatchId).ThenBy(d => d.InningsId).ThenBy(d => d.Sequence)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (deliveries.Count == 0)
+            return Array.Empty<PartnershipMatchDto>();
+
+        var inningsIds = deliveries.Select(d => d.InningsId).Distinct().ToHashSet();
+        var innings = await db.Innings.AsNoTracking()
+            .Where(i => inningsIds.Contains(i.Id))
+            .Select(i => new { i.Id, i.InningsNumber, i.BattingTeamId })
+            .ToDictionaryAsync(i => i.Id, ct)
+            .ConfigureAwait(false);
+        var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToHashSet();
+        var teamNames = await db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.Name })
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct)
+            .ConfigureAwait(false);
+
+        return deliveries.GroupBy(d => (d.MatchId, d.InningsId))
+            .Where(g => matchLookup.ContainsKey(g.Key.MatchId) && innings.ContainsKey(g.Key.InningsId))
+            .Select(g =>
+            {
+                var match = matchLookup[g.Key.MatchId];
+                var inning = innings[g.Key.InningsId];
+                var fallbackMatchName = $"{teamNames.GetValueOrDefault(match.TeamAId, "Team A")} vs {teamNames.GetValueOrDefault(match.TeamBId, "Team B")}";
+                var playerRuns = g.Where(d => d.BatterId == playerId).Sum(d => d.RunsOffBat);
+                var partnerRuns = g.Where(d => d.BatterId == partnerId).Sum(d => d.RunsOffBat);
+                var playerBalls = g.Count(d => d.BatterId == playerId && d.IsLegalDelivery);
+                var partnerBalls = g.Count(d => d.BatterId == partnerId && d.IsLegalDelivery);
+                var playerOuts = g.Count(d => d.IsWicket && d.DismissedPlayerId == playerId);
+                var partnerOuts = g.Count(d => d.IsWicket && d.DismissedPlayerId == partnerId);
+                return new PartnershipMatchDto
+                {
+                    MatchId = match.Id,
+                    MatchName = string.IsNullOrWhiteSpace(match.Title) ? fallbackMatchName : match.Title,
+                    MatchDateUtc = match.MatchDateUtc,
+                    InningsNumber = inning.InningsNumber,
+                    BattingTeamName = teamNames.GetValueOrDefault(inning.BattingTeamId, string.Empty),
+                    Runs = g.Sum(d => d.RunsOffBat + d.ExtraRuns),
+                    Balls = g.Count(d => d.IsLegalDelivery),
+                    Outs = playerOuts + partnerOuts,
+                    PlayerRuns = playerRuns,
+                    PlayerBalls = playerBalls,
+                    PlayerOuts = playerOuts,
+                    PartnerRuns = partnerRuns,
+                    PartnerBalls = partnerBalls,
+                    PartnerOuts = partnerOuts
+                };
+            })
+            .OrderByDescending(p => p.MatchDateUtc)
+            .ThenBy(p => p.InningsNumber)
+            .ToList();
+    }
+
+    public static IReadOnlyList<PartnershipDto> OrderPartnerships(
+        IEnumerable<PartnershipDto> pairs, string? sort, bool ascending)
+    {
+        IOrderedEnumerable<PartnershipDto> ordered = sort switch
+        {
+            "PartnershipName" => Order(pairs, p => $"{p.PlayerName} & {p.PartnerName}", ascending),
+            "PartnershipInnings" => Order(pairs, p => p.Innings, ascending),
+            "PartnershipRuns" or "Runs" => Order(pairs, p => p.Runs, ascending),
+            "PartnershipBalls" => Order(pairs, p => p.Balls, ascending),
+            "PartnershipAverage" => Order(pairs, p => p.Outs == 0 ? 0d : p.Runs / (double)p.Outs, ascending),
+            "PartnershipStrikeRate" => Order(pairs, p => p.Balls == 0 ? 0d : p.Runs * 100d / p.Balls, ascending),
+            "PartnershipOuts" => Order(pairs, p => p.Outs, ascending),
+            "PlayerRuns" => Order(pairs, p => p.PlayerRuns, ascending),
+            "PlayerBalls" => Order(pairs, p => p.PlayerBalls, ascending),
+            "PlayerStrikeRate" => Order(pairs, p => p.PlayerBalls == 0 ? 0d : p.PlayerRuns * 100d / p.PlayerBalls, ascending),
+            "PlayerAverage" => Order(pairs, p => p.PlayerOuts == 0 ? 0d : p.PlayerRuns / (double)p.PlayerOuts, ascending),
+            "PlayerOuts" => Order(pairs, p => p.PlayerOuts, ascending),
+            "PartnerRuns" => Order(pairs, p => p.PartnerRuns, ascending),
+            "PartnerBalls" => Order(pairs, p => p.PartnerBalls, ascending),
+            "PartnerStrikeRate" => Order(pairs, p => p.PartnerBalls == 0 ? 0d : p.PartnerRuns * 100d / p.PartnerBalls, ascending),
+            "PartnerAverage" => Order(pairs, p => p.PartnerOuts == 0 ? 0d : p.PartnerRuns / (double)p.PartnerOuts, ascending),
+            "PartnerOuts" => Order(pairs, p => p.PartnerOuts, ascending),
+            _ => Order(pairs, p => p.Runs, ascending)
+        };
+        return ordered.ThenBy(p => p.PlayerName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(p => p.PartnerName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    private static IOrderedEnumerable<PartnershipDto> Order<TKey>(
+        IEnumerable<PartnershipDto> pairs, Func<PartnershipDto, TKey> key, bool ascending)
+        => ascending ? pairs.OrderBy(key) : pairs.OrderByDescending(key);
+
+    public static async Task<IReadOnlyList<PartnershipDto>> BuildPartnershipsAsync(ApiDbContext db, Guid playerId, CancellationToken ct)
+    {
+        var deliveries = await db.Deliveries.AsNoTracking()
+            .Where(d => d.BatterId == playerId || d.NonStrikerId == playerId)
+            .OrderBy(d => d.MatchId).ThenBy(d => d.InningsId).ThenBy(d => d.Sequence)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var completed = await db.Matches.AsNoTracking().Where(m => m.Status == MatchStatus.Completed && !m.IsDeleted)
+            .Select(m => m.Id).ToHashSetAsync(ct).ConfigureAwait(false);
+        deliveries = deliveries.Where(d => completed.Contains(d.MatchId)).ToList();
+        var paired = new Dictionary<(Guid Partner, Guid Innings), PartnershipDto>();
+        foreach (var d in deliveries)
+        {
+            var partner = d.BatterId == playerId ? d.NonStrikerId : d.BatterId;
+            if (partner == Guid.Empty || partner == playerId) continue;
+            var key = (partner, d.InningsId);
+            if (!paired.TryGetValue(key, out var row)) paired[key] = row = new PartnershipDto { PlayerId = playerId, PartnerId = partner };
+            row.Runs += d.RunsOffBat + d.ExtraRuns;
+            if (d.IsLegalDelivery) row.Balls++;
+            if (d.BatterId == playerId)
+            {
+                row.PlayerRuns += d.RunsOffBat;
+                if (d.IsLegalDelivery) row.PlayerBalls++;
+            }
+            else
+            {
+                row.PartnerRuns += d.RunsOffBat;
+                if (d.IsLegalDelivery) row.PartnerBalls++;
+            }
+            if (d.IsWicket && d.DismissedPlayerId == playerId) row.PlayerOuts++;
+            if (d.IsWicket && d.DismissedPlayerId == partner) row.PartnerOuts++;
+            if (d.IsWicket && d.DismissedPlayerId is Guid outId && (outId == playerId || outId == partner)) row.NotOut++;
+        }
+        var names = await PlayerNamesAsync(db, paired.Keys.Select(k => k.Partner).Append(playerId), ct).ConfigureAwait(false);
+        return paired.Values.GroupBy(p => p.PartnerId).Select(g => new PartnershipDto
+        {
+            PlayerId = playerId, PlayerName = names.GetValueOrDefault(playerId, "?"),
+            PartnerId = g.Key, PartnerName = names.GetValueOrDefault(g.Key, "?"),
+            Innings = g.Count(), Runs = g.Sum(x => x.Runs), Balls = g.Sum(x => x.Balls),
+            PlayerRuns = g.Sum(x => x.PlayerRuns), PlayerBalls = g.Sum(x => x.PlayerBalls),
+            PartnerRuns = g.Sum(x => x.PartnerRuns), PartnerBalls = g.Sum(x => x.PartnerBalls),
+            PlayerOuts = g.Sum(x => x.PlayerOuts), PartnerOuts = g.Sum(x => x.PartnerOuts),
+            Outs = g.Sum(x => x.PlayerOuts + x.PartnerOuts),
+            NotOut = g.Count(x => x.NotOut == 0)
+        }).OrderByDescending(p => p.Runs).ToList();
+    }
     public static List<Guid>? NormalizeFormatIds(IReadOnlyList<Guid>? formatIds)
         => NormalizeIds(formatIds);
 
@@ -430,8 +748,8 @@ public static class StatsCalculator
         static double BatPts(PlayerCareerDto p)
         {
             if (p.BallsFaced <= 0 && p.Runs <= 0) return 0;
-            double pts = p.Runs + p.Fours * 2 + p.Sixes * 4
-                         + p.Fifties * 12 + p.Hundreds * 25 + p.NotOuts * 5 + p.HighestScore * 0.5;
+            double pts = p.Runs + p.Fours * 4 + p.Sixes * 6
+                         + p.Fifties * 12 + p.Hundreds * 25 + p.NotOuts * 4 + p.HighestScore * 0.5;
             if (p.BallsFaced >= 6)
                 pts += (BatSr(p) - 100) * p.BallsFaced / 200.0;
             if (p.InningsBatted >= 2)
@@ -446,16 +764,13 @@ public static class StatsCalculator
         {
             if (p.Wickets <= 0 && p.OversBowledBalls <= 0) return 0;
             var overs = p.OversBowledBalls / 6.0;
-            double pts = p.Wickets * 10 + p.BowledWkts * 3 + p.LbwWkts * 2 + p.StumpedWkts * 2
-                         + p.HitWicketWkts * 2 + p.Maidens * 8 + p.DotBallsBowled * 0.35
+            double pts = p.Wickets * 25 + p.BowledWkts * 5 + p.Maidens * 8 + p.DotBallsBowled * 0.35
                          + p.HatTricks * 20 + p.BestBowlingWickets * 2;
             if (p.OversBowledBalls >= 6)
                 pts += (8.0 - BowlEcon(p)) * overs;
             if (p.Wickets > 0 && p.OversBowledBalls >= 6)
                 pts += (18.0 - p.OversBowledBalls / (double)p.Wickets) * p.Wickets * 0.3;
-            else if (p.Wickets == 0 && p.OversBowledBalls >= 6)
-                pts -= overs;
-            pts += p.WidesBowled * -1.5 + p.NoBallsBowled * -2 + p.ByesConceded * -0.2 + p.LegByesConceded * -0.2;
+            pts += p.WidesBowled * -1 + p.NoBallsBowled * -1 + p.ByesConceded * -0.2 + p.LegByesConceded * -0.2;
             return Math.Round(pts);
         }
 
@@ -471,12 +786,6 @@ public static class StatsCalculator
             if (actions <= 0 && p.DroppedCatches <= 0) return 0;
             double pts = p.Catches * 10 + p.RunOutsEffected * 12 + p.Stumpings * 15
                          + p.DroppedCatches * -10;
-            if (p.Matches >= 4 && actions > 0)
-            {
-                var expected = p.Matches * 0.25;
-                if (actions < expected)
-                    pts += (actions - expected) * 4;
-            }
             return Math.Round(pts);
         }
 
@@ -1148,6 +1457,10 @@ public static class StatsCalculator
         IReadOnlyList<Guid>? seriesIds = null,
         IReadOnlyList<Guid>? matchIdsFilter = null,
         bool attendanceFromDebut = false,
+        bool asCaptain = false,
+        Guid? captainPlayerId = null,
+        bool captainOpponentSide = false,
+        bool asPlayer = false,
         CancellationToken ct = default)
     {
         var players = await db.Players.AsNoTracking()
@@ -1269,6 +1582,39 @@ public static class StatsCalculator
             .GroupBy(d => d.DismissedPlayerId!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
         var inningsById = innings.ToDictionary(i => i.Id);
+        var deliveryPlayersByMatch = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var delivery in allDeliveries)
+        {
+            if (!deliveryPlayersByMatch.TryGetValue(delivery.MatchId, out var deliveryPlayers))
+            {
+                deliveryPlayers = new HashSet<Guid>();
+                deliveryPlayersByMatch[delivery.MatchId] = deliveryPlayers;
+            }
+
+            foreach (var playerId in new[]
+                     {
+                         delivery.BatterId,
+                         delivery.NonStrikerId,
+                         delivery.BowlerId,
+                         delivery.DismissedPlayerId ?? Guid.Empty,
+                         delivery.FielderId ?? Guid.Empty
+                     })
+            {
+                if (playerId != Guid.Empty)
+                    deliveryPlayers.Add(playerId);
+            }
+        }
+
+        Guid? CaptainTeamInMatch(Match match, Guid playerId)
+        {
+            var captainA = match.TeamACaptainId
+                ?? (teams.TryGetValue(match.TeamAId, out var teamA) ? teamA.CaptainPlayerId : null);
+            var captainB = match.TeamBCaptainId
+                ?? (teams.TryGetValue(match.TeamBId, out var teamB) ? teamB.CaptainPlayerId : null);
+            if (captainA == playerId) return match.TeamAId;
+            if (captainB == playerId) return match.TeamBId;
+            return null;
+        }
 
         var venueQuery = db.VenueBookings.AsNoTracking()
             .Where(b => !b.IsDeleted);
@@ -1374,27 +1720,121 @@ public static class StatsCalculator
                     return (Total: total, Paid: paid);
                 });
 
+        var expenseQuery = db.Expenses.AsNoTracking().Where(x => !x.IsDeleted);
+        if (fromUtc is DateTime expenseFrom) expenseQuery = expenseQuery.Where(x => x.CreatedAtUtc >= expenseFrom);
+        if (toExclusiveUtc is DateTime expenseTo) expenseQuery = expenseQuery.Where(x => x.CreatedAtUtc < expenseTo);
+        var expenses = await expenseQuery.Include(x => x.Contributions).ToListAsync(ct).ConfigureAwait(false);
+        var expensePurchasedByPlayer = expenses.GroupBy(x => x.PurchasedByPlayerId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+        var expenseRemainingByPlayer = expenses.GroupBy(x => x.PurchasedByPlayerId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => Math.Max(0, x.Amount - x.Contributions
+                .Where(c => string.Equals(c.Status, ExpenseContributionStatus.Paid, StringComparison.OrdinalIgnoreCase))
+                .Sum(c => c.Amount))));
+        var expenseContributedByPlayer = expenses.SelectMany(x => x.Contributions)
+            .Where(x => string.Equals(x.Status, ExpenseContributionStatus.Paid, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(x => x.PlayerId).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+
         var list = new List<PlayerCareerDto>();
         foreach (var player in players)
         {
-            batByPlayer.TryGetValue(player.Id, out var asBatter);
-            bowlByPlayer.TryGetValue(player.Id, out var asBowler);
-            outsByPlayer.TryGetValue(player.Id, out var outs);
-            asBatter ??= new List<Delivery>();
-            asBowler ??= new List<Delivery>();
-            outs ??= new List<Delivery>();
+            var playerAllBatting = batByPlayer.GetValueOrDefault(player.Id) ?? new List<Delivery>();
+            var playerAllBowling = bowlByPlayer.GetValueOrDefault(player.Id) ?? new List<Delivery>();
+            List<Match> playerMatches;
+            if (asCaptain && asPlayer)
+            {
+                playerMatches = new List<Match>();
+            }
+            else if (captainPlayerId is Guid selectedCaptainId && selectedCaptainId != Guid.Empty)
+            {
+                playerMatches = new List<Match>();
+                foreach (var match in matches)
+                {
+                    var captainTeamId = CaptainTeamInMatch(match, selectedCaptainId);
+                    if (captainTeamId is not Guid ownTeamId)
+                        continue;
+                    var requestedTeamId = captainOpponentSide
+                        ? ownTeamId == match.TeamAId ? match.TeamBId : match.TeamAId
+                        : ownTeamId;
+
+                    var playerTeamId = ResolvePlayerTeamFromSquad(match, player.Id)
+                        ?? ResolvePlayerTeam(player.Id, playerAllBatting, playerAllBowling, inningsById, match.Id);
+                    if (playerTeamId is null && teams.TryGetValue(requestedTeamId, out var requestedTeam)
+                        && requestedTeam.TeamPlayers.Any(tp => tp.PlayerId == player.Id))
+                        playerTeamId = requestedTeamId;
+                    if (playerTeamId != requestedTeamId)
+                        continue;
+                    if (asCaptain && CaptainTeamInMatch(match, player.Id) is null)
+                        continue;
+                    if (asPlayer && CaptainTeamInMatch(match, player.Id) is not null)
+                        continue;
+                    playerMatches.Add(match);
+                }
+            }
+            else if (asCaptain)
+            {
+                playerMatches = matches.Where(m => CaptainTeamInMatch(m, player.Id) is not null).ToList();
+            }
+            else if (asPlayer)
+            {
+                playerMatches = matches.Where(m =>
+                    CaptainTeamInMatch(m, player.Id) is null
+                    && (ResolvePlayerTeamFromSquad(m, player.Id) is not null
+                        || deliveryPlayersByMatch.TryGetValue(m.Id, out var deliveryPlayers)
+                        && deliveryPlayers.Contains(player.Id))).ToList();
+            }
+            else
+            {
+                playerMatches = matches;
+            }
+
+            if ((asCaptain || asPlayer || captainPlayerId is Guid) && playerMatches.Count == 0)
+                continue;
+
+            var restrictToPlayerMatches = asCaptain || asPlayer || captainPlayerId is Guid;
+            var playerMatchIds = restrictToPlayerMatches
+                ? playerMatches.Select(m => m.Id).ToHashSet()
+                : null;
+            var playerDeliveries = restrictToPlayerMatches
+                ? allDeliveries.Where(d => playerMatchIds!.Contains(d.MatchId)).ToList()
+                : allDeliveries;
+            var asBatter = restrictToPlayerMatches
+                ? playerDeliveries.Where(d => d.BatterId == player.Id).ToList()
+                : batByPlayer.GetValueOrDefault(player.Id) ?? new List<Delivery>();
+            var asBowler = restrictToPlayerMatches
+                ? playerDeliveries.Where(d => d.BowlerId == player.Id).ToList()
+                : bowlByPlayer.GetValueOrDefault(player.Id) ?? new List<Delivery>();
+            var outs = restrictToPlayerMatches
+                ? playerDeliveries.Where(d => d.IsWicket && d.DismissedPlayerId == player.Id).ToList()
+                : outsByPlayer.GetValueOrDefault(player.Id) ?? new List<Delivery>();
+            var playerInningsByMatch = restrictToPlayerMatches
+                ? inningsByMatch.Where(pair => playerMatchIds!.Contains(pair.Key))
+                    .ToDictionary(pair => pair.Key, pair => pair.Value)
+                : inningsByMatch;
+            var playerInningsById = restrictToPlayerMatches
+                ? innings.Where(i => playerMatchIds!.Contains(i.MatchId)).ToDictionary(i => i.Id)
+                : inningsById;
 
             var summary = new PlayerCareerDto { PlayerId = player.Id, PlayerName = player.FullName };
             ApplyBatting(summary, asBatter);
             ApplyDismissals(summary, outs);
-            ApplyPartnerRunOuts(summary, allDeliveries, player.Id);
+            ApplyPartnerRunOuts(summary, playerDeliveries, player.Id);
             ApplyBowling(summary, asBowler);
             ApplyBattingMilestones(summary, asBatter, outs);
-            ApplyBowlingMilestones(summary, asBowler, allDeliveries, matches, inningsById);
-            ApplyFielding(summary, allDeliveries, player.Id);
-            ApplyMatchResults(summary, player.Id, matches, inningsByMatch, inningsById, asBatter, asBowler, teams);
-            ApplyTournamentResults(summary, player.Id, tournaments, teams);
-            ApplySeriesResults(summary, player.Id, seriesList, teams);
+            ApplyBowlingMilestones(summary, asBowler, playerDeliveries, playerMatches, playerInningsById);
+            ApplyFielding(summary, playerDeliveries, player.Id);
+            ApplyMatchResults(summary, player.Id, playerMatches, playerInningsByMatch, playerInningsById, asBatter, asBowler, teams);
+            var playerTournaments = restrictToPlayerMatches
+                ? tournaments.Where(t => playerMatches.Any(m => m.TournamentId == t.Id)).ToList()
+                : tournaments;
+            var playerSeries = restrictToPlayerMatches
+                ? seriesList.Where(s => playerMatches.Any(m => m.SeriesId == s.Id)).ToList()
+                : seriesList;
+            ApplyTournamentResults(summary, player.Id, playerTournaments, teams);
+            ApplySeriesResults(summary, player.Id, playerSeries, teams);
+
+            summary.ExpensePurchased = expensePurchasedByPlayer.GetValueOrDefault(player.Id);
+            summary.ExpenseContributed = expenseContributedByPlayer.GetValueOrDefault(player.Id);
+            summary.ExpenseRemaining = expenseRemainingByPlayer.GetValueOrDefault(player.Id);
 
             if (attendanceFromDebut && debutDayByPlayer.TryGetValue(player.Id, out var debutDay))
             {
@@ -1428,6 +1868,7 @@ public static class StatsCalculator
                 && summary.DroppedCatches == 0
                 && summary.AttendancePresent == 0
                 && summary.PaymentTotal <= 0
+                && summary.ExpensePurchased <= 0 && summary.ExpenseContributed <= 0
                 && summary.Tournaments == 0
                 && summary.Series == 0)
                 continue;
@@ -2255,7 +2696,7 @@ public static class StatsCalculator
                 case >= 6: s.SixesConceded++; break;
             }
 
-            s.RunsConceded += d.RunsOffBat + d.ExtraRuns;
+            s.RunsConceded += RunsChargedToBowler(d);
             if (!d.IsWicket) continue;
             switch (d.WicketType)
             {
@@ -2343,7 +2784,7 @@ public static class StatsCalculator
             var runs = 0;
             foreach (var d in list)
             {
-                runs += d.RunsOffBat + d.ExtraRuns;
+                runs += RunsChargedToBowler(d);
                 if (!d.IsWicket) continue;
                 switch (d.WicketType)
                 {
@@ -2477,7 +2918,7 @@ public static class StatsCalculator
         var runsInOver = 0;
         foreach (var d in bowled.OrderBy(x => x.Sequence))
         {
-            runsInOver += d.RunsOffBat + d.ExtraRuns;
+            runsInOver += RunsChargedToBowler(d);
             if (!d.IsLegalDelivery)
                 continue;
             legalInOver++;
@@ -2490,6 +2931,9 @@ public static class StatsCalculator
         }
         return maidens;
     }
+
+    private static int RunsChargedToBowler(Delivery delivery)
+        => delivery.RunsOffBat + (delivery.ExtraType is ExtraType.Bye or ExtraType.LegBye ? 0 : delivery.ExtraRuns);
 
     private static void ApplyAttendance(
         PlayerCareerDto s,
