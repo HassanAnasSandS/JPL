@@ -120,6 +120,7 @@ public sealed class GroundsDbContext : DbContext
             e.HasOne(x => x.Ground).WithMany(g => g.Bookings).HasForeignKey(x => x.GroundId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.GroundId, x.Status, x.StartAt, x.EndAt });
             e.HasIndex(x => new { x.CustomerUserId, x.CreatedAtUtc });
+            e.HasIndex(x => x.ClientRequestId).IsUnique().HasFilter("ClientRequestId IS NOT NULL");
             e.HasIndex(x => new { x.IsDeleted, x.CreatedAtUtc, x.Id });
         });
 

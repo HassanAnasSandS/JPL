@@ -113,9 +113,10 @@ public sealed class AuctionDraftGroup
     public int MaxPerCaptain { get; set; }
 }
 
-public sealed class Auction
+public sealed class Auction : ILeagueScoped
 {
     public Guid Id { get; set; }
+    public Guid LeagueId { get; set; }
     public string Title { get; set; } = string.Empty;
     public DateTime AuctionDateUtc { get; set; } = DateTime.Now;
     public string? Notes { get; set; }
@@ -163,8 +164,9 @@ public sealed class Auction
     public ICollection<AuctionLot> Lots { get; set; } = new List<AuctionLot>();
 }
 
-public sealed class AuctionCaptain
+public sealed class AuctionCaptain : ILeagueScoped
 {
+    public Guid LeagueId { get; set; }
     public Guid AuctionId { get; set; }
     public Auction Auction { get; set; } = null!;
     public Guid PlayerId { get; set; }
@@ -177,9 +179,10 @@ public sealed class AuctionCaptain
     public int JokersLeft { get; set; }
 }
 
-public sealed class AuctionLot
+public sealed class AuctionLot : ILeagueScoped
 {
     public Guid Id { get; set; }
+    public Guid LeagueId { get; set; }
     public Guid AuctionId { get; set; }
     public Auction Auction { get; set; } = null!;
     public Guid PlayerId { get; set; }

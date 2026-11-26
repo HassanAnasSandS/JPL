@@ -2,8 +2,6 @@ namespace JPL.Api.Contracts;
 
 public sealed record LoginRequest(string Username, string Password);
 
-public sealed record SignupRequest(string Username, string Password, string WhatsApp);
-
 public sealed record LoginResponse(
     Guid UserId,
     string Username,
@@ -22,9 +20,28 @@ public sealed record LeagueDto(
     int LiveMatchCount = 0,
     int LiveNetsCount = 0);
 
+/// <summary>
+/// SuperAdmin league create / edit. ImageBase64 null = keep current image (edit);
+/// RemoveImage = clear it. IsActive null = keep current (edit) / true (create).
+/// </summary>
 public sealed record LeagueUpsertRequest(
     string Name,
-    string? ImageBase64);
+    string? ImageBase64,
+    bool? IsActive = null,
+    bool RemoveImage = false);
+
+/// <summary>SuperAdmin League management row (includes inactive leagues; soft-deleted are hidden).</summary>
+public sealed record LeagueAdminDto(
+    Guid Id,
+    string Name,
+    string? ImageBase64,
+    bool IsActive,
+    DateTime CreatedAtUtc,
+    DateTime? UpdatedAtUtc,
+    int AdminCount,
+    int UserCount,
+    int LiveMatchCount = 0,
+    int LiveNetsCount = 0);
 
 public sealed record UserDto(
     Guid Id,
@@ -101,9 +118,39 @@ public sealed record SyncPushRequest(
     string EntityType,
     Guid EntityId,
     string Operation,
+    string PayloadJson,
+    string? BasePayloadJson = null);
+
+public sealed record SyncPushResponse(bool Accepted, string Message, string? ServerPayloadJson = null);
+
+public sealed record SyncChangeDto(
+    long Sequence,
+    string EntityType,
+    string EntityKey,
+    string Operation,
+    long? EntityVersion,
+    DateTime ChangedAtUtc,
     string PayloadJson);
 
-public sealed record SyncPushResponse(bool Accepted, string Message);
+public sealed record SyncChangesPageDto(
+    long AfterSequence,
+    long ThroughSequence,
+    long NextSequence,
+    bool HasMore,
+    IReadOnlyList<SyncChangeDto> Changes);
+
+public sealed record SyncSnapshotRowDto(
+    string EntityType,
+    string EntityKey,
+    string Operation,
+    string PayloadJson);
+
+public sealed record SyncSnapshotPageDto(
+    string EntityType,
+    string? Cursor,
+    string? NextCursor,
+    bool HasMore,
+    IReadOnlyList<SyncSnapshotRowDto> Rows);
 
 /// <summary>Completed match card for MAUI Matches list (server is source of truth).</summary>
 public sealed record MatchSummaryDto(
@@ -129,7 +176,8 @@ public sealed record MatchSummaryDto(
     byte OversMode = 0,
     Guid? TournamentId = null,
     Guid? SeriesId = null,
-    string? LiveStreamUrl = null);
+    string? LiveStreamUrl = null,
+    Guid? PlayerTeamId = null);
 
 /// <summary>
 /// Raw Match + Innings + Delivery rows. Lets a device that lost its SQLite file
@@ -228,6 +276,49 @@ public sealed class NetSessionScorecardDto
     public string OversText { get; set; } = "0.0";
     public List<NetScorecardBattingDto> Batting { get; set; } = new();
     public List<NetScorecardBowlingDto> Bowling { get; set; } = new();
+    public List<NetScorecardDeliveryDto> Deliveries { get; set; } = new();
+    public List<NetScorecardPlayerDto> Players { get; set; } = new();
+}
+
+public sealed class NetSessionAwardsRowDto
+{
+    public Guid SessionId { get; set; }
+    public string SessionName { get; set; } = string.Empty;
+    public DateTime SessionDateUtc { get; set; }
+    public Guid? PlayerOfTheSessionPlayerId { get; set; }
+    public string? PlayerOfTheSessionName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
+}
+
+public sealed class NetScorecardDeliveryDto
+{
+    public Guid Id { get; set; }
+    public int Sequence { get; set; }
+    public int OverNumber { get; set; }
+    public int BallInOver { get; set; }
+    public Guid BatterId { get; set; }
+    public Guid NonStrikerId { get; set; }
+    public Guid BowlerId { get; set; }
+    public int RunsOffBat { get; set; }
+    public int ExtraRuns { get; set; }
+    public byte ExtraType { get; set; }
+    public bool IsWicket { get; set; }
+    public byte WicketType { get; set; }
+    public Guid? DismissedPlayerId { get; set; }
+    public Guid? FielderId { get; set; }
+    public bool IsDroppedCatch { get; set; }
+    public bool IsLegalDelivery { get; set; }
+}
+
+public sealed class NetScorecardPlayerDto
+{
+    public Guid Id { get; set; }
+    public string FullName { get; set; } = string.Empty;
 }
 
 public sealed class NetScorecardBattingDto
@@ -900,6 +991,7 @@ public sealed class SchedulerListDto
     public Guid CreatedByUserId { get; set; }
     public string CreatedByUsername { get; set; } = string.Empty;
     public DateTime UpdatedAtUtc { get; set; }
+    public long Version { get; set; }
 }
 
 public sealed class SchedulerDetailDto
@@ -915,6 +1007,9 @@ public sealed class SchedulerDetailDto
     public string? QualificationPicksJson { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string CreatedByUsername { get; set; } = string.Empty;
+    public long Version { get; set; }
     public List<SchedulerTeamDto> Teams { get; set; } = new();
     public List<SchedulerMatchDto> Matches { get; set; } = new();
 }
@@ -958,5 +1053,21 @@ public sealed class SchedulerUpsertRequest
     public string? QualificationPicksJson { get; set; }
     public List<SchedulerTeamDto> Teams { get; set; } = new();
     public List<SchedulerMatchDto> Matches { get; set; } = new();
+}
+
+public sealed class SchedulerSyncRequest
+{
+    public Guid OperationId { get; set; }
+    public Guid TournamentId { get; set; }
+    public long ExpectedVersion { get; set; }
+    public string Operation { get; set; } = "Upsert";
+    public System.Text.Json.JsonElement Payload { get; set; }
+}
+
+public sealed class SchedulerSyncResponse
+{
+    public Guid TournamentId { get; set; }
+    public long AppliedVersion { get; set; }
+    public bool WasDuplicate { get; set; }
 }
 

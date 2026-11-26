@@ -6,7 +6,7 @@ public enum AppRole : byte
     Admin = 1,
     SuperAdmin = 2,
     GroundOwner = 3,
-    PublicUser = 4,
+    // 4 = legacy PublicUser (removed)
     Guest = 5
 }
 
@@ -19,6 +19,11 @@ public sealed class League
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;
     /// <summary>Auto-created SQL catalog or SQLite file. Null = share the default database.</summary>
     public string? DatabaseName { get; set; }
+    /// <summary>Last SuperAdmin edit (name / image / active). Null for rows created before league management.</summary>
+    public DateTime? UpdatedAtUtc { get; set; }
+    /// <summary>Soft delete: hidden everywhere, league database is kept (never dropped).</summary>
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAtUtc { get; set; }
 }
 
 public sealed class AppUser

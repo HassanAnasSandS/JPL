@@ -45,9 +45,9 @@ internal static class GroundsCaller
     public static bool IsSuperAdmin(HttpContext http)
         => string.Equals(Role(http), nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Ground owners only see their own rows. SuperAdmin may see every owner.</summary>
+    /// <summary>Ground owners only see their own rows.</summary>
     public static bool MustScopeToOwnGrounds(HttpContext http)
-        => IsGroundOwner(http) && !IsSuperAdmin(http);
+        => IsGroundOwner(http);
 
     public static IQueryable<Ground> WhereOwnedByCaller(IQueryable<Ground> query, HttpContext http)
     {
@@ -69,5 +69,5 @@ internal static class GroundsCaller
     }
 
     public static bool CanManageGround(HttpContext http, Guid ownerUserId)
-        => IsSuperAdmin(http) || (IsGroundOwner(http) && UserId(http) != Guid.Empty && UserId(http) == ownerUserId);
+        => IsGroundOwner(http) && UserId(http) != Guid.Empty && UserId(http) == ownerUserId;
 }

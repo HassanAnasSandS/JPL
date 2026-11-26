@@ -13,9 +13,10 @@ public static class VenueBookingPaymentStatus
         => string.Equals(status, Paid, StringComparison.OrdinalIgnoreCase) ? Paid : Pending;
 }
 
-public sealed class VenueBooking
+public sealed class VenueBooking : ILeagueScoped
 {
     public Guid Id { get; set; }
+    public Guid LeagueId { get; set; }
     /// <summary>Admin user who created this booking — only they may edit/delete.</summary>
     public Guid CreatedByUserId { get; set; }
     public Guid VenueId { get; set; }
@@ -30,8 +31,9 @@ public sealed class VenueBooking
     public ICollection<VenueBookingParticipant> Participants { get; set; } = new List<VenueBookingParticipant>();
 }
 
-public sealed class VenueBookingParticipant
+public sealed class VenueBookingParticipant : ILeagueScoped
 {
+    public Guid LeagueId { get; set; }
     public Guid VenueBookingId { get; set; }
     public VenueBooking VenueBooking { get; set; } = null!;
     public Guid PlayerId { get; set; }

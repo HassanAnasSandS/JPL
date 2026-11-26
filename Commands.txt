@@ -22,6 +22,10 @@ Android
 
 dotnet build "E:\JPL\JPL.csproj" -f net9.0-android -c Release
 
+Windows Desktop Installer
+
+powershell -ExecutionPolicy Bypass -File "E:\JPL\tools\Publish-Windows.ps1"
+
 -------------------------------------------
 
 Direct Update Run Krnay k lie

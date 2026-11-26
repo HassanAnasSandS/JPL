@@ -169,6 +169,51 @@ public static class EventAwardsCalculator
         return new Awards(overall.PlayerId, bestBat.PlayerId, bestBowl.PlayerId, bestField.PlayerId);
     }
 
+    /// <summary>Calculates one Nets session's awards with the same role eligibility and tie-breaks as its scorecard.</summary>
+    public static Awards ComputeNetsSession(IReadOnlyList<Delivery> deliveries)
+    {
+        if (deliveries.Count == 0)
+            return new Awards(null, null, null, null);
+
+        var rows = CalculateMatch(deliveries)
+            .Select((stats, order) => new EventTally { Stats = stats, Order = order })
+            .ToList();
+        if (rows.Count == 0)
+            return new Awards(null, null, null, null);
+
+        var overall = rows
+            .OrderByDescending(x => x.TotalPoints)
+            .ThenByDescending(x => x.Wickets)
+            .ThenByDescending(x => x.Runs)
+            .ThenBy(x => x.Order)
+            .First();
+        var bestBat = rows
+            .Where(x => x.Stats.Runs > 0 || x.Stats.BallsFaced > 0)
+            .OrderByDescending(x => x.BattingPoints)
+            .ThenByDescending(x => x.Runs)
+            .ThenBy(x => x.Order)
+            .FirstOrDefault();
+        var bestBowl = rows
+            .Where(x => x.Stats.OversBowledBalls > 0 || x.Stats.WidesBowled > 0
+                        || x.Stats.NoBallsBowled > 0 || x.Stats.ByesConceded > 0
+                        || x.Stats.LegByesConceded > 0)
+            .OrderByDescending(x => x.BowlingPoints)
+            .ThenByDescending(x => x.Wickets)
+            .ThenByDescending(x => x.Stats.Maidens)
+            .ThenBy(x => x.Stats.RunsConceded)
+            .ThenBy(x => x.Order)
+            .FirstOrDefault();
+        var bestField = rows
+            .Where(x => x.Stats.Catches + x.Stats.RunOutsEffected + x.Stats.Stumpings + x.Stats.DroppedCatches > 0)
+            .OrderByDescending(x => x.FieldingPoints)
+            .ThenByDescending(x => x.Stats.Catches + x.Stats.RunOutsEffected + x.Stats.Stumpings)
+            .ThenBy(x => x.Stats.DroppedCatches)
+            .ThenBy(x => x.Order)
+            .FirstOrDefault();
+
+        return new Awards(overall.PlayerId, bestBat?.PlayerId, bestBowl?.PlayerId, bestField?.PlayerId);
+    }
+
     private static IReadOnlyList<PlayerMatchTally> CalculateMatch(IReadOnlyList<Delivery> deliveries)
     {
         var players = new Dictionary<Guid, PlayerMatchTally>();

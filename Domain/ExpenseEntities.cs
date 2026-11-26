@@ -13,9 +13,10 @@ public static class ExpenseContributionStatus
         => string.Equals(status, Paid, StringComparison.OrdinalIgnoreCase) ? Paid : Pending;
 }
 
-public sealed class Expense
+public sealed class Expense : ILeagueScoped
 {
     public Guid Id { get; set; }
+    public Guid LeagueId { get; set; }
     public Guid CreatedByUserId { get; set; }
     public string Name { get; set; } = string.Empty;
     public Guid PurchasedByPlayerId { get; set; }
@@ -27,8 +28,9 @@ public sealed class Expense
     public ICollection<ExpenseContribution> Contributions { get; set; } = new List<ExpenseContribution>();
 }
 
-public sealed class ExpenseContribution
+public sealed class ExpenseContribution : ILeagueScoped
 {
+    public Guid LeagueId { get; set; }
     public Guid ExpenseId { get; set; }
     public Expense Expense { get; set; } = null!;
     public Guid PlayerId { get; set; }

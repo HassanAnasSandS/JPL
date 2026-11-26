@@ -113,7 +113,7 @@ public partial class TournamentSchedulerDetailViewModel : ObservableObject, IQue
     private int _tieBreakExtra;
     private bool _suppressTieBreak;
 
-    public bool CanWrite => _auth.Current is { IsGuest: false };
+    public bool CanWrite => _auth.Current?.CanWrite == true;
     public bool ShowNoMatches => !HasMatches;
 
     partial void OnHasMatchesChanged(bool value) => OnPropertyChanged(nameof(ShowNoMatches));
@@ -164,18 +164,21 @@ public partial class TournamentSchedulerDetailViewModel : ObservableObject, IQue
         HasWinner = detail.HasWinner;
         CanEdit = CanWrite && detail.CanEdit && !IsReadOnlyView;
         var isDraft = detail.Status == SchedulerStatus.Draft;
+        var isCompleted = detail.Status == SchedulerStatus.Completed;
         CanChangeResults = CanWrite && detail.CanEdit && !IsReadOnlyView && !isDraft;
         ShowResultHint = CanChangeResults;
         ShowViewOnlyBanner = IsReadOnlyView || !detail.CanEdit || isDraft;
         ViewOnlyBanner = IsReadOnlyView
             ? "View only — browse standings and fixtures. Results cannot be changed here."
-            : isDraft
+            : isDraft && detail.CanEdit
                 ? detail.RoundRobinType == SchedulerRoundRobinType.Custom
                     ? "Draft — finish Custom fixtures in Edit setup (matches per team + who vs who). Schedule starts after that."
                     : "Draft — open Edit setup to finish and start the schedule."
                 : detail.CanEdit
                     ? string.Empty
-                    : "Completed — this schedule is locked. Edit and delete are disabled.";
+                    : isCompleted
+                        ? "Completed — this schedule is locked. Edit and delete are disabled."
+                        : "View only — only the League Admin who created this tournament can edit it.";
         HasStandings = detail.Standings.Count > 0;
         HasMatches = detail.Matches.Count > 0;
         _allMatches = detail.Matches.ToList();

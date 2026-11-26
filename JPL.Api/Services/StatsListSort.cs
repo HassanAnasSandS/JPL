@@ -55,6 +55,10 @@ internal static class StatsListSort
         "Loss" => r.Loss,
         "Tied" => r.Tied,
         "MatchWinPct" => r.Matches == 0 ? double.MinValue : (r.Won + r.Tied * 0.5) / r.Matches,
+        "BestWinningStreak" => r.BestWinningStreak,
+        "CurrentWinningStreak" => r.CurrentWinningStreak,
+        "WorstLosingStreak" => r.WorstLosingStreak,
+        "CurrentLosingStreak" => r.CurrentLosingStreak,
         "CaptainMatches" => r.CaptainMatches,
         "CaptainWon" => r.CaptainWon,
         "CaptainLoss" => r.CaptainLoss,
@@ -73,6 +77,10 @@ internal static class StatsListSort
         "TournamentWinPct" => r.Tournaments == 0
             ? double.MinValue
             : (r.TournamentWon + r.TournamentTied * 0.5) / r.Tournaments,
+        "BestTournamentWinningStreak" => r.BestTournamentWinningStreak,
+        "CurrentTournamentWinningStreak" => r.CurrentTournamentWinningStreak,
+        "WorstTournamentLosingStreak" => r.WorstTournamentLosingStreak,
+        "CurrentTournamentLosingStreak" => r.CurrentTournamentLosingStreak,
         "CaptainTournaments" => r.CaptainTournaments,
         "CaptainTournamentWon" => r.CaptainTournamentWon,
         "CaptainTournamentLoss" => r.CaptainTournamentLoss,
@@ -87,6 +95,10 @@ internal static class StatsListSort
         "SeriesWinPct" => r.Series == 0
             ? double.MinValue
             : (r.SeriesWon + r.SeriesTied * 0.5) / r.Series,
+        "BestSeriesWinningStreak" => r.BestSeriesWinningStreak,
+        "CurrentSeriesWinningStreak" => r.CurrentSeriesWinningStreak,
+        "WorstSeriesLosingStreak" => r.WorstSeriesLosingStreak,
+        "CurrentSeriesLosingStreak" => r.CurrentSeriesLosingStreak,
         "CaptainSeries" => r.CaptainSeries,
         "CaptainSeriesWon" => r.CaptainSeriesWon,
         "CaptainSeriesLoss" => r.CaptainSeriesLoss,
@@ -163,6 +175,9 @@ internal static class StatsListSort
         "FieldingPerMatch" => r.Matches == 0
             ? double.MinValue
             : (r.Catches + r.RunOutsEffected + r.Stumpings) / (double)r.Matches,
+        "FieldingPerSession" => r.Sessions == 0
+            ? double.MinValue
+            : (r.Catches + r.RunOutsEffected + r.Stumpings) / (double)r.Sessions,
         "DroppedCatches" => r.DroppedCatches,
         "AttendanceTotal" => r.AttendanceTotal,
         "AttendancePresent" => r.AttendancePresent,

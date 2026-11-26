@@ -27,8 +27,12 @@ public partial class StatsViewModel : ObservableObject
     private int _partnershipDetailsLoadGen;
     private int _partnershipPageBusy;
     private bool _partnershipLoadPending;
+    private int _netsAwardsLoadGen;
+    private int _netsAwardsPageBusy;
+    private bool _netsAwardsLoadPending;
 
     public ObservableCollection<PlayerCareerSummary> Leaderboard { get; } = new();
+    public ObservableCollection<NetSessionAwardsRow> NetSessionAwards { get; } = new();
     public ObservableCollection<TeamCareerSummary> TeamLeaderboard { get; } = new();
     public ObservableCollection<TeamVsStat> TeamVs { get; } = new();
     public ObservableCollection<TeamSquadPlayerRow> TeamSquad { get; } = new();
@@ -37,6 +41,9 @@ public partial class StatsViewModel : ObservableObject
     public ObservableCollection<CaptainVsStat> CaptainVs { get; } = new();
     public ObservableCollection<PartnershipStat> Partnerships { get; } = new();
     public ObservableCollection<PartnershipMatchStat> PartnershipMatchDetails { get; } = new();
+    public ObservableCollection<ApiMatchSummaryDto> PlayerMatchHistory { get; } = new();
+    public ObservableCollection<PlayerTournamentHistoryItem> PlayerTournamentHistory { get; } = new();
+    public ObservableCollection<PlayerSeriesHistoryItem> PlayerSeriesHistory { get; } = new();
     public ObservableCollection<VenueListItem> VenueOptions { get; } = new();
     public IReadOnlyList<string> PlayerRoleOptions { get; } = new[] { "All", "As a Captain", "As a Player" };
 
@@ -73,6 +80,38 @@ public partial class StatsViewModel : ObservableObject
     [ObservableProperty] private bool isLoadingPartnershipDetails;
     [ObservableProperty] private string? partnershipDetailsError;
     [ObservableProperty] private PartnershipStat? selectedPartnershipPair;
+    [ObservableProperty] private bool showPlayerMatchHistory;
+    [ObservableProperty] private bool isLoadingPlayerMatchHistory;
+    [ObservableProperty] private string? playerMatchHistoryError;
+    [ObservableProperty] private string playerMatchHistoryTitle = string.Empty;
+    [ObservableProperty] private int bestWinningStreak;
+    [ObservableProperty] private int currentWinningStreak;
+    [ObservableProperty] private int worstLosingStreak;
+    [ObservableProperty] private int currentLosingStreak;
+    [ObservableProperty] private int bestTournamentWinningStreak;
+    [ObservableProperty] private int currentTournamentWinningStreak;
+    [ObservableProperty] private int worstTournamentLosingStreak;
+    [ObservableProperty] private int currentTournamentLosingStreak;
+    [ObservableProperty] private int playerTournamentPlayed;
+    [ObservableProperty] private int playerTournamentWon;
+    [ObservableProperty] private int playerTournamentLoss;
+    [ObservableProperty] private int playerTournamentTied;
+    [ObservableProperty] private int bestSeriesWinningStreak;
+    [ObservableProperty] private int currentSeriesWinningStreak;
+    [ObservableProperty] private int worstSeriesLosingStreak;
+    [ObservableProperty] private int currentSeriesLosingStreak;
+    [ObservableProperty] private int playerSeriesPlayed;
+    [ObservableProperty] private int playerSeriesWon;
+    [ObservableProperty] private int playerSeriesLoss;
+    [ObservableProperty] private int playerSeriesTied;
+    [ObservableProperty] private bool showPlayerTournamentHistory;
+    [ObservableProperty] private bool isLoadingPlayerTournamentHistory;
+    [ObservableProperty] private string? playerTournamentHistoryError;
+    [ObservableProperty] private string playerTournamentHistoryTitle = string.Empty;
+    [ObservableProperty] private bool showPlayerSeriesHistory;
+    [ObservableProperty] private bool isLoadingPlayerSeriesHistory;
+    [ObservableProperty] private string? playerSeriesHistoryError;
+    [ObservableProperty] private string playerSeriesHistoryTitle = string.Empty;
 
     public bool ShowTable => !ShowDetail;
     public bool ShowLoading => IsBusy || IsSorting;
@@ -87,7 +126,7 @@ public partial class StatsViewModel : ObservableObject
     };
     public string CountLabel => TotalCount <= 0
         ? "No stats"
-        : $"{(IsPartnershipStats ? Partnerships.Count : IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count)} of {TotalCount}";
+        : $"{(IsNetsAwardsStats ? NetSessionAwards.Count : IsPartnershipStats ? Partnerships.Count : IsTeamStats ? TeamLeaderboard.Count : Leaderboard.Count)} of {TotalCount}";
     public bool IsBattingTab => HeadToHeadMode == 0;
     public bool IsBowlingTab => HeadToHeadMode == 1;
     public bool IsFieldingTab => HeadToHeadMode == 2;
@@ -95,9 +134,15 @@ public partial class StatsViewModel : ObservableObject
     public bool IsPartnershipTab => HeadToHeadMode == 4;
     public bool ShowConfrontationsList => HeadToHeadMode is 0 or 1;
     public bool IsMatchStats => SelectedCategory == 0;
+    /// <summary>Match/Tournament/Series use two-line streak headers; keep name + stats bars the same height.</summary>
+    public bool HasTallStatsHeader => IsMatchStats || IsTournamentStats || IsSeriesStats;
+    public double StatsHeaderBarHeight => HasTallStatsHeader ? 50 : 42;
+    /// <summary>Body spacer under the frozen header = bar height + gold underline (2).</summary>
+    public double StatsHeaderSpacer => StatsHeaderBarHeight + 2;
     public bool IsTournamentStats => SelectedCategory == 1;
     public bool IsSeriesStats => SelectedCategory == 2;
     public bool IsBattingStats => SelectedCategory == 3;
+    public bool IsNetsAwardsStats => IsNetsSource && SelectedCategory == 12;
     public bool IsPartnershipStats => SelectedCategory == 11;
     public bool IsMatchBattingStats => IsBattingStats && IsMatchesSource;
     public bool IsNetsBattingStats => IsBattingStats && IsNetsSource;
@@ -125,7 +170,7 @@ public partial class StatsViewModel : ObservableObject
         || Columns.IsVisible("PartnerAverage") || Columns.IsVisible("PartnerOuts");
     public bool ShowPlayerDetail => ShowDetail && SelectedCareer is not null && SelectedTeam is null;
     public bool ShowTeamDetail => ShowDetail && SelectedTeam is not null;
-    public bool ShowPlayerLeaderboard => !IsTeamStats && !IsExpenseStats && !IsPartnershipStats;
+    public bool ShowPlayerLeaderboard => !IsTeamStats && !IsExpenseStats && !IsPartnershipStats && !IsNetsAwardsStats;
     public bool ShowMatchCategories => !IsNetsSource;
     public bool ShowMatchSpecificFilters => ShowMatchCategories && !IsExpenseStats;
     public bool ShowAsCaptainFilter => !IsNetsSource && (SelectedCategory is >= 0 and <= 8 or 10);
@@ -135,12 +180,18 @@ public partial class StatsViewModel : ObservableObject
     private bool FilterAsCaptain => string.Equals(SelectedPlayerRole, "As a Captain", StringComparison.Ordinal);
     private bool FilterAsPlayer => string.Equals(SelectedPlayerRole, "As a Player", StringComparison.Ordinal);
     public bool IsMatchesSource => !IsNetsSource;
+    public string SessionOrMatchLabel => IsNetsSource ? "Session" : "Match";
+    public string SessionOrMatchSortParameter => IsNetsSource ? "Sessions" : "Matches";
+    public string FieldingRateLabel => IsNetsSource ? "Per Session" : "Per Match";
+    public string FieldingRateSortParameter => IsNetsSource ? "FieldingPerSession" : "FieldingPerMatch";
     public string StatsSourceLabel => IsNetsSource ? "Nets" : "Matches";
     public string ConfrontationSectionTitle => IsNetsSource ? "Nets 1 vs 1" : "Head to head";
     public string FiltersToggleText => ShowFilters
         ? "Hide filters"
         : HasActiveFilters ? "Filters on" : "Filters";
-    public string EmptyStatsHint => IsNetsSource
+    public string EmptyStatsHint => IsNetsAwardsStats
+        ? "No completed nets sessions yet."
+        : IsNetsSource
         ? "No nets stats yet — complete a session first."
         : IsPartnershipStats
             ? "No partnership records match these filters."
@@ -149,7 +200,7 @@ public partial class StatsViewModel : ObservableObject
             : IsTeamStats
             ? "No team stats yet — complete a match first."
             : "No stats yet — complete a match first.";
-    public string SearchPlaceholder => IsExpenseStats ? "Filter expense or purchaser" : IsTeamStats ? "Search team" : IsPartnershipStats ? "Search player or pair" : "Search player";
+    public string SearchPlaceholder => IsNetsAwardsStats ? "Search session" : IsExpenseStats ? "Filter expense or purchaser" : IsTeamStats ? "Search team" : IsPartnershipStats ? "Search player or pair" : "Search player";
     public string NameColumnTitle => IsTeamStats ? "Team" : IsPartnershipStats ? "Partnership" : "Player";
     public string NameSortParameter => IsTeamStats ? "TeamName" : IsPartnershipStats ? "PartnershipName" : "PlayerName";
     public string TableHint => IsTeamStats
@@ -340,15 +391,24 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowAsCaptainFilter));
         OnPropertyChanged(nameof(ShowCaptainFilter));
         OnPropertyChanged(nameof(IsMatchesSource));
+        OnPropertyChanged(nameof(SessionOrMatchLabel));
+        OnPropertyChanged(nameof(SessionOrMatchSortParameter));
+        OnPropertyChanged(nameof(FieldingRateLabel));
+        OnPropertyChanged(nameof(FieldingRateSortParameter));
         OnPropertyChanged(nameof(StatsSourceLabel));
         OnPropertyChanged(nameof(ConfrontationSectionTitle));
         OnPropertyChanged(nameof(EmptyStatsHint));
         OnPropertyChanged(nameof(CareerSubtitle));
         OnPropertyChanged(nameof(IsMatchBattingStats));
         OnPropertyChanged(nameof(IsNetsBattingStats));
+        OnPropertyChanged(nameof(IsNetsAwardsStats));
+        OnPropertyChanged(nameof(ShowPlayerLeaderboard));
+        OnPropertyChanged(nameof(ShowColumnPicker));
         if (value && HeadToHeadMode == 3)
             HeadToHeadMode = 0;
-        if (value && SelectedCategory is 0 or 1 or 2 or 6 or 7 or 8 or 9 or 10 or 11)
+        if (value && SelectedCategory is not (3 or 4 or 5 or 12))
+            SelectedCategory = 3;
+        else if (!value && SelectedCategory == 12)
             SelectedCategory = 3;
         else
             ApplyCategory();
@@ -363,15 +423,25 @@ public partial class StatsViewModel : ObservableObject
 
     partial void OnSelectedCategoryChanged(int oldValue, int newValue)
     {
+        if (oldValue == 12 && newValue != 12)
+        {
+            Interlocked.Increment(ref _netsAwardsLoadGen);
+            IsBusy = false;
+            IsLoadingMore = false;
+        }
         if (oldValue == 11 && newValue != 11)
             Interlocked.Increment(ref _partnershipLoadGen);
 
         OnPropertyChanged(nameof(IsMatchStats));
+        OnPropertyChanged(nameof(HasTallStatsHeader));
+        OnPropertyChanged(nameof(StatsHeaderBarHeight));
+        OnPropertyChanged(nameof(StatsHeaderSpacer));
         OnPropertyChanged(nameof(IsTournamentStats));
         OnPropertyChanged(nameof(IsSeriesStats));
         OnPropertyChanged(nameof(IsBattingStats));
         OnPropertyChanged(nameof(IsMatchBattingStats));
         OnPropertyChanged(nameof(IsNetsBattingStats));
+        OnPropertyChanged(nameof(IsNetsAwardsStats));
         OnPropertyChanged(nameof(IsBowlingStats));
         OnPropertyChanged(nameof(IsFieldingStats));
         OnPropertyChanged(nameof(IsCaptaincyStats));
@@ -381,6 +451,7 @@ public partial class StatsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsExpenseStats));
         OnPropertyChanged(nameof(IsPartnershipStats));
         OnPropertyChanged(nameof(ShowPlayerLeaderboard));
+        OnPropertyChanged(nameof(ShowColumnPicker));
         OnPropertyChanged(nameof(ShowMatchSpecificFilters));
         OnPropertyChanged(nameof(ShowAsCaptainFilter));
         OnPropertyChanged(nameof(ShowCaptainFilter));
@@ -440,6 +511,7 @@ public partial class StatsViewModel : ObservableObject
             "tournament" => 1,
             "series" => 2,
             "batting" => 3,
+            "awards" => 12,
             "partnerships" => 11,
             "bowling" => 4,
             "fielding" => 5,
@@ -458,12 +530,12 @@ public partial class StatsViewModel : ObservableObject
         {
             case 1:
                 CategoryTitle = "Tournament";
-                CategoryHint = "Tournaments played, won, lost, tied";
+                CategoryHint = "Tournaments played, won, lost, tied, streaks";
                 SetDefaultSort("Tournaments");
                 break;
             case 2:
                 CategoryTitle = "Series";
-                CategoryHint = "Series played, won, lost, tied";
+                CategoryHint = "Series played, won, lost, tied, streaks";
                 SetDefaultSort("Series");
                 break;
             case 3:
@@ -487,6 +559,11 @@ public partial class StatsViewModel : ObservableObject
                 CategoryTitle = "Fielding";
                 CategoryHint = "Catches, run outs, stumpings, dropped catches";
                 SetDefaultSort("Catches");
+                break;
+            case 12:
+                CategoryTitle = "Awards";
+                CategoryHint = "Player of the Session, Best Batsman, Best Bowler, Best Fielder";
+                SetDefaultSort("SessionDateUtc");
                 break;
             case 6:
                 CategoryTitle = "Captaincy";
@@ -515,7 +592,7 @@ public partial class StatsViewModel : ObservableObject
                 break;
             default:
                 CategoryTitle = "Match";
-                CategoryHint = "Played, won, lost, tied";
+                CategoryHint = "Played, won, lost, tied, streaks";
                 SetDefaultSort("Matches");
                 break;
         }
@@ -542,6 +619,11 @@ public partial class StatsViewModel : ObservableObject
     {
         if (ShowDetail)
             return;
+        if (IsNetsAwardsStats)
+        {
+            await ReloadNetsAwardsAsync().ConfigureAwait(true);
+            return;
+        }
         if (IsPartnershipStats)
         {
             await ReloadPartnershipsAsync().ConfigureAwait(true);
@@ -558,6 +640,78 @@ public partial class StatsViewModel : ObservableObject
         TeamLeaderboard.Clear();
         OnPropertyChanged(nameof(CountLabel));
         await LoadMoreAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadNetsAwardsAsync()
+    {
+        Interlocked.Increment(ref _netsAwardsLoadGen);
+        NetSessionAwards.Clear();
+        TotalCount = 0;
+        HasMore = true;
+        OnPropertyChanged(nameof(CountLabel));
+        await LoadMoreNetsAwardsAsync().ConfigureAwait(true);
+    }
+
+    private async Task LoadMoreNetsAwardsAsync()
+    {
+        if (!IsNetsAwardsStats || !HasMore)
+            return;
+
+        if (Interlocked.Exchange(ref _netsAwardsPageBusy, 1) == 1)
+        {
+            _netsAwardsLoadPending = true;
+            return;
+        }
+
+        var generation = Volatile.Read(ref _netsAwardsLoadGen);
+        try
+        {
+            _netsAwardsLoadPending = false;
+            if (NetSessionAwards.Count == 0)
+                IsBusy = true;
+            else
+                IsLoadingMore = true;
+            ErrorMessage = null;
+
+            var page = await _stats.GetNetSessionAwardsPageAsync(NetSessionAwards.Count, PlayerNameFilter)
+                .ConfigureAwait(true);
+            if (generation != Volatile.Read(ref _netsAwardsLoadGen) || !IsNetsAwardsStats)
+                return;
+
+            TotalCount = page.TotalCount;
+            foreach (var row in page.Items)
+            {
+                row.IsAltRow = NetSessionAwards.Count % 2 == 1;
+                NetSessionAwards.Add(row);
+            }
+            HasMore = page.HasMore;
+            OnPropertyChanged(nameof(CountLabel));
+        }
+        catch (Exception ex)
+        {
+            if (generation == Volatile.Read(ref _netsAwardsLoadGen))
+            {
+                ErrorMessage = NetworkUi.IsNetworkFailure(ex)
+                    ? "Offline — Nets awards need internet."
+                    : $"Nets awards require API. {ex.Message}";
+                HasMore = false;
+            }
+        }
+        finally
+        {
+            if (generation == Volatile.Read(ref _netsAwardsLoadGen) || IsNetsAwardsStats)
+            {
+                IsBusy = false;
+                IsLoadingMore = false;
+            }
+            Interlocked.Exchange(ref _netsAwardsPageBusy, 0);
+            var reloadAfterCurrentPage = generation != Volatile.Read(ref _netsAwardsLoadGen)
+                && IsNetsAwardsStats && HasMore;
+            var loadQueuedPage = _netsAwardsLoadPending && IsNetsAwardsStats && HasMore;
+            _netsAwardsLoadPending = false;
+            if (reloadAfterCurrentPage || loadQueuedPage)
+                await LoadMoreNetsAwardsAsync().ConfigureAwait(true);
+        }
     }
 
     private async Task ReloadPartnershipsAsync()
@@ -675,6 +829,11 @@ public partial class StatsViewModel : ObservableObject
             await LoadMorePartnershipsAsync().ConfigureAwait(true);
             return;
         }
+        if (IsNetsAwardsStats)
+        {
+            await LoadMoreNetsAwardsAsync().ConfigureAwait(true);
+            return;
+        }
         if (!HasMore || Interlocked.Exchange(ref _loadBusy, 1) == 1)
             return;
 
@@ -740,11 +899,21 @@ public partial class StatsViewModel : ObservableObject
             if (IsTeamStats)
                 return;
             TotalCount = board.TotalCount;
-            foreach (var row in board.Items)
+            var pageItems = board.Items as IList<PlayerCareerSummary> ?? board.Items.ToList();
+            if (IsMatchesSource && IsMatchStats)
+                await FillMissingMatchStreaksAsync(pageItems).ConfigureAwait(true);
+            else if (IsMatchesSource && IsTournamentStats)
+                await FillMissingTournamentStreaksAsync(pageItems).ConfigureAwait(true);
+            else if (IsMatchesSource && IsSeriesStats)
+                await FillMissingSeriesStreaksAsync(pageItems).ConfigureAwait(true);
+            // Hosted API may sort streak columns as all-zeros; re-order after client fill.
+            pageItems = ReorderStreakPageIfNeeded(pageItems, skip);
+            foreach (var row in pageItems)
                 row.IsAltRow = row.Rank % 2 == 0;
-            ListPaging.Append(Leaderboard, board.Items, p => p.PlayerId);
+            ListPaging.Append(Leaderboard, pageItems, p => p.PlayerId);
             HasMore = board.HasMore;
             OnPropertyChanged(nameof(CountLabel));
+            Columns.NotifyLayoutChanged();
 
             UpdateSortedByText();
         }
@@ -927,6 +1096,18 @@ public partial class StatsViewModel : ObservableObject
         "Sessions" => "Sessions",
         "Matches" => "Match",
         "MatchWinPct" => "Win %",
+        "BestWinningStreak" => "Best winning streak",
+        "CurrentWinningStreak" => "Current winning streak",
+        "WorstLosingStreak" => "Worst losing streak",
+        "CurrentLosingStreak" => "Current losing streak",
+        "BestTournamentWinningStreak" => "Best winning streak",
+        "CurrentTournamentWinningStreak" => "Current winning streak",
+        "WorstTournamentLosingStreak" => "Worst losing streak",
+        "CurrentTournamentLosingStreak" => "Current losing streak",
+        "BestSeriesWinningStreak" => "Best winning streak",
+        "CurrentSeriesWinningStreak" => "Current winning streak",
+        "WorstSeriesLosingStreak" => "Worst losing streak",
+        "CurrentSeriesLosingStreak" => "Current losing streak",
         "TournamentWinPct" => "Win %",
         "SeriesWinPct" => "Win %",
         "CaptainWinPct" => "Win %",
@@ -1117,6 +1298,73 @@ public partial class StatsViewModel : ObservableObject
     private async Task OpenPlayerAsync(PlayerCareerSummary? row)
     {
         if (row is null) return;
+        if (IsSeriesStats && IsMatchesSource)
+        {
+            PlayerSeriesHistory.Clear();
+            ApplySeriesStreaksFromCareer(row);
+            PlayerSeriesHistoryTitle = $"{row.PlayerName} · Series";
+            PlayerSeriesHistoryError = null;
+            ShowPlayerSeriesHistory = true;
+            IsLoadingPlayerSeriesHistory = true;
+            try
+            {
+                foreach (var series in await _stats.GetPlayerSeriesHistoryAsync(row.PlayerId).ConfigureAwait(true))
+                    PlayerSeriesHistory.Add(series);
+            }
+            catch (Exception ex)
+            {
+                PlayerSeriesHistoryError = NetworkUi.IsNetworkFailure(ex)
+                    ? "Offline — series history needs internet."
+                    : ex.Message;
+            }
+            finally { IsLoadingPlayerSeriesHistory = false; }
+            return;
+        }
+        if (IsTournamentStats && IsMatchesSource)
+        {
+            PlayerTournamentHistory.Clear();
+            ApplyTournamentStreaksFromCareer(row);
+            PlayerTournamentHistoryTitle = $"{row.PlayerName} · Tournaments";
+            PlayerTournamentHistoryError = null;
+            ShowPlayerTournamentHistory = true;
+            IsLoadingPlayerTournamentHistory = true;
+            try
+            {
+                foreach (var tournament in await _stats.GetPlayerTournamentHistoryAsync(row.PlayerId).ConfigureAwait(true))
+                    PlayerTournamentHistory.Add(tournament);
+            }
+            catch (Exception ex)
+            {
+                PlayerTournamentHistoryError = NetworkUi.IsNetworkFailure(ex)
+                    ? "Offline — tournament history needs internet."
+                    : ex.Message;
+            }
+            finally { IsLoadingPlayerTournamentHistory = false; }
+            return;
+        }
+        if (IsMatchStats && IsMatchesSource)
+        {
+            PlayerMatchHistory.Clear();
+            ApplyMatchStreaksFromCareer(row);
+            PlayerMatchHistoryTitle = $"{row.PlayerName} · All Matches";
+            PlayerMatchHistoryError = null;
+            ShowPlayerMatchHistory = true;
+            IsLoadingPlayerMatchHistory = true;
+            try
+            {
+                var matches = await _stats.GetPlayerMatchesAsync(row.PlayerId).ConfigureAwait(true);
+                foreach (var match in matches)
+                    PlayerMatchHistory.Add(match);
+            }
+            catch (Exception ex)
+            {
+                PlayerMatchHistoryError = NetworkUi.IsNetworkFailure(ex)
+                    ? "Offline — match history needs internet."
+                    : ex.Message;
+            }
+            finally { IsLoadingPlayerMatchHistory = false; }
+            return;
+        }
         SelectedTeam = null;
         TeamVs.Clear();
         TeamSquad.Clear();
@@ -1129,6 +1377,327 @@ public partial class StatsViewModel : ObservableObject
             HeadToHeadMode = 0;
         ShowDetail = true;
         await LoadPlayerDetailsAsync().ConfigureAwait(true);
+    }
+
+    public string BestWinningStreakText => MatchStreakText(BestWinningStreak);
+    public string CurrentWinningStreakText => MatchStreakText(CurrentWinningStreak);
+    public string WorstLosingStreakText => MatchStreakText(WorstLosingStreak);
+    public string CurrentLosingStreakText => MatchStreakText(CurrentLosingStreak);
+    public string BestTournamentWinningStreakText => TournamentStreakText(BestTournamentWinningStreak);
+    public string CurrentTournamentWinningStreakText => TournamentStreakText(CurrentTournamentWinningStreak);
+    public string WorstTournamentLosingStreakText => TournamentStreakText(WorstTournamentLosingStreak);
+    public string CurrentTournamentLosingStreakText => TournamentStreakText(CurrentTournamentLosingStreak);
+    public string BestSeriesWinningStreakText => SeriesStreakText(BestSeriesWinningStreak);
+    public string CurrentSeriesWinningStreakText => SeriesStreakText(CurrentSeriesWinningStreak);
+    public string WorstSeriesLosingStreakText => SeriesStreakText(WorstSeriesLosingStreak);
+    public string CurrentSeriesLosingStreakText => SeriesStreakText(CurrentSeriesLosingStreak);
+
+    partial void OnBestWinningStreakChanged(int value) => OnPropertyChanged(nameof(BestWinningStreakText));
+    partial void OnCurrentWinningStreakChanged(int value) => OnPropertyChanged(nameof(CurrentWinningStreakText));
+    partial void OnWorstLosingStreakChanged(int value) => OnPropertyChanged(nameof(WorstLosingStreakText));
+    partial void OnCurrentLosingStreakChanged(int value) => OnPropertyChanged(nameof(CurrentLosingStreakText));
+    partial void OnBestTournamentWinningStreakChanged(int value) => OnPropertyChanged(nameof(BestTournamentWinningStreakText));
+    partial void OnCurrentTournamentWinningStreakChanged(int value) => OnPropertyChanged(nameof(CurrentTournamentWinningStreakText));
+    partial void OnWorstTournamentLosingStreakChanged(int value) => OnPropertyChanged(nameof(WorstTournamentLosingStreakText));
+    partial void OnCurrentTournamentLosingStreakChanged(int value) => OnPropertyChanged(nameof(CurrentTournamentLosingStreakText));
+    partial void OnBestSeriesWinningStreakChanged(int value) => OnPropertyChanged(nameof(BestSeriesWinningStreakText));
+    partial void OnCurrentSeriesWinningStreakChanged(int value) => OnPropertyChanged(nameof(CurrentSeriesWinningStreakText));
+    partial void OnWorstSeriesLosingStreakChanged(int value) => OnPropertyChanged(nameof(WorstSeriesLosingStreakText));
+    partial void OnCurrentSeriesLosingStreakChanged(int value) => OnPropertyChanged(nameof(CurrentSeriesLosingStreakText));
+
+    private static string MatchStreakText(int value) => $"{value} match{(value == 1 ? "" : "es")}";
+    private static string TournamentStreakText(int value) => $"{value} tournament{(value == 1 ? "" : "s")}";
+    private static string SeriesStreakText(int value) => $"{value} series";
+
+    private void ApplyMatchStreaksFromCareer(PlayerCareerSummary row)
+    {
+        BestWinningStreak = row.BestWinningStreak;
+        CurrentWinningStreak = row.CurrentWinningStreak;
+        WorstLosingStreak = row.WorstLosingStreak;
+        CurrentLosingStreak = row.CurrentLosingStreak;
+    }
+
+    private static bool IsStreakSortColumn(string? column) => column is
+        "BestWinningStreak" or "CurrentWinningStreak" or "WorstLosingStreak" or "CurrentLosingStreak"
+        or "BestTournamentWinningStreak" or "CurrentTournamentWinningStreak"
+        or "WorstTournamentLosingStreak" or "CurrentTournamentLosingStreak"
+        or "BestSeriesWinningStreak" or "CurrentSeriesWinningStreak"
+        or "WorstSeriesLosingStreak" or "CurrentSeriesLosingStreak";
+
+    private static int StreakSortValue(PlayerCareerSummary row, string column) => column switch
+    {
+        "BestWinningStreak" => row.BestWinningStreak,
+        "CurrentWinningStreak" => row.CurrentWinningStreak,
+        "WorstLosingStreak" => row.WorstLosingStreak,
+        "CurrentLosingStreak" => row.CurrentLosingStreak,
+        "BestTournamentWinningStreak" => row.BestTournamentWinningStreak,
+        "CurrentTournamentWinningStreak" => row.CurrentTournamentWinningStreak,
+        "WorstTournamentLosingStreak" => row.WorstTournamentLosingStreak,
+        "CurrentTournamentLosingStreak" => row.CurrentTournamentLosingStreak,
+        "BestSeriesWinningStreak" => row.BestSeriesWinningStreak,
+        "CurrentSeriesWinningStreak" => row.CurrentSeriesWinningStreak,
+        "WorstSeriesLosingStreak" => row.WorstSeriesLosingStreak,
+        "CurrentSeriesLosingStreak" => row.CurrentSeriesLosingStreak,
+        _ => 0
+    };
+
+    private IList<PlayerCareerSummary> ReorderStreakPageIfNeeded(IList<PlayerCareerSummary> items, int skip)
+    {
+        if (items.Count == 0 || !IsStreakSortColumn(_sortColumn))
+        {
+            for (var i = 0; i < items.Count; i++)
+                items[i].Rank = skip + i + 1;
+            return items;
+        }
+
+        IEnumerable<PlayerCareerSummary> ordered = _sortAscending
+            ? items.OrderBy(r => StreakSortValue(r, _sortColumn)).ThenBy(r => r.PlayerName, StringComparer.OrdinalIgnoreCase)
+            : items.OrderByDescending(r => StreakSortValue(r, _sortColumn)).ThenBy(r => r.PlayerName, StringComparer.OrdinalIgnoreCase);
+        var list = ordered.ToList();
+        for (var i = 0; i < list.Count; i++)
+            list[i].Rank = skip + i + 1;
+        return list;
+    }
+
+    /// <summary>
+    /// Hosted API may not expose streak fields yet — fill from history before rows render
+    /// so columns are not stuck at 0 until a later sort/reload.
+    /// </summary>
+    private async Task FillMissingMatchStreaksAsync(IEnumerable<PlayerCareerSummary> rows)
+    {
+        var missing = rows.Where(StreakStats.NeedsMatchStreakFill).ToList();
+        if (missing.Count == 0)
+            return;
+
+        using var gate = new SemaphoreSlim(4);
+        var tasks = missing.Select(async row =>
+        {
+            await gate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var matches = await _stats.GetPlayerMatchesAsync(row.PlayerId).ConfigureAwait(false);
+                StreakStats.ApplyMatchStreaks(row, matches);
+            }
+            catch
+            {
+                /* keep zeros if history is unavailable */
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private async Task FillMissingTournamentStreaksAsync(IEnumerable<PlayerCareerSummary> rows)
+    {
+        var missing = rows.Where(StreakStats.NeedsTournamentStreakFill).ToList();
+        if (missing.Count == 0)
+            return;
+
+        using var gate = new SemaphoreSlim(4);
+        var tasks = missing.Select(async row =>
+        {
+            await gate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var history = await _stats.GetPlayerTournamentHistoryAsync(row.PlayerId).ConfigureAwait(false);
+                ApplyTournamentStreaksFromHistory(row, history);
+            }
+            catch
+            {
+                /* keep zeros if history is unavailable */
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private async Task FillMissingSeriesStreaksAsync(IEnumerable<PlayerCareerSummary> rows)
+    {
+        var missing = rows.Where(StreakStats.NeedsSeriesStreakFill).ToList();
+        if (missing.Count == 0)
+            return;
+
+        using var gate = new SemaphoreSlim(4);
+        var tasks = missing.Select(async row =>
+        {
+            await gate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var history = await _stats.GetPlayerSeriesHistoryAsync(row.PlayerId).ConfigureAwait(false);
+                ApplySeriesStreaksFromHistory(row, history);
+            }
+            catch
+            {
+                /* keep zeros if history is unavailable */
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private static void ApplyTournamentStreaksFromHistory(
+        PlayerCareerSummary row, IReadOnlyList<PlayerTournamentHistoryItem> history)
+    {
+        var outcomes = history
+            .Select(t =>
+            {
+                var date = t.Matches.Count == 0
+                    ? DateTime.MinValue
+                    : t.Matches.Max(m => m.MatchDateUtc);
+                var wins = t.Matches.Count(m => StreakStats.MatchOutcome(m) > 0);
+                var losses = t.Matches.Count(m => StreakStats.MatchOutcome(m) < 0);
+                // Approximate tournament result from that player's match results in the event.
+                var outcome = wins == losses ? 0 : wins > losses ? 1 : -1;
+                return (date, t.TournamentId, outcome);
+            })
+            .Where(x => x.date != DateTime.MinValue);
+        var (bestWin, currentWin, worstLoss, currentLoss) = StreakStats.Compute(outcomes);
+        row.BestTournamentWinningStreak = bestWin;
+        row.CurrentTournamentWinningStreak = currentWin;
+        row.WorstTournamentLosingStreak = worstLoss;
+        row.CurrentTournamentLosingStreak = currentLoss;
+    }
+
+    private static void ApplySeriesStreaksFromHistory(
+        PlayerCareerSummary row, IReadOnlyList<PlayerSeriesHistoryItem> history)
+    {
+        var outcomes = history.Select(s =>
+        {
+            var date = s.Matches.Count == 0
+                ? DateTime.MinValue
+                : s.Matches.Max(m => m.MatchDateUtc);
+            // Series list already has win counts for each side when available.
+            var outcome = s.TeamAWins == s.TeamBWins
+                ? 0
+                : PlayerSeriesOutcome(s);
+            return (date, s.SeriesId, outcome);
+        }).Where(x => x.date != DateTime.MinValue);
+        var (bestWin, currentWin, worstLoss, currentLoss) = StreakStats.Compute(outcomes);
+        row.BestSeriesWinningStreak = bestWin;
+        row.CurrentSeriesWinningStreak = currentWin;
+        row.WorstSeriesLosingStreak = worstLoss;
+        row.CurrentSeriesLosingStreak = currentLoss;
+    }
+
+    private static int PlayerSeriesOutcome(PlayerSeriesHistoryItem series)
+    {
+        // Infer the player's side from match (You) labels when possible.
+        var sample = series.Matches.FirstOrDefault(m => m.PlayerTeamId is Guid);
+        if (sample?.PlayerTeamId is Guid teamId)
+        {
+            if (teamId == sample.TeamAId)
+                return series.TeamAWins == series.TeamBWins ? 0
+                    : series.TeamAWins > series.TeamBWins ? 1 : -1;
+            if (teamId == sample.TeamBId)
+                return series.TeamAWins == series.TeamBWins ? 0
+                    : series.TeamBWins > series.TeamAWins ? 1 : -1;
+        }
+
+        var wins = series.Matches.Count(m => StreakStats.MatchOutcome(m) > 0);
+        var losses = series.Matches.Count(m => StreakStats.MatchOutcome(m) < 0);
+        return wins == losses ? 0 : wins > losses ? 1 : -1;
+    }
+
+    private void ApplyTournamentStreaksFromCareer(PlayerCareerSummary row)
+    {
+        BestTournamentWinningStreak = row.BestTournamentWinningStreak;
+        CurrentTournamentWinningStreak = row.CurrentTournamentWinningStreak;
+        WorstTournamentLosingStreak = row.WorstTournamentLosingStreak;
+        CurrentTournamentLosingStreak = row.CurrentTournamentLosingStreak;
+        PlayerTournamentPlayed = row.Tournaments;
+        PlayerTournamentWon = row.TournamentWon;
+        PlayerTournamentLoss = row.TournamentLoss;
+        PlayerTournamentTied = row.TournamentTied;
+    }
+
+    private void ApplySeriesStreaksFromCareer(PlayerCareerSummary row)
+    {
+        BestSeriesWinningStreak = row.BestSeriesWinningStreak;
+        CurrentSeriesWinningStreak = row.CurrentSeriesWinningStreak;
+        WorstSeriesLosingStreak = row.WorstSeriesLosingStreak;
+        CurrentSeriesLosingStreak = row.CurrentSeriesLosingStreak;
+        PlayerSeriesPlayed = row.Series;
+        PlayerSeriesWon = row.SeriesWon;
+        PlayerSeriesLoss = row.SeriesLoss;
+        PlayerSeriesTied = row.SeriesTied;
+    }
+
+    [RelayCommand]
+    private async Task OpenNetsAwardPlayerAsync(Guid? playerId)
+    {
+        if (playerId is not Guid id || id == Guid.Empty)
+            return;
+
+        try
+        {
+            IsBusy = true;
+            ErrorMessage = null;
+            var career = await _stats.GetCareerAsync(id, "nets").ConfigureAwait(true);
+            if (career is null)
+            {
+                ErrorMessage = "Nets player stats not found.";
+                return;
+            }
+
+            await OpenPlayerAsync(career).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = NetworkUi.IsNetworkFailure(ex)
+                ? "Offline — Nets player stats need internet."
+                : $"Nets player stats require API. {ex.Message}";
+            if (NetworkUi.IsNetworkFailure(ex))
+                await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ClosePlayerMatchHistory()
+    {
+        ShowPlayerMatchHistory = false;
+        IsLoadingPlayerMatchHistory = false;
+        PlayerMatchHistoryError = null;
+    }
+
+    [RelayCommand]
+    private void ClosePlayerTournamentHistory()
+    {
+        ShowPlayerTournamentHistory = false;
+        IsLoadingPlayerTournamentHistory = false;
+        PlayerTournamentHistoryError = null;
+    }
+
+    [RelayCommand]
+    private void TogglePlayerTournament(PlayerTournamentHistoryItem? tournament)
+    {
+        if (tournament is not null) tournament.IsExpanded = !tournament.IsExpanded;
+    }
+
+    [RelayCommand]
+    private void ClosePlayerSeriesHistory()
+    {
+        ShowPlayerSeriesHistory = false;
+        IsLoadingPlayerSeriesHistory = false;
+        PlayerSeriesHistoryError = null;
+    }
+
+    [RelayCommand]
+    private void TogglePlayerSeries(PlayerSeriesHistoryItem? series)
+    {
+        if (series is not null) series.IsExpanded = !series.IsExpanded;
     }
 
     [RelayCommand]

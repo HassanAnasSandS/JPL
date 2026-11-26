@@ -89,6 +89,8 @@ public class Program
         await LeagueNameDeduper.CollapsePersistedAsync(db).ConfigureAwait(false);
         await dbManager.DropMasterSportsTablesAsync().ConfigureAwait(false);
         await dbManager.EnsureAllLeagueDatabasesAsync(db).ConfigureAwait(false);
+        await RemapSuperAdminOwnershipAsync(db, dbManager).ConfigureAwait(false);
+        await DeleteLegacyPublicUsersAsync(db).ConfigureAwait(false);
     }
 
     private static async Task EnsureMasterSchemaAsync(MasterDbContext db)
@@ -100,6 +102,15 @@ public class Program
             await db.Database.ExecuteSqlRawAsync("""
                 IF COL_LENGTH('Leagues', 'DatabaseName') IS NULL
                     ALTER TABLE Leagues ADD DatabaseName nvarchar(128) NULL;
+                """).ConfigureAwait(false);
+            // League management (SuperAdmin): soft delete + last-edit stamp. Idempotent.
+            await db.Database.ExecuteSqlRawAsync("""
+                IF COL_LENGTH('Leagues', 'IsDeleted') IS NULL
+                    ALTER TABLE Leagues ADD IsDeleted bit NOT NULL CONSTRAINT DF_Leagues_IsDeleted DEFAULT 0;
+                IF COL_LENGTH('Leagues', 'DeletedAtUtc') IS NULL
+                    ALTER TABLE Leagues ADD DeletedAtUtc datetimeoffset NULL;
+                IF COL_LENGTH('Leagues', 'UpdatedAtUtc') IS NULL
+                    ALTER TABLE Leagues ADD UpdatedAtUtc datetimeoffset NULL;
                 """).ConfigureAwait(false);
             await db.Database.ExecuteSqlRawAsync("""
                 IF COL_LENGTH('Users', 'LeagueId') IS NULL
@@ -127,6 +138,27 @@ public class Program
             {
                 await db.Database.ExecuteSqlRawAsync(
                     """ALTER TABLE "Leagues" ADD COLUMN "DatabaseName" TEXT NULL;""")
+                    .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Leagues" ADD COLUMN "IsDeleted" INTEGER NOT NULL DEFAULT 0;""")
+                    .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Leagues" ADD COLUMN "DeletedAtUtc" TEXT NULL;""")
+                    .ConfigureAwait(false);
+            }
+            catch { /* already exists */ }
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "Leagues" ADD COLUMN "UpdatedAtUtc" TEXT NULL;""")
                     .ConfigureAwait(false);
             }
             catch { /* already exists */ }
@@ -181,10 +213,26 @@ public class Program
                         QualificationPicksJson nvarchar(max) NULL,
                         CreatedAtUtc datetime2 NOT NULL,
                         UpdatedAtUtc datetime2 NOT NULL,
-                        IsDeleted bit NOT NULL
+                        IsDeleted bit NOT NULL,
+                        Version bigint NOT NULL CONSTRAINT DF_SchedulerTournaments_Version DEFAULT 1
                     );
                     CREATE INDEX IX_SchedulerTournaments_CreatedByUserId
                         ON dbo.SchedulerTournaments (CreatedByUserId);
+                END
+                """).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                IF COL_LENGTH('dbo.SchedulerTournaments', 'Version') IS NULL
+                    ALTER TABLE dbo.SchedulerTournaments ADD Version bigint NOT NULL CONSTRAINT DF_SchedulerTournaments_Version DEFAULT 1;
+                IF OBJECT_ID(N'dbo.SchedulerSyncReceipts', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SchedulerSyncReceipts (
+                        OperationId uniqueidentifier NOT NULL CONSTRAINT PK_SchedulerSyncReceipts PRIMARY KEY,
+                        TournamentId uniqueidentifier NOT NULL,
+                        AppliedVersion bigint NOT NULL,
+                        PayloadHash nvarchar(64) NOT NULL,
+                        CreatedAtUtc datetime2 NOT NULL
+                    );
+                    CREATE INDEX IX_SchedulerSyncReceipts_TournamentId ON dbo.SchedulerSyncReceipts (TournamentId);
                 END
                 """).ConfigureAwait(false);
             await db.Database.ExecuteSqlRawAsync("""
@@ -246,9 +294,28 @@ public class Program
                     "QualificationPicksJson" TEXT NULL,
                     "CreatedAtUtc" TEXT NOT NULL,
                     "UpdatedAtUtc" TEXT NOT NULL,
-                    "IsDeleted" INTEGER NOT NULL
+                    "IsDeleted" INTEGER NOT NULL,
+                    "Version" INTEGER NOT NULL DEFAULT 1
                 );
                 """).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "SchedulerSyncReceipts" (
+                    "OperationId" TEXT NOT NULL CONSTRAINT "PK_SchedulerSyncReceipts" PRIMARY KEY,
+                    "TournamentId" TEXT NOT NULL,
+                    "AppliedVersion" INTEGER NOT NULL,
+                    "PayloadHash" TEXT NOT NULL,
+                    "CreatedAtUtc" TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS "IX_SchedulerSyncReceipts_TournamentId"
+                    ON "SchedulerSyncReceipts" ("TournamentId");
+                """).ConfigureAwait(false);
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "SchedulerTournaments" ADD COLUMN "Version" INTEGER NOT NULL DEFAULT 1;""")
+                    .ConfigureAwait(false);
+            }
+            catch { /* version column already exists */ }
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "SchedulerTeams" (
                     "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTeams" PRIMARY KEY,
@@ -360,6 +427,85 @@ public class Program
             other.IsActive = false;
         }
 
+        await db.SaveChangesAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// SuperAdmin no longer owns league sports data. Remap CreatedBy / StartedBy to Hassan (JPAdmin).
+    /// </summary>
+    private static async Task RemapSuperAdminOwnershipAsync(MasterDbContext master, LeagueDatabaseManager dbManager)
+    {
+        var jpAdminId = Guid.Parse("CBCE4628-3F25-41D3-86DA-96E3419B3585");
+        var superIds = await master.Users.AsNoTracking()
+            .Where(u => u.Role == AppRole.SuperAdmin)
+            .Select(u => u.Id)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        if (superIds.Count == 0)
+            return;
+
+        // Ensure JPAdmin account exists / keeps this id when present.
+        var jpAdmin = await master.Users.FirstOrDefaultAsync(u => u.Id == jpAdminId).ConfigureAwait(false);
+        if (jpAdmin is null)
+        {
+            jpAdmin = await master.Users
+                .FirstOrDefaultAsync(u => u.Username == "JPAdmin" || u.Username == "Hassan")
+                .ConfigureAwait(false);
+        }
+
+        if (jpAdmin is null)
+            return; // nothing safe to remap onto
+
+        if (jpAdmin.Id != jpAdminId)
+            jpAdminId = jpAdmin.Id;
+
+        // Master: scheduler tournaments
+        await master.SchedulerTournaments.IgnoreQueryFilters()
+            .Where(t => superIds.Contains(t.CreatedByUserId))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.CreatedByUserId, jpAdminId))
+            .ConfigureAwait(false);
+
+        var leagues = await master.Leagues.AsNoTracking()
+            .Where(l => l.IsActive)
+            .Select(l => l.Id)
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        foreach (var leagueId in leagues)
+        {
+            try
+            {
+                await using var leagueDb = dbManager.CreateForLeague(leagueId);
+                await leagueDb.VenueBookings.IgnoreQueryFilters()
+                    .Where(b => superIds.Contains(b.CreatedByUserId))
+                    .ExecuteUpdateAsync(s => s.SetProperty(b => b.CreatedByUserId, jpAdminId))
+                    .ConfigureAwait(false);
+                await leagueDb.Expenses.IgnoreQueryFilters()
+                    .Where(e => superIds.Contains(e.CreatedByUserId))
+                    .ExecuteUpdateAsync(s => s.SetProperty(e => e.CreatedByUserId, jpAdminId))
+                    .ConfigureAwait(false);
+                await leagueDb.Matches
+                    .Where(m => m.StartedByUserId != null && superIds.Contains(m.StartedByUserId!.Value))
+                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.StartedByUserId, (Guid?)jpAdminId))
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                /* league catalog missing / offline — skip */
+            }
+        }
+    }
+
+    private static async Task DeleteLegacyPublicUsersAsync(MasterDbContext db)
+    {
+        // Role byte 4 = removed PublicUser. Hard-delete so they cannot sign in.
+        var publicUsers = await db.Users
+            .Where(u => (byte)u.Role == 4)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        if (publicUsers.Count == 0)
+            return;
+        db.Users.RemoveRange(publicUsers);
         await db.SaveChangesAsync().ConfigureAwait(false);
     }
 }

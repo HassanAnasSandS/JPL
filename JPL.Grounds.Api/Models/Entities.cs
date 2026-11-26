@@ -6,7 +6,7 @@ public enum AppRole : byte
     Admin = 1,
     SuperAdmin = 2,
     GroundOwner = 3,
-    PublicUser = 4,
+    // 4 = legacy PublicUser (removed)
     Guest = 5
 }
 
@@ -199,6 +199,8 @@ public sealed class GroundBooking
     public Guid GroundId { get; set; }
     public Ground Ground { get; set; } = null!;
     public Guid CustomerUserId { get; set; }
+    /// <summary>Client generated id; uniquely identifies an offline submission retry.</summary>
+    public Guid? ClientRequestId { get; set; }
     public string CustomerName { get; set; } = string.Empty;
     public string? CustomerPhone { get; set; }
     public DateTime StartAt { get; set; }

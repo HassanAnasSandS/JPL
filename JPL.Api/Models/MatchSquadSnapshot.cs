@@ -90,10 +90,15 @@ internal sealed class MatchSquadSnapshot
 
     private static IReadOnlyList<Guid> Combine(List<Guid>? ids, List<MatchSquadPlayerSnap>? players)
     {
+        // Playing XI only — substitutes must not count as "played" for W/L / streaks.
         if (ids is { Count: > 0 })
             return ids.Where(id => id != Guid.Empty).Distinct().ToList();
         if (players is { Count: > 0 })
-            return players.Select(p => p.Id).Where(id => id != Guid.Empty).Distinct().ToList();
+            return players
+                .Where(p => !p.IsSubstitute && p.Id != Guid.Empty)
+                .Select(p => p.Id)
+                .Distinct()
+                .ToList();
         return [];
     }
 }

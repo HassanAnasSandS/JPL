@@ -190,7 +190,8 @@ public sealed record BookingCreateRequest(
     IReadOnlyList<GroundShopQtyUpsert>? Shop,
     decimal? BookingAmount = null,
     decimal? Discount = null,
-    decimal? Advance = null);
+    decimal? Advance = null,
+    Guid? ClientRequestId = null);
 
 public sealed record BookingUpdateRequest(
     string? Status,

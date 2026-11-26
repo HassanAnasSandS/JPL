@@ -12,6 +12,7 @@ public partial class StatsPage : ContentPage
         InitializeComponent();
         BindingContext = _vm = vm;
         InfiniteScroll.AttachScrollView(LeaderboardScroll);
+        InfiniteScroll.AttachScrollView(NetsAwardsScroll);
         InfiniteScroll.AttachScrollView(PartnershipLeaderboardScroll);
         ScrollSync.FreezeHeader(LeaderboardScroll, NameHeaderHost, StatsHeaderHost);
         ScrollSync.FreezeHeader(PartnershipLeaderboardScroll, PartnershipNameHeaderHost, PartnershipStatsHeaderHost);

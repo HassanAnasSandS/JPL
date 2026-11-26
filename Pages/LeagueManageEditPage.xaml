@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:jpl="clr-namespace:JPL"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.LeagueManageEditPage"
+             x:DataType="vm:LeagueManageEditViewModel"
+             Title="{Binding Title}"
+             HideSoftInputOnTapped="True">
+
+    <ScrollView VerticalOptions="Fill"
+                VerticalScrollBarVisibility="Default"
+                HorizontalScrollBarVisibility="Never">
+        <VerticalStackLayout Padding="16" Spacing="14" VerticalOptions="Start" MaximumWidthRequest="640">
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="League name *" Style="{StaticResource SectionLabel}" />
+                    <Entry Placeholder="e.g. JPL"
+                           Text="{Binding Name}"
+                           MaxLength="160"
+                           ReturnType="Done"
+                           ReturnCommand="{Binding SaveCommand}"
+                           FontSize="16" />
+                    <Label Text="{Binding NameError}"
+                           IsVisible="{Binding HasNameError}"
+                           TextColor="{StaticResource Danger}"
+                           FontSize="12" />
+
+                    <Label Text="Logo" Style="{StaticResource SectionLabel}" />
+                    <Border WidthRequest="120"
+                            HeightRequest="120"
+                            StrokeThickness="0"
+                            BackgroundColor="#E8EEF5"
+                            HorizontalOptions="Center">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="16" />
+                        </Border.StrokeShape>
+                        <Image Source="{Binding ImagePreview}" Aspect="AspectFit" />
+                    </Border>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Button Text="Choose image"
+                                Style="{StaticResource OutlineButton}"
+                                Command="{Binding PickImageCommand}" />
+                        <Button Grid.Column="1"
+                                Text="Remove"
+                                Style="{StaticResource GhostButton}"
+                                IsVisible="{Binding HasImage}"
+                                Command="{Binding RemoveImageCommand}" />
+                    </Grid>
+                    <Label Text="PNG or JPG, under 2 MB."
+                           FontSize="11"
+                           Style="{StaticResource MutedLabel}" />
+
+                    <HorizontalStackLayout Spacing="10" jpl:ToggleOnTap.Enable="True">
+                        <Switch IsToggled="{Binding IsActive}" VerticalOptions="Center" />
+                        <Label Text="{Binding ActiveHint}"
+                               VerticalOptions="Center"
+                               LineBreakMode="WordWrap"
+                               MaximumWidthRequest="480"
+                               Style="{StaticResource BodyLabel}"
+                               TextColor="{Binding StatusColor}" />
+                    </HorizontalStackLayout>
+
+                    <Label Text="{Binding InfoText}"
+                           FontSize="12"
+                           Style="{StaticResource MutedLabel}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="{Binding SaveLabel}"
+                    Style="{StaticResource GoldButton}"
+                    HeightRequest="48"
+                    IsEnabled="{Binding CanSave}"
+                    Command="{Binding SaveCommand}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Secondary}" />
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Danger}"
+                   FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

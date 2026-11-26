@@ -40,8 +40,13 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
 
     public event EventHandler? Changed;
 
+    /// <summary>Re-apply column widths/visibility on already-rendered stats grids.</summary>
+    public void NotifyLayoutChanged() => Changed?.Invoke(this, EventArgs.Empty);
+
     public bool IsVisible(string key)
     {
+        if (_scopeKey == "nets-bowling" && string.Equals(key, "InningsBowled", StringComparison.Ordinal))
+            return false;
         foreach (var opt in Options)
         {
             if (string.Equals(opt.Key, key, StringComparison.Ordinal))
@@ -57,6 +62,13 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
         _scopeKey = ScopeKey(category, isNetsSource);
         var defs = DefinitionsFor(category, isNetsSource);
         var hidden = LoadHidden(_scopeKey);
+        if (_scopeKey == "nets-batting" && hidden.Remove("Sessions"))
+        {
+            if (hidden.Count == 0)
+                Preferences.Default.Remove(PrefPrefix + _scopeKey);
+            else
+                Preferences.Default.Set(PrefPrefix + _scopeKey, string.Join(",", hidden));
+        }
 
         _suppress = true;
         Options.Clear();
@@ -166,8 +178,8 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
             1 => "tournament",
             2 => "series",
             3 => isNetsSource ? "nets-batting" : "batting",
-            4 => "bowling",
-            5 => "fielding",
+            4 => isNetsSource ? "nets-bowling" : "bowling",
+            5 => isNetsSource ? "nets-fielding" : "fielding",
             6 => "captaincy",
             7 => "team",
             8 => "attendance",
@@ -186,7 +198,11 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
                 ("TournamentWon", "Won", 44),
                 ("TournamentLoss", "Lost", 44),
                 ("TournamentTied", "Tied", 44),
-                ("TournamentWinPct", "Win%", 52)
+                ("TournamentWinPct", "Win%", 52),
+                ("BestTournamentWinningStreak", "Best winning streak", 84),
+                ("CurrentTournamentWinningStreak", "Current winning streak", 100),
+                ("WorstTournamentLosingStreak", "Worst losing streak", 84),
+                ("CurrentTournamentLosingStreak", "Current losing streak", 100)
             ],
             2 =>
             [
@@ -194,7 +210,11 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
                 ("SeriesWon", "Won", 44),
                 ("SeriesLoss", "Lost", 44),
                 ("SeriesTied", "Tied", 44),
-                ("SeriesWinPct", "Win%", 52)
+                ("SeriesWinPct", "Win%", 52),
+                ("BestSeriesWinningStreak", "Best winning streak", 84),
+                ("CurrentSeriesWinningStreak", "Current winning streak", 100),
+                ("WorstSeriesLosingStreak", "Worst losing streak", 84),
+                ("CurrentSeriesLosingStreak", "Current losing streak", 100)
             ],
             3 when isNetsSource =>
             [
@@ -223,7 +243,8 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
                 ("BattingStrikeRate", "SR", 48),
                 ("AvgPerSession", "Avg/Sess", 72),
                 ("AvgPerOut", "Avg/Out", 72),
-                ("BoundaryPct", "Bound%", 56)
+                ("BoundaryPct", "Bound%", 56),
+                ("Sessions", "Session", 52)
             ],
             3 =>
             [
@@ -255,9 +276,39 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
                 ("BattingAverage", "Avg", 44),
                 ("BoundaryPct", "Bound%", 56)
             ],
+            4 when isNetsSource =>
+            [
+                ("Matches", "Session", 48),
+                ("OversBowled", "Overs", 48),
+                ("OversBowledBalls", "Balls", 40),
+                ("RunsConceded", "Runs", 40),
+                ("Wickets", "Wkts", 36),
+                ("BestBowling", "Best", 48),
+                ("FiveWicketHauls", "5W", 36),
+                ("Maidens", "Mdn", 40),
+                ("HatTricks", "Hat", 40),
+                ("DuckWkts", "Duck", 40),
+                ("GoldenDuckWkts", "G.Duck", 48),
+                ("DotBallsBowled", "Dot", 32),
+                ("FoursConceded", "4s", 32),
+                ("SixesConceded", "6s", 32),
+                ("WidesBowled", "Wd", 36),
+                ("NoBallsBowled", "NB", 36),
+                ("ByesConceded", "Bye", 32),
+                ("LegByesConceded", "LB", 32),
+                ("BowledWkts", "Bld", 32),
+                ("CaughtWkts", "Cgt", 32),
+                ("LbwWkts", "LBW", 32),
+                ("StumpedWkts", "St", 32),
+                ("HitWicketWkts", "Hit wkt", 56),
+                ("RunOutWkts", "RO", 32),
+                ("BowlingStrikeRate", "SR", 44),
+                ("BowlingAverage", "Avg", 44),
+                ("BowlingEconomy", "Econ", 44)
+            ],
             4 =>
             [
-                ("Matches", "Match", 48),
+                ("Matches", isNetsSource ? "Session" : "Match", 48),
                 ("InningsBowled", "Inns", 40),
                 ("OversBowled", "Overs", 48),
                 ("OversBowledBalls", "Balls", 40),
@@ -288,12 +339,12 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
             ],
             5 =>
             [
-                ("Matches", "Match", 48),
+                ("Matches", isNetsSource ? "Session" : "Match", 48),
                 ("Catches", "Catches", 64),
                 ("RunOutsEffected", "Run outs", 72),
                 ("Stumpings", "Stumpings", 72),
                 ("FieldingTotal", "Total", 52),
-                ("FieldingPerMatch", "Per Match", 64),
+                ("FieldingPerMatch", isNetsSource ? "Per Session" : "Per Match", 64),
                 ("DroppedCatches", "Drops", 56)
             ],
             6 =>
@@ -380,7 +431,11 @@ public sealed partial class StatsColumnVisibilityViewModel : ObservableObject
                 ("Won", "Won", 44),
                 ("Loss", "Lost", 44),
                 ("Tied", "Tied", 44),
-                ("MatchWinPct", "Win%", 52)
+                ("MatchWinPct", "Win%", 52),
+                ("BestWinningStreak", "Best winning streak", 84),
+                ("CurrentWinningStreak", "Current winning streak", 100),
+                ("WorstLosingStreak", "Worst losing streak", 84),
+                ("CurrentLosingStreak", "Current losing streak", 100)
             ]
         };
 }

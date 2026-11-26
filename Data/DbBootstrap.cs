@@ -7,19 +7,31 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 24;
+    private const int SchemaVersion = 41;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
+    private static readonly string[] LeagueScopedTables =
+    [
+        "Players", "Teams", "TeamPlayers", "Matches", "Innings", "Deliveries",
+        "Auctions", "AuctionCaptains", "AuctionLots", "Venues", "Formats",
+        "VenueBookings", "VenueBookingParticipants", "Expenses", "ExpenseContributions",
+        "Tournaments", "TournamentTeams", "TournamentFixtures", "Series", "SeriesFixtures",
+        "NetSessions", "NetDeliveries", "SchedulerTournaments", "SchedulerTeams", "SchedulerMatches",
+        "SyncOutbox", "LiveOutbox", "SyncCursors", "SyncDeferredPulls", "SyncLogs",
+        "LocalStatsCache", "SchedulerSyncOutbox"
+    ];
 
-    public static string GetDatabasePath()
+    public static string GetDatabasePath(Guid? userId = null)
     {
         var dir = FileSystem.AppDataDirectory;
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "jpl.db");
+        return userId is Guid id && id != Guid.Empty
+            ? Path.Combine(dir, $"jpl-user-{id:N}.db")
+            : Path.Combine(dir, "jpl.db");
     }
 
     public static async Task InitializeAsync(JplDbContext db, CancellationToken ct = default)
     {
-        var path = GetDatabasePath();
+        var path = db.Database.GetDbConnection().DataSource;
         if (!File.Exists(path))
             await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
         else
@@ -30,8 +42,40 @@ public static class DbBootstrap
         {
             await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
             await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+            await EnsureLocalStatsCacheTableAsync(db, ct).ConfigureAwait(false);
             await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
+            await EnsureSchedulerSyncOutboxAsync(db, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "LocalGroundCache" (
+                    "CacheKey" TEXT NOT NULL CONSTRAINT "PK_LocalGroundCache" PRIMARY KEY,
+                    "PayloadJson" TEXT NOT NULL,
+                    "UpdatedAtUtc" TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS "IX_LocalGroundCache_UpdatedAtUtc"
+                    ON "LocalGroundCache" ("UpdatedAtUtc");
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "GroundBookingRequestOutbox" (
+                    "RequestId" TEXT NOT NULL CONSTRAINT "PK_GroundBookingRequestOutbox" PRIMARY KEY,
+                    "UserId" TEXT NOT NULL,
+                    "GroundId" TEXT NOT NULL,
+                    "GroundName" TEXT NOT NULL,
+                    "StartAt" TEXT NOT NULL,
+                    "EndAt" TEXT NOT NULL,
+                    "PayloadJson" TEXT NOT NULL,
+                    "Status" INTEGER NOT NULL,
+                    "AttemptCount" INTEGER NOT NULL,
+                    "LastError" TEXT NULL,
+                    "CreatedAtUtc" TEXT NOT NULL,
+                    "LastAttemptAtUtc" TEXT NULL
+                );
+                CREATE INDEX IF NOT EXISTS "IX_GroundBookingRequestOutbox_UserId_CreatedAtUtc"
+                    ON "GroundBookingRequestOutbox" ("UserId", "CreatedAtUtc");
+                CREATE INDEX IF NOT EXISTS "IX_GroundBookingRequestOutbox_Status"
+                    ON "GroundBookingRequestOutbox" ("Status");
+                """, ct).ConfigureAwait(false);
             await EnsureLegacyTablesAsync(db, ct).ConfigureAwait(false);
+            await EnsureLeagueScopedColumnsAsync(db, ct).ConfigureAwait(false);
 
             try
             {
@@ -75,10 +119,687 @@ public static class DbBootstrap
             Preferences.Default.Set(SchemaVersionKey, SchemaVersion);
         }
 
+        // Always idempotent — version gate alone left older DBs without these columns
+        // while EF already selected them (Nets/Matches pages then fail with "no such column").
+        await EnsureSyncSchemaAsync(db, ct).ConfigureAwait(false);
+        await EnsureSyncLogTableAsync(db, ct).ConfigureAwait(false);
+        await DropLegacyVenueBookingVenueNameAsync(db, ct).ConfigureAwait(false);
+
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);
-        await db.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout=3000;", ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout=8000;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// SyncOutbox / deferred-pull columns required by the current EF model.
+    /// Safe to call on every startup; skips ALTER when the column already exists.
+    /// </summary>
+    public static Task EnsureSyncSchemaAsync(JplDbContext db, CancellationToken ct = default)
+        => EnsureSyncSchemaCoreAsync(db, ct);
+
+    private static async Task EnsureSyncSchemaCoreAsync(JplDbContext db, CancellationToken ct)
+    {
+        // Create SyncOutbox if an older install somehow never got it.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SyncOutbox" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SyncOutbox" PRIMARY KEY,
+                "LeagueId" TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+                "IdempotencyKey" TEXT NOT NULL,
+                "EntityType" TEXT NOT NULL,
+                "EntityKeyJson" TEXT NOT NULL DEFAULT '{{}}',
+                "BasePayloadJson" TEXT NULL,
+                "ServerPayloadJson" TEXT NULL,
+                "EntityId" TEXT NOT NULL,
+                "Operation" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "AttemptCount" INTEGER NOT NULL,
+                "LastError" TEXT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "LastAttemptAtUtc" TEXT NULL
+            );
+            """, ct).ConfigureAwait(false);
+
+        // Prefer ALTER+ignore over PRAGMA-only detection — older installs hit
+        // "no such column: s.BasePayloadJson" when EF mapped columns before repair ran.
+        await TryAddColumnAsync(db,
+            """ALTER TABLE "SyncOutbox" ADD COLUMN "EntityKeyJson" TEXT NOT NULL DEFAULT '{{}}';""", ct)
+            .ConfigureAwait(false);
+        await TryAddColumnAsync(db,
+            """ALTER TABLE "SyncOutbox" ADD COLUMN "BasePayloadJson" TEXT NULL;""", ct)
+            .ConfigureAwait(false);
+        await TryAddColumnAsync(db,
+            """ALTER TABLE "SyncOutbox" ADD COLUMN "ServerPayloadJson" TEXT NULL;""", ct)
+            .ConfigureAwait(false);
+        await TryAddColumnAsync(db,
+            """ALTER TABLE "SyncOutbox" ADD COLUMN "LeagueId" TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';""", ct)
+            .ConfigureAwait(false);
+        await EnsureSyncDeferredPullsAsync(db, ct).ConfigureAwait(false);
+
+        // SQLite Guid TEXT compares case-sensitively. Legacy rows with uppercase hex
+        // break EF lookups (lowercase params) → duplicate PK inserts on cache/sync.
+        await NormalizeGuidTextColumnsAsync(db, ct).ConfigureAwait(false);
+        await DeduplicateSyncCursorsAsync(db, ct).ConfigureAwait(false);
+        await RemapSentinelLeagueRowsAsync(db, ct).ConfigureAwait(false);
+        await DropLegacyVenueBookingVenueNameAsync(db, ct).ConfigureAwait(false);
+        await EnsureLocalSyncCursorsAsync(db, ct).ConfigureAwait(false);
+        await EnsureSyncLogTableAsync(db, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// SyncCursors PK is LeagueId TEXT — uppercase + lowercase Guid variants can coexist.
+    /// Merge them so EF Find/UPDATE never hits 0 rows (DbUpdateConcurrencyException).
+    /// </summary>
+    public static async Task DeduplicateSyncCursorsAsync(JplDbContext db, CancellationToken ct = default)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "SyncCursors_merge" (
+                    "LeagueId" TEXT NOT NULL PRIMARY KEY,
+                    "LastSequence" INTEGER NOT NULL DEFAULT 0,
+                    "IsBootstrapped" INTEGER NOT NULL DEFAULT 0,
+                    "LastSuccessfulSyncUtc" TEXT NULL
+                );
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync(
+                """DELETE FROM "SyncCursors_merge";""", ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "SyncCursors_merge" ("LeagueId", "LastSequence", "IsBootstrapped", "LastSuccessfulSyncUtc")
+                SELECT lower("LeagueId"),
+                       MAX("LastSequence"),
+                       MAX("IsBootstrapped"),
+                       MAX("LastSuccessfulSyncUtc")
+                FROM "SyncCursors"
+                WHERE "LeagueId" IS NOT NULL AND length(trim("LeagueId")) = 36
+                GROUP BY lower("LeagueId");
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync(
+                """DELETE FROM "SyncCursors";""", ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "SyncCursors" ("LeagueId", "LastSequence", "IsBootstrapped", "LastSuccessfulSyncUtc")
+                SELECT "LeagueId", "LastSequence", "IsBootstrapped", "LastSuccessfulSyncUtc"
+                FROM "SyncCursors_merge";
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync(
+                """DROP TABLE IF EXISTS "SyncCursors_merge";""", ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* table may not exist yet on brand-new installs */
+        }
+    }
+
+    public static async Task EnsureSyncLogTableAsync(JplDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SyncLogs" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SyncLogs" PRIMARY KEY,
+                "LeagueId" TEXT NOT NULL,
+                "AtUtc" TEXT NOT NULL,
+                "Level" INTEGER NOT NULL DEFAULT 0,
+                "Phase" TEXT NOT NULL,
+                "Message" TEXT NOT NULL,
+                "Detail" TEXT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_SyncLogs_LeagueId_AtUtc"
+                ON "SyncLogs" ("LeagueId", "AtUtc");
+            """, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Domain/API use VenueId only. Legacy installs still have VenueName TEXT NOT NULL —
+    /// EF inserts omit that column → Sync dies with NOT NULL constraint failed.
+    /// </summary>
+    private static async Task DropLegacyVenueBookingVenueNameAsync(JplDbContext db, CancellationToken ct)
+    {
+        if (!await ColumnExistsAsync(db, "VenueBookings", "VenueName", ct).ConfigureAwait(false))
+            return;
+
+        try
+        {
+            await EnsureColumnAsync(db, "VenueBookings", "VenueId",
+                    """ALTER TABLE "VenueBookings" ADD COLUMN "VenueId" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            /* already present */
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                UPDATE "VenueBookings"
+                SET "VenueId" = (
+                    SELECT v."Id" FROM "Venues" v
+                    WHERE lower(trim(v."Name")) = lower(trim("VenueBookings"."VenueName"))
+                    LIMIT 1
+                )
+                WHERE ("VenueId" IS NULL OR "VenueId" = '')
+                  AND "VenueName" IS NOT NULL AND trim("VenueName") != '';
+                """, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync($"""
+                UPDATE "VenueBookings"
+                SET "VenueId" = '{VenueSeeds.FalconId:D}'
+                WHERE "VenueId" IS NULL OR "VenueId" = '';
+                """, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        // Prefer DROP COLUMN (SQLite 3.35+). Fall back to table rebuild.
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                    """ALTER TABLE "VenueBookings" DROP COLUMN "VenueName";""", ct)
+                .ConfigureAwait(false);
+            return;
+        }
+        catch
+        {
+            /* older SQLite — rebuild */
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "VenueBookings_v40" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_VenueBookings" PRIMARY KEY,
+                    "LeagueId" TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+                    "CreatedByUserId" TEXT NOT NULL,
+                    "VenueId" TEXT NOT NULL,
+                    "BookingDateUtc" TEXT NOT NULL,
+                    "BookedByPlayerId" TEXT NOT NULL,
+                    "BookingCost" TEXT NOT NULL,
+                    "Version" INTEGER NOT NULL,
+                    "CreatedAtUtc" TEXT NOT NULL,
+                    "UpdatedAtUtc" TEXT NOT NULL,
+                    "IsDeleted" INTEGER NOT NULL
+                );
+                INSERT INTO "VenueBookings_v40" (
+                    "Id", "LeagueId", "CreatedByUserId", "VenueId", "BookingDateUtc",
+                    "BookedByPlayerId", "BookingCost", "Version", "CreatedAtUtc", "UpdatedAtUtc", "IsDeleted")
+                SELECT
+                    "Id",
+                    IFNULL("LeagueId", '00000000-0000-0000-0000-000000000000'),
+                    "CreatedByUserId",
+                    IFNULL(NULLIF("VenueId", ''), '00000000-0000-0000-0000-000000000001'),
+                    "BookingDateUtc",
+                    "BookedByPlayerId",
+                    "BookingCost",
+                    "Version",
+                    "CreatedAtUtc",
+                    "UpdatedAtUtc",
+                    "IsDeleted"
+                FROM "VenueBookings";
+                DROP TABLE "VenueBookings";
+                ALTER TABLE "VenueBookings_v40" RENAME TO "VenueBookings";
+                CREATE INDEX IF NOT EXISTS "IX_VenueBookings_BookingDateUtc" ON "VenueBookings" ("BookingDateUtc");
+                CREATE INDEX IF NOT EXISTS "IX_VenueBookings_CreatedByUserId" ON "VenueBookings" ("CreatedByUserId");
+                """, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Last resort: keep column but allow NULL so EF inserts succeed.
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                        """UPDATE "VenueBookings" SET "VenueName" = '' WHERE "VenueName" IS NULL;""", ct)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                /* give up — Sync will surface the real error */
+            }
+        }
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        JplDbContext db, string table, string column, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var closeWhenDone = connection.State != System.Data.ConnectionState.Open;
+        if (closeWhenDone)
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info(\"{table.Replace("\"", "\"\"", StringComparison.Ordinal)}\");";
+            await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var name = reader.GetString(1);
+                if (string.Equals(name, column, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+        finally
+        {
+            if (closeWhenDone)
+                await connection.CloseAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Rows stamped with legacy <see cref="LeagueIds.Jpl"/> (b1000001…) are invisible under a
+    /// real home-league filter — remap onto the selected league from Preferences.
+    /// </summary>
+    private static async Task RemapSentinelLeagueRowsAsync(JplDbContext db, CancellationToken ct)
+    {
+        var homeText = Preferences.Default.Get("cric360.league.currentId", string.Empty);
+        if (!Guid.TryParse(homeText, out var home) || home == Guid.Empty || home == LeagueIds.Jpl)
+            homeText = Preferences.Default.Get("jpl.session.leagueId", string.Empty);
+        if (!Guid.TryParse(homeText, out home) || home == Guid.Empty || home == LeagueIds.Jpl)
+            return;
+
+        var homeId = home.ToString("D");
+        var legacy = LeagueIds.Jpl.ToString("D");
+        foreach (var table in new[]
+                 {
+                     "Teams", "Players", "TeamPlayers", "Matches", "Formats", "Venues",
+                     "Auctions", "AuctionCaptains", "AuctionLots",
+                     "Tournaments", "TournamentTeams", "TournamentFixtures",
+                     "Series", "SeriesFixtures", "Innings", "Deliveries",
+                     "NetSessions", "NetDeliveries", "Expenses", "ExpenseContributions"
+                 })
+        {
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "UPDATE \"" + table + "\" SET \"LeagueId\" = {0} WHERE lower(\"LeagueId\") = lower({1});",
+                    homeId, legacy).ConfigureAwait(false);
+            }
+            catch
+            {
+                /* table may not exist yet */
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lowercase every TEXT value that looks like a Guid so EF parameters match SQLite rows.
+    /// Idempotent — safe on every startup and before Sync pull.
+    /// </summary>
+    public static async Task NormalizeGuidTextColumnsForSyncAsync(JplDbContext db, CancellationToken ct = default)
+    {
+        await NormalizeGuidTextColumnsAsync(db, ct).ConfigureAwait(false);
+        await DeduplicateSyncCursorsAsync(db, ct).ConfigureAwait(false);
+    }
+
+    private static async Task NormalizeGuidTextColumnsAsync(JplDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var closeWhenDone = connection.State != System.Data.ConnectionState.Open;
+        if (closeWhenDone)
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        // Parent Id + child FK columns are lowercased in separate statements; with FK enforcement on,
+        // lowercasing a parent first aborts the whole UPDATE and leaves mixed-case Guids behind.
+        var restoreForeignKeys = false;
+        var foreignKeysOff = false;
+        try
+        {
+            await using var fkRead = connection.CreateCommand();
+            fkRead.CommandText = "PRAGMA foreign_keys;";
+            var fkState = await fkRead.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            if (Convert.ToInt64(fkState ?? 0L, System.Globalization.CultureInfo.InvariantCulture) == 1)
+            {
+                await using var fkOff = connection.CreateCommand();
+                fkOff.CommandText = "PRAGMA foreign_keys=OFF;";
+                await fkOff.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                restoreForeignKeys = true;
+                // PRAGMA is a no-op inside a transaction — re-read to be sure.
+                var after = await fkRead.ExecuteScalarAsync(ct).ConfigureAwait(false);
+                foreignKeysOff = Convert.ToInt64(after ?? 1L, System.Globalization.CultureInfo.InvariantCulture) == 0;
+            }
+            else
+            {
+                foreignKeysOff = true;
+            }
+        }
+        catch
+        {
+            /* inside a transaction / unsupported — keep going */
+        }
+
+        try
+        {
+            var tables = new List<string>();
+            await using (var list = connection.CreateCommand())
+            {
+                list.CommandText = """
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
+                    """;
+                await using var reader = await list.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    tables.Add(reader.GetString(0));
+            }
+
+            foreach (var table in tables)
+            {
+                // Only with FK enforcement off: never let a twin DELETE cascade into child rows.
+                if (foreignKeysOff)
+                    await DeleteLowercaseTwinsAsync(connection, table, ct).ConfigureAwait(false);
+
+                var columns = new List<string>();
+                await using (var pragma = connection.CreateCommand())
+                {
+                    pragma.CommandText = $"PRAGMA table_info(\"{table.Replace("\"", "\"\"", StringComparison.Ordinal)}\");";
+                    await using var reader = await pragma.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        var colType = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                        if (colType.Contains("TEXT", StringComparison.OrdinalIgnoreCase)
+                            || colType.Length == 0)
+                            columns.Add(reader.GetString(1));
+                    }
+                }
+
+                foreach (var column in columns)
+                {
+                    var safeTable = table.Replace("\"", "\"\"", StringComparison.Ordinal);
+                    var safeColumn = column.Replace("\"", "\"\"", StringComparison.Ordinal);
+
+                    // If lowercasing a PK/unique column would collide with an existing
+                    // lowercase row, drop the uppercase duplicate first.
+                    if (string.Equals(column, "Id", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            await using var dedupe = connection.CreateCommand();
+                            dedupe.CommandText = $"""
+                                DELETE FROM "{safeTable}"
+                                WHERE typeof("Id") = 'text'
+                                  AND length("Id") = 36
+                                  AND "Id" != lower("Id")
+                                  AND EXISTS (
+                                      SELECT 1 FROM "{safeTable}" AS keep
+                                      WHERE keep."Id" = lower("{safeTable}"."Id")
+                                  );
+                                """;
+                            await dedupe.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            /* ignore — table may lack Id or block DELETE */
+                        }
+                    }
+
+                    await using var update = connection.CreateCommand();
+                    // 36-char dashed Guid values only — leave other TEXT alone.
+                    // OR IGNORE: one row that would collide on a UNIQUE index (e.g. LocalStatsCache
+                    // LeagueId+CacheKey written in both cases) must not abort the whole column.
+                    update.CommandText = $"""
+                        UPDATE OR IGNORE "{safeTable}"
+                        SET "{safeColumn}" = lower("{safeColumn}")
+                        WHERE typeof("{safeColumn}") = 'text'
+                          AND length("{safeColumn}") = 36
+                          AND substr("{safeColumn}", 9, 1) = '-'
+                          AND substr("{safeColumn}", 14, 1) = '-'
+                          AND substr("{safeColumn}", 19, 1) = '-'
+                          AND substr("{safeColumn}", 24, 1) = '-'
+                          AND "{safeColumn}" != lower("{safeColumn}");
+                        """;
+                    try
+                    {
+                        await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        /* table/column may be virtual, locked, or unique — ignore */
+                    }
+                }
+            }
+
+        }
+        finally
+        {
+            if (restoreForeignKeys)
+            {
+                try
+                {
+                    await using var fkOn = connection.CreateCommand();
+                    fkOn.CommandText = "PRAGMA foreign_keys=ON;";
+                    await fkOn.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    /* connection closing */
+                }
+            }
+
+            if (closeWhenDone)
+                await connection.CloseAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A row that EF could not find (lowercase on disk, uppercase EF parameter) was re-inserted in
+    /// UPPERCASE, so the same key exists twice ("twins") and lowercasing hits a UNIQUE index and
+    /// is skipped forever. The UPPERCASE twin is always the newer write (pull / local edit after
+    /// the last normalize), so drop the stale lowercase twin; the column pass then lowercases it.
+    /// </summary>
+    private static async Task DeleteLowercaseTwinsAsync(
+        System.Data.Common.DbConnection connection, string table, CancellationToken ct)
+    {
+        static string Q(string name) => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+        static string Norm(string alias, string column) =>
+            $"(CASE WHEN typeof({alias}.{column}) = 'text' AND length({alias}.{column}) = 36 " +
+            $"AND substr({alias}.{column}, 9, 1) = '-' THEN lower({alias}.{column}) ELSE {alias}.{column} END)";
+
+        try
+        {
+            var uniqueIndexes = new List<string>();
+            await using (var list = connection.CreateCommand())
+            {
+                list.CommandText = $"PRAGMA index_list({Q(table)});";
+                await using var reader = await list.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    // seq, name, unique, origin, partial
+                    if (Convert.ToInt64(reader.GetValue(2), System.Globalization.CultureInfo.InvariantCulture) == 1)
+                        uniqueIndexes.Add(reader.GetString(1));
+                }
+            }
+
+            foreach (var index in uniqueIndexes)
+            {
+                var columns = new List<string>();
+                await using (var info = connection.CreateCommand())
+                {
+                    info.CommandText = $"PRAGMA index_info({Q(index)});";
+                    await using var reader = await info.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        if (!reader.IsDBNull(2))
+                            columns.Add(reader.GetString(2));
+                    }
+                }
+
+                if (columns.Count == 0)
+                    continue;
+
+                var quoted = columns.Select(Q).ToList();
+                var match = string.Join(" AND ", quoted.Select(c => $"keep.{c} = {Norm("up", c)}"));
+                var needsLower = string.Join(" OR ", quoted.Select(c => $"up.{c} != {Norm("up", c)}"));
+                await using var delete = connection.CreateCommand();
+                delete.CommandText = $"""
+                    DELETE FROM {Q(table)}
+                    WHERE rowid IN (
+                        SELECT keep.rowid
+                        FROM {Q(table)} AS up
+                        JOIN {Q(table)} AS keep ON keep.rowid != up.rowid AND {match}
+                        WHERE {needsLower});
+                    """;
+                try
+                {
+                    await delete.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    /* WITHOUT ROWID / virtual table — leave as is */
+                }
+            }
+        }
+        catch
+        {
+            /* never block startup / sync on repair */
+        }
+    }
+
+    /// <summary>
+    /// Ensure a SyncCursor row exists for every league that already has local data,
+    /// so PreferLocal / offline modules do not hammer a dead server. Does not mark
+    /// IsBootstrapped — full snapshot still runs when sync reaches the server.
+    /// </summary>
+    private static async Task EnsureLocalSyncCursorsAsync(JplDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SyncCursors" (
+                "LeagueId" TEXT NOT NULL CONSTRAINT "PK_SyncCursors" PRIMARY KEY,
+                "LastSequence" INTEGER NOT NULL DEFAULT 0,
+                "IsBootstrapped" INTEGER NOT NULL DEFAULT 0,
+                "LastSuccessfulSyncUtc" TEXT NULL
+            );
+            """, ct).ConfigureAwait(false);
+
+        // Seed cursor rows from known league-scoped tables (ignore missing tables).
+        foreach (var source in new[] { "Teams", "Players", "Matches", "NetSessions", "Tournaments", "Series" })
+        {
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync($"""
+                    INSERT OR IGNORE INTO "SyncCursors" ("LeagueId", "LastSequence", "IsBootstrapped", "LastSuccessfulSyncUtc")
+                    SELECT DISTINCT lower("LeagueId"), 0, 0, NULL
+                    FROM "{source}"
+                    WHERE "LeagueId" IS NOT NULL AND length("LeagueId") = 36;
+                    """, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                /* table may not exist */
+            }
+        }
+    }
+
+    /// <summary>Adds a column; treats "duplicate column" as success so repair is always safe.</summary>
+    private static async Task EnsureColumnOrIgnoreAsync(
+        JplDbContext db, string table, string column, string alterSql, CancellationToken ct)
+    {
+        try
+        {
+            await EnsureColumnAsync(db, table, column, alterSql, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (
+            ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)
+            || ex.InnerException?.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            /* already present */
+        }
+    }
+
+    /// <summary>Unconditional ALTER — ignores duplicate / missing-table failures.</summary>
+    private static async Task TryAddColumnAsync(JplDbContext db, string alterSql, CancellationToken ct)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(alterSql, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (
+            ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("no such table", StringComparison.OrdinalIgnoreCase)
+            || ex.InnerException?.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase) == true
+            || ex.InnerException?.Message.Contains("no such table", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            /* already present or table not created yet */
+        }
+    }
+
+    private static async Task EnsureLeagueScopedColumnsAsync(JplDbContext db, CancellationToken ct)
+    {
+        const string defaultLeague = "b1000001-0000-4000-8000-000000000001";
+        var connection = db.Database.GetDbConnection();
+        var closeWhenDone = connection.State != System.Data.ConnectionState.Open;
+        if (closeWhenDone)
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        try
+        {
+            await using (var cursorTable = connection.CreateCommand())
+            {
+                cursorTable.CommandText = """
+                    CREATE TABLE IF NOT EXISTS "SyncCursors" (
+                        "LeagueId" TEXT NOT NULL CONSTRAINT "PK_SyncCursors" PRIMARY KEY,
+                        "LastSequence" INTEGER NOT NULL DEFAULT 0,
+                        "IsBootstrapped" INTEGER NOT NULL DEFAULT 0,
+                        "LastSuccessfulSyncUtc" TEXT NULL
+                    );
+                    """;
+                await cursorTable.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            foreach (var table in LeagueScopedTables)
+            {
+                await using (var exists = connection.CreateCommand())
+                {
+                    exists.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$name;";
+                    var parameter = exists.CreateParameter();
+                    parameter.ParameterName = "$name";
+                    parameter.Value = table;
+                    exists.Parameters.Add(parameter);
+                    if (await exists.ExecuteScalarAsync(ct).ConfigureAwait(false) is null)
+                        continue;
+                }
+
+                var hasLeagueId = false;
+                await using (var columns = connection.CreateCommand())
+                {
+                    columns.CommandText = $"PRAGMA table_info(\"{table}\");";
+                    await using var reader = await columns.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        if (string.Equals(reader.GetString(1), "LeagueId", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasLeagueId = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasLeagueId)
+                {
+                    await using var alter = connection.CreateCommand();
+                    alter.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"LeagueId\" TEXT NOT NULL DEFAULT '{defaultLeague}';";
+                    await alter.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+
+                await using var backfill = connection.CreateCommand();
+                backfill.CommandText = $"UPDATE \"{table}\" SET \"LeagueId\" = '{defaultLeague}' WHERE \"LeagueId\" IS NULL OR \"LeagueId\" = '' OR \"LeagueId\" = '00000000-0000-0000-0000-000000000000';";
+                await backfill.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            if (closeWhenDone)
+                await connection.CloseAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>Flush WAL into jpl.db so an app update/kill does not drop the latest balls.</summary>
@@ -347,6 +1068,8 @@ public static class DbBootstrap
             /* table or column may not exist yet */
         }
 
+        await DropLegacyVenueBookingVenueNameAsync(db, ct).ConfigureAwait(false);
+
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "VenueBookings" (
                 "Id" TEXT NOT NULL CONSTRAINT "PK_VenueBookings" PRIMARY KEY,
@@ -540,6 +1263,26 @@ public static class DbBootstrap
 
         await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
         await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
+        await EnsureLocalStatsCacheTableAsync(db, ct).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureLocalStatsCacheTableAsync(JplDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "LocalStatsCache" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_LocalStatsCache" PRIMARY KEY,
+                "LeagueId" TEXT NOT NULL,
+                "CacheKey" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE UNIQUE INDEX IF NOT EXISTS "IX_LocalStatsCache_LeagueId_CacheKey" ON "LocalStatsCache" ("LeagueId", "CacheKey");""",
+            ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_LocalStatsCache_LeagueId_UpdatedAtUtc" ON "LocalStatsCache" ("LeagueId", "UpdatedAtUtc");""",
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -858,6 +1601,68 @@ public static class DbBootstrap
         await db.Database.ExecuteSqlRawAsync(
             """CREATE INDEX IF NOT EXISTS "IX_SchedulerMatches_TournamentId" ON "SchedulerMatches" ("TournamentId");""",
             ct).ConfigureAwait(false);
+
+        await EnsureColumnAsync(db, "SchedulerTournaments", "Version",
+            """ALTER TABLE "SchedulerTournaments" ADD COLUMN "Version" INTEGER NOT NULL DEFAULT 0;""", ct)
+            .ConfigureAwait(false);
+        await EnsureColumnAsync(db, "SchedulerTournaments", "CreatedByUsername",
+            """ALTER TABLE "SchedulerTournaments" ADD COLUMN "CreatedByUsername" TEXT NOT NULL DEFAULT '';""", ct)
+            .ConfigureAwait(false);
+        await EnsureColumnAsync(db, "SchedulerTournaments", "HasDetailsCached",
+            """ALTER TABLE "SchedulerTournaments" ADD COLUMN "HasDetailsCached" INTEGER NOT NULL DEFAULT 0;""", ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task EnsureSyncDeferredPullsAsync(JplDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SyncDeferredPulls" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SyncDeferredPulls" PRIMARY KEY,
+                "LeagueId" TEXT NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "EntityType" TEXT NOT NULL,
+                "EntityKeyJson" TEXT NOT NULL,
+                "Operation" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL,
+                "DeferredAtUtc" TEXT NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_SyncDeferredPulls_LeagueId_Sequence"
+            ON "SyncDeferredPulls" ("LeagueId", "Sequence");
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_SyncDeferredPulls_LeagueId_EntityType_EntityKeyJson"
+            ON "SyncDeferredPulls" ("LeagueId", "EntityType", "EntityKeyJson");
+            """, ct).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureSchedulerSyncOutboxAsync(JplDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SchedulerSyncOutbox" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerSyncOutbox" PRIMARY KEY,
+                "LeagueId" TEXT NOT NULL,
+                "TournamentId" TEXT NOT NULL,
+                "OperationId" TEXT NOT NULL,
+                "ExpectedVersion" INTEGER NOT NULL,
+                "Operation" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "AttemptCount" INTEGER NOT NULL,
+                "LastError" TEXT NULL,
+                "CreatedAtUtc" TEXT NOT NULL,
+                "LastAttemptAtUtc" TEXT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_SchedulerSyncOutbox_OperationId"
+            ON "SchedulerSyncOutbox" ("OperationId");
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_SchedulerSyncOutbox_LeagueId_TournamentId_CreatedAtUtc"
+            ON "SchedulerSyncOutbox" ("LeagueId", "TournamentId", "CreatedAtUtc");
+            """, ct).ConfigureAwait(false);
     }
 
     private static async Task EnsureLeagueSchemaAsync(JplDbContext db, CancellationToken ct)

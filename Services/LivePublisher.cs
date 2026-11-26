@@ -9,16 +9,31 @@ namespace JPL.Services;
 public interface ILivePublisher
 {
     void RequestFlush();
+    Task FlushPendingAsync(CancellationToken ct = default);
     Task<int> GetPendingCountAsync(CancellationToken ct = default);
     Task EnqueueMatchAsync(Guid matchId, CancellationToken ct = default);
+    /// <summary>Queues the supplied local entity in the caller's SQLite transaction.</summary>
+    Task EnqueueMatchAsync(JplDbContext db, Match match, CancellationToken ct = default);
     Task EnqueueInningsAsync(Guid inningsId, CancellationToken ct = default);
+    /// <summary>Queues the supplied local entity in the caller's SQLite transaction.</summary>
+    Task EnqueueInningsAsync(JplDbContext db, Innings innings, CancellationToken ct = default);
     Task EnqueueDeliveryAsync(Guid deliveryId, CancellationToken ct = default);
+    /// <summary>Queues the supplied local entity in the caller's SQLite transaction.</summary>
+    Task EnqueueDeliveryAsync(JplDbContext db, Delivery delivery, CancellationToken ct = default);
     Task EnqueueDeliveryDeleteAsync(Guid matchId, Guid deliveryId, CancellationToken ct = default);
+    /// <summary>Queues a ball deletion and updated match snapshot in the caller's transaction.</summary>
+    Task EnqueueDeliveryDeleteAsync(JplDbContext db, Match match, Guid deliveryId, CancellationToken ct = default);
     Task EnqueueNetSessionAsync(Guid sessionId, CancellationToken ct = default);
+    Task EnqueueNetSessionAsync(JplDbContext db, NetSession session, CancellationToken ct = default);
     Task EnqueueNetDeliveryAsync(Guid deliveryId, CancellationToken ct = default);
+    Task EnqueueNetDeliveryAsync(JplDbContext db, NetDelivery delivery, CancellationToken ct = default);
     Task EnqueueNetDeliveryDeleteAsync(Guid sessionId, Guid deliveryId, CancellationToken ct = default);
+    Task EnqueueNetDeliveryDeleteAsync(JplDbContext db, NetSession session, Guid deliveryId, CancellationToken ct = default);
     Task EnqueueMatchDeleteAsync(Guid matchId, CancellationToken ct = default);
+    /// <summary>Queues match deletion in the caller's SQLite transaction.</summary>
+    Task EnqueueMatchDeleteAsync(JplDbContext db, Guid matchId, CancellationToken ct = default);
     Task EnqueueNetSessionDeleteAsync(Guid sessionId, CancellationToken ct = default);
+    Task EnqueueNetSessionDeleteAsync(JplDbContext db, Guid sessionId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -42,6 +57,8 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _flushRequested;
     private int _disposed;
+    private int _flushDebounceScheduled;
+    private static readonly TimeSpan FlushDebounce = TimeSpan.FromMilliseconds(350);
 
     public LivePublisher(IDbContextFactory<JplDbContext> dbFactory, IHttpClientFactory http)
     {
@@ -70,11 +87,50 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
     public void RequestFlush()
     {
         Interlocked.Exchange(ref _flushRequested, 1);
+        // Debounce rapid balls so flush batches coalesce and SQLite isn't contended mid-over.
+        if (Interlocked.CompareExchange(ref _flushDebounceScheduled, 1, 0) != 0)
+            return;
+
         _ = Task.Run(async () =>
         {
-            try { await FlushAsync().ConfigureAwait(false); }
-            catch { /* never crash scoring */ }
+            try
+            {
+                await Task.Delay(FlushDebounce).ConfigureAwait(false);
+                Interlocked.Exchange(ref _flushDebounceScheduled, 0);
+                try { await FlushAsync().ConfigureAwait(false); }
+                catch { /* never crash scoring */ }
+                // Another ball may have arrived during flush — drain once more if flagged.
+                if (Interlocked.CompareExchange(ref _flushRequested, 0, 0) != 0)
+                    RequestFlush();
+            }
+            catch
+            {
+                Interlocked.Exchange(ref _flushDebounceScheduled, 0);
+            }
         });
+    }
+
+    /// <summary>Drain the ball-by-ball FIFO before lower-priority catalog sync work starts.</summary>
+    public async Task FlushPendingAsync(CancellationToken ct = default)
+    {
+        if (Volatile.Read(ref _disposed) == 1)
+            return;
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await RecoverStuckInFlightAsync(ct).ConfigureAwait(false);
+            while (true)
+            {
+                Interlocked.Exchange(ref _flushRequested, 0);
+                var any = await FlushBatchAsync(ct).ConfigureAwait(false);
+                if (!any && Interlocked.CompareExchange(ref _flushRequested, 0, 0) == 0)
+                    break;
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public Task EnqueueMatchAsync(Guid matchId, CancellationToken ct = default)
@@ -85,6 +141,9 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
             return m is null ? null : MatchPayload(m);
         }, ct);
 
+    public Task EnqueueMatchAsync(JplDbContext db, Match match, CancellationToken ct = default)
+        => EnqueueCoreAsync(db, "Match", match.Id, "Upsert", MatchPayload(match), Guid.NewGuid(), ct);
+
     public Task EnqueueInningsAsync(Guid inningsId, CancellationToken ct = default)
         => EnqueueLoadedAsync("Innings", inningsId, "Upsert", async db =>
         {
@@ -93,6 +152,9 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
             return i is null ? null : InningsPayload(i);
         }, ct);
 
+    public Task EnqueueInningsAsync(JplDbContext db, Innings innings, CancellationToken ct = default)
+        => EnqueueCoreAsync(db, "Innings", innings.Id, "Upsert", InningsPayload(innings), Guid.NewGuid(), ct);
+
     public Task EnqueueDeliveryAsync(Guid deliveryId, CancellationToken ct = default)
         => EnqueueLoadedAsync("Delivery", deliveryId, "Upsert", async db =>
         {
@@ -100,6 +162,9 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
                 .ConfigureAwait(false);
             return d is null ? null : DeliveryPayload(d);
         }, ct, idempotencyKey: deliveryId);
+
+    public Task EnqueueDeliveryAsync(JplDbContext db, Delivery delivery, CancellationToken ct = default)
+        => EnqueueCoreAsync(db, "Delivery", delivery.Id, "Upsert", DeliveryPayload(delivery), delivery.Id, ct);
 
     public async Task EnqueueDeliveryDeleteAsync(Guid matchId, Guid deliveryId, CancellationToken ct = default)
     {
@@ -118,6 +183,22 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
         await EnqueueMatchAsync(matchId, ct).ConfigureAwait(false);
     }
 
+    public async Task EnqueueDeliveryDeleteAsync(
+        JplDbContext db, Match match, Guid deliveryId, CancellationToken ct = default)
+    {
+        await DropUnsentUpsertsAsync(db, "Delivery", deliveryId, ct).ConfigureAwait(false);
+        await EnqueueCoreAsync(
+                db,
+                "Delivery",
+                deliveryId,
+                "Delete",
+                new { id = deliveryId, matchId = match.Id },
+                UndoKey(deliveryId),
+                ct)
+            .ConfigureAwait(false);
+        await EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
+    }
+
     public Task EnqueueNetSessionAsync(Guid sessionId, CancellationToken ct = default)
         => EnqueueLoadedAsync("NetSession", sessionId, "Upsert", async db =>
         {
@@ -125,6 +206,9 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
                 .ConfigureAwait(false);
             return s is null ? null : NetSessionPayload(s);
         }, ct);
+
+    public Task EnqueueNetSessionAsync(JplDbContext db, NetSession session, CancellationToken ct = default)
+        => EnqueueCoreAsync(db, "NetSession", session.Id, "Upsert", NetSessionPayload(session), Guid.NewGuid(), ct);
 
     public Task EnqueueNetDeliveryAsync(Guid deliveryId, CancellationToken ct = default)
         => EnqueueLoadedAsync("NetDelivery", deliveryId, "Upsert", async db =>
@@ -134,28 +218,55 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
             return d is null ? null : NetDeliveryPayload(d);
         }, ct, idempotencyKey: deliveryId);
 
+    public Task EnqueueNetDeliveryAsync(JplDbContext db, NetDelivery delivery, CancellationToken ct = default)
+        => EnqueueCoreAsync(db, "NetDelivery", delivery.Id, "Upsert", NetDeliveryPayload(delivery), delivery.Id, ct);
+
     public async Task EnqueueNetDeliveryDeleteAsync(Guid sessionId, Guid deliveryId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var session = await db.NetSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct).ConfigureAwait(false);
+        if (session is null) return;
+        await EnqueueNetDeliveryDeleteAsync(db, session, deliveryId, ct).ConfigureAwait(false);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task EnqueueNetDeliveryDeleteAsync(
+        JplDbContext db, NetSession session, Guid deliveryId, CancellationToken ct = default)
+    {
         await DropUnsentUpsertsAsync(db, "NetDelivery", deliveryId, ct).ConfigureAwait(false);
         await EnqueueCoreAsync(
                 db,
                 "NetDelivery",
                 deliveryId,
                 "Delete",
-                new { id = deliveryId, sessionId },
+                new { id = deliveryId, sessionId = session.Id },
                 UndoKey(deliveryId),
                 ct)
             .ConfigureAwait(false);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await EnqueueNetSessionAsync(sessionId, ct).ConfigureAwait(false);
+        await EnqueueNetSessionAsync(db, session, ct).ConfigureAwait(false);
     }
 
     public Task EnqueueMatchDeleteAsync(Guid matchId, CancellationToken ct = default)
         => EnqueueRawAsync("Match", matchId, "Delete", new { id = matchId }, Guid.NewGuid(), ct);
 
+    public async Task EnqueueMatchDeleteAsync(JplDbContext db, Guid matchId, CancellationToken ct = default)
+    {
+        await DropUnsentUpsertsAsync(db, "Match", matchId, ct).ConfigureAwait(false);
+        await EnqueueCoreAsync(
+                db, "Match", matchId, "Delete", new { id = matchId }, UndoKey(matchId), ct)
+            .ConfigureAwait(false);
+    }
+
     public Task EnqueueNetSessionDeleteAsync(Guid sessionId, CancellationToken ct = default)
         => EnqueueRawAsync("NetSession", sessionId, "Delete", new { id = sessionId }, Guid.NewGuid(), ct);
+
+    public async Task EnqueueNetSessionDeleteAsync(JplDbContext db, Guid sessionId, CancellationToken ct = default)
+    {
+        await DropUnsentUpsertsAsync(db, "NetSession", sessionId, ct).ConfigureAwait(false);
+        await EnqueueCoreAsync(
+                db, "NetSession", sessionId, "Delete", new { id = sessionId }, UndoKey(sessionId), ct)
+            .ConfigureAwait(false);
+    }
 
     private async Task EnqueueLoadedAsync(
         string entityType,
@@ -350,6 +461,16 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
                     var code = (int)response.StatusCode;
                     if (code is 502 or 503 or 504 or 0)
                         throw new OfflineException(NetworkUi.OfflineMessage);
+
+                    // Scoring device is authoritative for live balls — never block the FIFO on 409.
+                    if (code == 409 && LiveScoringConflict.IsAutoKeepLocal(item.EntityType))
+                    {
+                        item.Status = SyncOutboxStatus.Completed;
+                        item.LastError = null;
+                        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                        continue;
+                    }
+
                     var detail = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     throw new HttpRequestException($"Live sync failed ({code}): {detail}");
                 }

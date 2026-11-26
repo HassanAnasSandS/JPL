@@ -107,6 +107,8 @@ public partial class ScoringViewModel : ObservableObject
     private bool _isScoringBall;
     /// <summary>Drops re-entrant run-pad taps without flipping IsBusy — the pad never greys out mid-over.</summary>
     private int _scoreGate;
+    /// <summary>Full batting/bowling card refresh every N legal balls (plus wicket/over end).</summary>
+    private int _ballsSinceFullCard;
     private TaskCompletionSource<SquadPlayer?>? _playerPickTcs;
 
     partial void OnDidNotBatTextChanged(string value)
@@ -586,28 +588,30 @@ public partial class ScoringViewModel : ObservableObject
             IsWicket = false;
             IsDroppedCatch = false;
 
-            // Drop dismissed batters; leave empty crease end for popup pick after a wicket.
-            await RefreshAvailableBattersAsync(dismissedId, autoFillEmptyEnd: dismissedId is null)
-                .ConfigureAwait(true);
+            // Batter list / GetScoringContext only on wicket — every-ball rebuild stalls scoring.
+            if (dismissedId is not null)
+            {
+                await RefreshAvailableBattersAsync(dismissedId, autoFillEmptyEnd: false)
+                    .ConfigureAwait(true);
+            }
 
             // All out: no not-out batters left.
-            if (Batters.Count == 0)
+            if (dismissedId is not null && Batters.Count == 0)
             {
                 await RefreshScoreAsync().ConfigureAwait(true);
                 await RefreshScorecardAsync().ConfigureAwait(true);
-                var allOut = await Shell.Current.DisplayAlert(
+                await Shell.Current.DisplayAlert(
                     "All out",
                     "No batsmen left. End innings now?",
-                    "End innings",
-                    "Later").ConfigureAwait(true);
-                if (allOut)
-                    await EndInningsCoreAsync(askConfirm: false).ConfigureAwait(true);
+                    "End innings").ConfigureAwait(true);
+                await EndInningsCoreAsync(askConfirm: false).ConfigureAwait(true);
                 return;
             }
 
             // Classic mode: one batter left but setting off → cannot continue without partner.
             ApplyLoneBatsmanState();
-            if (!LastBatsmanCanBatAsSingleWicket && Batters.Count == 1 &&
+            if (dismissedId is not null
+                && !LastBatsmanCanBatAsSingleWicket && Batters.Count == 1 &&
                 (Striker is null || NonStriker is null))
             {
                 // Keep the remaining not-out batter on strike for display.
@@ -615,13 +619,11 @@ public partial class ScoringViewModel : ObservableObject
                 NonStriker = null;
                 await RefreshScoreAsync().ConfigureAwait(true);
                 await RefreshScorecardAsync().ConfigureAwait(true);
-                var stop = await Shell.Current.DisplayAlert(
+                await Shell.Current.DisplayAlert(
                     "Last wicket fallen",
                     "Only one batsman remains. End innings now?",
-                    "End innings",
-                    "Later").ConfigureAwait(true);
-                if (stop)
-                    await EndInningsCoreAsync(askConfirm: false).ConfigureAwait(true);
+                    "End innings").ConfigureAwait(true);
+                await EndInningsCoreAsync(askConfirm: false).ConfigureAwait(true);
                 return;
             }
 
@@ -633,9 +635,9 @@ public partial class ScoringViewModel : ObservableObject
                 else if (NonStriker is null)
                     await PromptNextBatsmanAsync(fillStrikerEnd: false).ConfigureAwait(true);
             }
-            else if (dismissedId is null)
+            else
             {
-                // Re-apply crease after Batters list rebuild so strike rotate has correct ends.
+                // Keep crease ends without rebuilding the batter picker list.
                 Striker = Batters.FirstOrDefault(p => p.Id == creaseStrikerId) ?? Striker;
                 if (creaseNonStrikerId is Guid nsId)
                     NonStriker = Batters.FirstOrDefault(p => p.Id == nsId) ?? NonStriker;
@@ -659,15 +661,15 @@ public partial class ScoringViewModel : ObservableObject
                     (Striker, NonStriker) = (NonStriker, Striker);
             }
 
-            // One snapshot read per ball drives the scoreboard, chase panel and over/target checks.
+            // Snapshot every ball (aggregates + this-over). Full card only on wicket / over end / every 6.
             var snap = await RefreshScoreAsync().ConfigureAwait(true);
-            await RefreshScorecardAsync().ConfigureAwait(true);
             await RefreshDuelAsync().ConfigureAwait(true);
 
             // Target chased — stop the game and offer End innings / Complete match.
             ApplyTargetAchievedFromSnapshot(snap);
             if (IsTargetAchieved)
             {
+                await RefreshScorecardAsync().ConfigureAwait(true);
                 await PromptTargetAchievedAsync().ConfigureAwait(true);
                 return;
             }
@@ -685,8 +687,19 @@ public partial class ScoringViewModel : ObservableObject
                 && Striker.Id != NonStriker.Id)
             {
                 (Striker, NonStriker) = (NonStriker, Striker);
+            }
+
+            var legalBall = extra is not ExtraType.Wide and not ExtraType.NoBall;
+            if (legalBall)
+                _ballsSinceFullCard++;
+            var needFullCard = dismissedId is not null
+                               || justCompletedOver
+                               || BattingCard.Count == 0
+                               || _ballsSinceFullCard >= 6;
+            if (needFullCard)
+            {
+                _ballsSinceFullCard = 0;
                 await RefreshScorecardAsync().ConfigureAwait(true);
-                await RefreshDuelAsync().ConfigureAwait(true);
             }
 
             if (snap?.InningsOversComplete == true)
@@ -694,13 +707,11 @@ public partial class ScoringViewModel : ObservableObject
                 var autoMsg = snap.OversMode == OversMode.MatchTotal
                     ? $"Match overs complete ({snap.OversLimit}). End innings now?"
                     : $"{snap.OversLimit} overs done for this turn. End innings now?";
-                var auto = await Shell.Current.DisplayAlert(
+                await Shell.Current.DisplayAlert(
                     "Overs complete",
                     autoMsg,
-                    "End innings",
-                    "Later").ConfigureAwait(true);
-                if (auto)
-                    await EndInningsCoreAsync(askConfirm: false).ConfigureAwait(true);
+                    "End innings").ConfigureAwait(true);
+                await EndInningsCoreAsync(askConfirm: false).ConfigureAwait(true);
             }
             else if (justCompletedOver)
             {
@@ -728,7 +739,7 @@ public partial class ScoringViewModel : ObservableObject
         var completeLabel = "Complete match";
         var pick = await Shell.Current.DisplayActionSheet(
                 title,
-                "Later",
+                null,
                 null,
                 "End innings",
                 completeLabel)
@@ -1147,6 +1158,17 @@ public partial class ScoringViewModel : ObservableObject
         ProjectedScoreText = snap is null || snap.OversMode == OversMode.Unlimited
             ? "-"
             : snap.ProjectedScore.ToString();
+        if (snap is not null)
+            ScorecardTotalText = $"{snap.Runs}/{snap.Wickets}";
+
+        ThisOverBalls.Clear();
+        foreach (var mark in snap?.ThisOver ?? Array.Empty<OverBallMark>())
+            ThisOverBalls.Add(OverBallChip.From(mark));
+        HasThisOverBalls = ThisOverBalls.Count > 0;
+        ShowThisOverEmpty = !HasThisOverBalls;
+        ThisOverLabel = HasThisOverBalls
+            ? $"This over · {ThisOverBalls.Count} ball{(ThisOverBalls.Count == 1 ? "" : "s")}"
+            : "This over";
 
         if (snap is { IsChase: true, RunsRequired: int need })
         {

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using JPL.Data;
 using JPL.Domain;
 
 namespace JPL.Services;
@@ -103,60 +106,53 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
 {
     private readonly IApiClient _api;
     private readonly IAuthService _auth;
+    private readonly IDbContextFactory<JplDbContext> _dbFactory;
+    private readonly ISchedulerOutboxSyncService _schedulerSync;
+    private static readonly JsonSerializerOptions SyncJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
 
-    public TournamentSchedulerService(IApiClient api, IAuthService auth)
+    public TournamentSchedulerService(
+        IApiClient api,
+        IAuthService auth,
+        IDbContextFactory<JplDbContext> dbFactory,
+        ISchedulerOutboxSyncService schedulerSync)
     {
         _api = api;
         _auth = auth;
+        _dbFactory = dbFactory;
+        _schedulerSync = schedulerSync;
     }
 
     public async Task<IReadOnlyList<SchedulerListItem>> GetAllAsync(CancellationToken ct = default)
     {
         EnsureCanUse();
-        var rows = await _api.GetSchedulerListAsync(ct).ConfigureAwait(false);
-        return rows.Select(ToListItem).ToList();
+        if (!LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+            return (await _api.GetSchedulerListAsync(ct).ConfigureAwait(false)).Select(ToListItem).ToList();
+
+        var local = await GetLocalListAsync(ct).ConfigureAwait(false);
+        return local;
     }
 
     public async Task<ApiPagedResult<SchedulerListItem>> GetPageAsync(int skip, string? q, Guid? createdBy = null, CancellationToken ct = default)
     {
         EnsureCanUse();
-        var page = await _api.GetSchedulerPageAsync(skip, q, createdBy, ct).ConfigureAwait(false);
-        var items = new List<SchedulerListItem>();
-        foreach (var t in page.Items ?? [])
+        if (!LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
         {
-            var item = ToListItem(t);
-            // Completed (or RR-done Knockout=No) rows with no Champion line — recompute + persist.
-            if (string.IsNullOrWhiteSpace(t.WinnerLine)
-                && ((SchedulerStatus)t.Status == SchedulerStatus.Completed
-                    || ((SchedulerKnockoutFormat)t.KnockoutFormat == SchedulerKnockoutFormat.None
-                        && (SchedulerStatus)t.Status == SchedulerStatus.GroupStage)))
-            {
-                try
-                {
-                    var detail = await GetAsync(t.Id, ct).ConfigureAwait(false);
-                    item = new SchedulerListItem
-                    {
-                        Id = detail.Id,
-                        Name = detail.Name,
-                        MetaLine = detail.MetaLine,
-                        StatusText = detail.StatusText,
-                        WinnerLine = detail.WinnerLine,
-                        Status = detail.Status,
-                        CanEdit = detail.CanEdit,
-                        CreatedByUserId = item.CreatedByUserId,
-                        CreatedByUsername = item.CreatedByUsername
-                    };
-                }
-                catch
-                {
-                    /* keep original list row */
-                }
-            }
-
-            items.Add(item);
+            var live = await _api.GetSchedulerPageAsync(skip, q, createdBy, ct).ConfigureAwait(false);
+            return live.WithItems((live.Items ?? []).Select(ToListItem).ToList());
         }
 
-        return page.WithItems(items);
+        var localRows = await GetLocalListAsync(ct).ConfigureAwait(false);
+        if (createdBy is Guid ownerId && ownerId != Guid.Empty)
+            localRows = localRows.Where(row => row.CreatedByUserId == ownerId).ToList();
+        if (!string.IsNullOrWhiteSpace(q))
+            localRows = localRows.Where(row => row.Name.Contains(q.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        return new ApiPagedResult<SchedulerListItem>(localRows.Skip(Math.Max(0, skip))
+            .Take(ListPaging.PageSize).ToList(), localRows.Count, Math.Max(0, skip), ListPaging.PageSize);
+
     }
 
     private static SchedulerListItem ToListItem(ApiSchedulerListDto t) => new()
@@ -184,22 +180,25 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
     public async Task<SchedulerDetail> GetAsync(Guid id, CancellationToken ct = default)
     {
         EnsureCanUse();
-        var dto = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false)
-                  ?? throw new InvalidOperationException("Scheduled tournament not found.");
-        var entity = FromDto(dto);
+        if (!LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            var live = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false)
+                       ?? throw new InvalidOperationException("Scheduled tournament not found.");
+            return ToDetail(FromDto(live));
+        }
+
+        var entity = await LoadLocalEntityAsync(id, ct).ConfigureAwait(false);
+        if (entity is null || entity.IsDeleted)
+            throw new InvalidOperationException("Scheduled tournament not found on this device.");
+        if (!entity.HasDetailsCached)
+            throw new InvalidOperationException("This scheduler's details are not available locally yet. Run Sync to refresh them.");
         var dirty = TryReseatUnplayedKnockout(entity)
                     || TryEnsureRoundRobinChampion(entity)
                     || TryEnsureKnockoutChampion(entity);
-        if (dirty)
+        if (dirty && IsCreator(entity.CreatedByUserId))
         {
-            try
-            {
-                await _api.UpdateSchedulerAsync(entity.Id, ToUpsert(entity), ct).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Still return computed champion for display; list refresh will retry persist.
-            }
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            await PersistAndQueueAsync(entity, "Upsert", ct).ConfigureAwait(false);
         }
 
         return ToDetail(entity);
@@ -217,7 +216,7 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         IReadOnlyList<SchedulerCustomPairInput>? customPairs = null,
         CancellationToken ct = default)
     {
-        EnsureCanUse();
+        EnsureCanWrite();
         name = (name ?? string.Empty).Trim();
         if (name.Length == 0)
             throw new InvalidOperationException("Enter a tournament name.");
@@ -292,9 +291,7 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
 
         if (id is Guid existing)
         {
-            var dto = await _api.GetSchedulerAsync(existing, ct).ConfigureAwait(false)
-                      ?? throw new InvalidOperationException("Scheduled tournament not found.");
-            entity = FromDto(dto);
+            entity = await LoadOwnedAsync(existing, ct).ConfigureAwait(false);
             if (entity.Status == SchedulerStatus.Completed || entity.WinnerTeamId is not null)
                 throw new InvalidOperationException("Cannot edit a completed scheduler.");
             isExisting = true;
@@ -313,6 +310,7 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             entity = new SchedulerTournament
             {
                 CreatedByUserId = _auth.Current!.UserId,
+                CreatedByUsername = _auth.Current.Username,
                 CreatedAtUtc = DateTime.UtcNow
             };
         }
@@ -395,20 +393,21 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             entity.Status = SchedulerStatus.GroupStage;
         }
 
-        var saved = id is Guid
-            ? await _api.UpdateSchedulerAsync(entity.Id, ToUpsert(entity), ct).ConfigureAwait(false)
-            : await _api.CreateSchedulerAsync(ToUpsert(entity), ct).ConfigureAwait(false);
-        return saved.Id;
+        await PersistAndQueueAsync(entity, "Upsert", ct).ConfigureAwait(false);
+        _schedulerSync.RequestSyncNow();
+        return entity.Id;
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        EnsureCanUse();
-        var dto = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false)
-                  ?? throw new InvalidOperationException("Scheduled tournament not found.");
-        if ((SchedulerStatus)dto.Status == SchedulerStatus.Completed || dto.WinnerTeamId is not null)
+        EnsureCanWrite();
+        var entity = await LoadOwnedAsync(id, ct).ConfigureAwait(false);
+        if (entity.Status == SchedulerStatus.Completed || entity.WinnerTeamId is not null)
             throw new InvalidOperationException("Cannot delete a completed scheduler.");
-        await _api.DeleteSchedulerAsync(id, ct).ConfigureAwait(false);
+        entity.IsDeleted = true;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+        await PersistAndQueueAsync(entity, "Delete", ct).ConfigureAwait(false);
+        _schedulerSync.RequestSyncNow();
     }
 
     public async Task SetMatchResultAsync(
@@ -417,7 +416,7 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         SchedulerMatchResult result,
         CancellationToken ct = default)
     {
-        EnsureCanUse();
+        EnsureCanWrite();
         var t = await LoadOwnedAsync(tournamentId, ct).ConfigureAwait(false);
         if (t.Status == SchedulerStatus.Draft)
             throw new InvalidOperationException("Finish Custom fixtures in Edit before recording results.");
@@ -437,7 +436,8 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
 
         RefreshProgress(t, reseatKnockout: wasGroup);
         t.UpdatedAtUtc = DateTime.UtcNow;
-        await _api.UpdateSchedulerAsync(t.Id, ToUpsert(t), ct).ConfigureAwait(false);
+        await PersistAndQueueAsync(t, "Upsert", ct).ConfigureAwait(false);
+        _schedulerSync.RequestSyncNow();
     }
 
     public async Task SaveQualificationPicksAsync(
@@ -445,7 +445,7 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         IReadOnlyList<Guid> teamIds,
         CancellationToken ct = default)
     {
-        EnsureCanUse();
+        EnsureCanWrite();
         var t = await LoadOwnedAsync(tournamentId, ct).ConfigureAwait(false);
         if (t.Status == SchedulerStatus.Completed || t.WinnerTeamId is not null)
             throw new InvalidOperationException("Cannot change qualification on a completed scheduler.");
@@ -472,21 +472,60 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
         t.QualificationPicksJson = SchedulerEngine.WritePicks(teamIds);
         RefreshProgress(t, reseatKnockout: true);
         t.UpdatedAtUtc = DateTime.UtcNow;
-        await _api.UpdateSchedulerAsync(t.Id, ToUpsert(t), ct).ConfigureAwait(false);
+        await PersistAndQueueAsync(t, "Upsert", ct).ConfigureAwait(false);
+        _schedulerSync.RequestSyncNow();
     }
 
     private async Task<SchedulerTournament> LoadOwnedAsync(Guid id, CancellationToken ct)
     {
-        var dto = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false)
-                  ?? throw new InvalidOperationException("Scheduled tournament not found.");
-        return FromDto(dto);
+        var local = await LoadLocalEntityAsync(id, ct).ConfigureAwait(false);
+        if (local is not null && await HasPendingAsync(id, ct).ConfigureAwait(false))
+        {
+            if (!local.HasDetailsCached)
+                throw new InvalidOperationException("This scheduler's details are not available on this device yet.");
+            EnsureIsCreator(local.CreatedByUserId);
+            return local;
+        }
+        try
+        {
+            var dto = await _api.GetSchedulerAsync(id, ct).ConfigureAwait(false);
+            if (dto is not null)
+            {
+                var remote = FromDto(dto);
+                EnsureIsCreator(remote.CreatedByUserId);
+                await CacheDetailAsync(remote, ct).ConfigureAwait(false);
+                return remote;
+            }
+            if (local is not null)
+            {
+                await MarkLocalDeletedAsync(id, ct).ConfigureAwait(false);
+                throw new InvalidOperationException("Scheduled tournament was deleted on the server.");
+            }
+        }
+        catch (Exception ex) when (NetworkUi.IsNetworkFailure(ex))
+        {
+            if (local is not null && !local.IsDeleted)
+            {
+                EnsureIsCreator(local.CreatedByUserId);
+                return local;
+            }
+        }
+        if (local is not null && !local.IsDeleted)
+        {
+            if (!local.HasDetailsCached)
+                throw new InvalidOperationException("This scheduler's details have not been synced to this device yet. Connect once to open it offline later.");
+            EnsureIsCreator(local.CreatedByUserId);
+            return local;
+        }
+        throw new InvalidOperationException("Scheduled tournament is not available on this device.");
     }
 
-    private static SchedulerTournament FromDto(ApiSchedulerDetailDto dto)
+    private SchedulerTournament FromDto(ApiSchedulerDetailDto dto)
     {
         var entity = new SchedulerTournament
         {
             Id = dto.Id,
+            LeagueId = Guid.Empty,
             Name = dto.Name,
             GroupCount = dto.GroupCount,
             RoundRobinType = (SchedulerRoundRobinType)dto.RoundRobinType,
@@ -494,7 +533,13 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             KnockoutFormat = (SchedulerKnockoutFormat)dto.KnockoutFormat,
             Status = (SchedulerStatus)dto.Status,
             WinnerTeamId = dto.WinnerTeamId,
-            QualificationPicksJson = dto.QualificationPicksJson
+            QualificationPicksJson = dto.QualificationPicksJson,
+            CreatedByUserId = dto.CreatedByUserId == Guid.Empty ? _auth.Current?.UserId ?? Guid.Empty : dto.CreatedByUserId,
+            CreatedByUsername = dto.CreatedByUsername,
+            Version = dto.Version,
+            CreatedAtUtc = dto.CreatedAtUtc,
+            UpdatedAtUtc = dto.UpdatedAtUtc,
+            HasDetailsCached = true
         };
         foreach (var team in dto.Teams)
         {
@@ -569,6 +614,275 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             x.LoserFeedsIsTeamA
         }).ToList()
     };
+
+    private async Task CacheListAsync(IReadOnlyList<ApiSchedulerListDto> rows, CancellationToken ct)
+    {
+        if (rows.Count == 0)
+            return;
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        foreach (var row in rows)
+        {
+            if (await db.SchedulerSyncOutbox.AsNoTracking().AnyAsync(item => item.TournamentId == row.Id
+                    && item.Status != SyncOutboxStatus.Completed, ct).ConfigureAwait(false))
+                continue;
+
+            var local = await db.SchedulerTournaments.IgnoreQueryFilters().Include(item => item.Teams)
+                .FirstOrDefaultAsync(item => item.Id == row.Id && item.LeagueId == db.CurrentLeagueId, ct)
+                .ConfigureAwait(false);
+            if (local is null)
+            {
+                local = new SchedulerTournament { Id = row.Id };
+                db.SchedulerTournaments.Add(local);
+            }
+            local.Name = row.Name;
+            local.GroupCount = row.GroupCount;
+            local.RoundRobinType = (SchedulerRoundRobinType)row.RoundRobinType;
+            local.QualifyPerGroup = row.QualifyPerGroup;
+            local.KnockoutFormat = (SchedulerKnockoutFormat)row.KnockoutFormat;
+            local.Status = (SchedulerStatus)row.Status;
+            local.CreatedByUserId = row.CreatedByUserId;
+            local.CreatedByUsername = row.CreatedByUsername ?? string.Empty;
+            local.Version = row.Version;
+            local.UpdatedAtUtc = row.UpdatedAtUtc;
+            local.IsDeleted = false;
+        }
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task CacheDetailAsync(SchedulerTournament source, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        if (await db.SchedulerSyncOutbox.AsNoTracking().AnyAsync(item => item.TournamentId == source.Id
+                && item.Status != SyncOutboxStatus.Completed, ct).ConfigureAwait(false))
+            return;
+
+        var local = await db.SchedulerTournaments.IgnoreQueryFilters()
+            .Include(item => item.Teams)
+            .Include(item => item.Matches)
+            .FirstOrDefaultAsync(item => item.Id == source.Id && item.LeagueId == db.CurrentLeagueId, ct)
+            .ConfigureAwait(false);
+        if (local is null)
+        {
+            local = new SchedulerTournament { Id = source.Id };
+            db.SchedulerTournaments.Add(local);
+        }
+        var cachedUsername = local.CreatedByUsername;
+        CopyScalars(local, source);
+        local.CreatedByUsername = string.IsNullOrWhiteSpace(source.CreatedByUsername)
+            ? cachedUsername
+            : source.CreatedByUsername;
+        ReconcileTeams(db, local, source.Teams);
+        ReconcileMatches(db, local, source.Matches);
+        local.HasDetailsCached = true;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task<SchedulerTournament?> LoadLocalEntityAsync(Guid id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await db.SchedulerTournaments.AsNoTracking()
+            .Include(item => item.Teams)
+            .Include(item => item.Matches)
+            .FirstOrDefaultAsync(item => item.Id == id, ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> HasPendingAsync(Guid id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await db.SchedulerSyncOutbox.AsNoTracking().AnyAsync(item => item.TournamentId == id
+            && item.Status != SyncOutboxStatus.Completed, ct).ConfigureAwait(false);
+    }
+
+    private async Task MarkLocalDeletedAsync(Guid id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var row = await db.SchedulerTournaments.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(item => item.Id == id && item.LeagueId == db.CurrentLeagueId, ct)
+            .ConfigureAwait(false);
+        if (row is null)
+            return;
+        row.IsDeleted = true;
+        row.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task<List<SchedulerListItem>> GetLocalListAsync(CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var rows = await db.SchedulerTournaments.AsNoTracking()
+            .Include(item => item.Teams)
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var session = _auth.Current;
+        // Local DB is already home-league scoped; League Admin/User can see league schedules.
+        // SuperAdmin platform: own rows only when not platform (local rarely used).
+        rows = rows.Where(row => session is not null && (
+            session.CanManagePlatform
+            || session.Role is AppRole.Admin or AppRole.User
+            || row.CreatedByUserId == session.UserId)).ToList();
+        return rows.Select(row =>
+        {
+            var winner = row.WinnerTeamId is Guid winnerId
+                ? row.Teams.FirstOrDefault(team => team.Id == winnerId)?.Name
+                : null;
+            return new SchedulerListItem
+            {
+                Id = row.Id,
+                Name = row.Name,
+                MetaLine = SchedulerEngine.SetupHint(row.GroupCount, row.QualifyPerGroup,
+                    row.KnockoutFormat, row.RoundRobinType, row.Teams.Count,
+                    row.RoundRobinType == SchedulerRoundRobinType.Custom
+                        ? SchedulerEngine.TryReadCustomMatchesPerTeam(row.QualificationPicksJson)
+                        : null),
+                StatusText = SchedulerEngine.StatusText(row.Status),
+                WinnerLine = winner is null ? string.Empty : $"Champion: {winner}",
+                Status = row.Status,
+                CanEdit = session is not null
+                    && session.CanWrite
+                    && session.UserId == row.CreatedByUserId
+                    && row.Status != SchedulerStatus.Completed,
+                CreatedByUserId = row.CreatedByUserId,
+                CreatedByUsername = row.CreatedByUsername
+            };
+        }).ToList();
+    }
+
+    private async Task PersistAndQueueAsync(SchedulerTournament source, string operation, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var local = await db.SchedulerTournaments.IgnoreQueryFilters()
+            .Include(item => item.Teams)
+            .Include(item => item.Matches)
+            .FirstOrDefaultAsync(item => item.Id == source.Id && item.LeagueId == db.CurrentLeagueId, ct)
+            .ConfigureAwait(false);
+
+        var pending = await db.SchedulerSyncOutbox
+            .Where(item => item.TournamentId == source.Id && item.Status != SyncOutboxStatus.Completed)
+            .OrderBy(item => item.CreatedAtUtc)
+            .ToListAsync(ct).ConfigureAwait(false);
+        if (pending.Any(item => item.Status == SyncOutboxStatus.Failed))
+            throw new InvalidOperationException("This scheduler has a sync conflict. Run Sync now to see the conflict details before editing it again.");
+
+        var expectedVersion = (local?.Version ?? source.Version) + pending.Count;
+        var knownServerVersion = local?.Version ?? source.Version;
+        if (local is null)
+        {
+            local = new SchedulerTournament { Id = source.Id, Version = source.Version };
+            db.SchedulerTournaments.Add(local);
+        }
+        CopyScalars(local, source);
+        local.Version = Math.Max(local.Version, knownServerVersion);
+        local.HasDetailsCached = true;
+        ReconcileTeams(db, local, source.Teams);
+        ReconcileMatches(db, local, source.Matches);
+
+        var operationId = Guid.NewGuid();
+        var request = new ApiSchedulerSyncRequest
+        {
+            OperationId = operationId,
+            TournamentId = source.Id,
+            ExpectedVersion = expectedVersion,
+            Operation = operation,
+            Payload = ToUpsert(source)
+        };
+        db.SchedulerSyncOutbox.Add(new SchedulerSyncOutboxItem
+        {
+            Id = Guid.NewGuid(),
+            TournamentId = source.Id,
+            OperationId = operationId,
+            ExpectedVersion = expectedVersion,
+            Operation = operation,
+            PayloadJson = JsonSerializer.Serialize(request, SyncJson),
+            Status = SyncOutboxStatus.Pending,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    private static void CopyScalars(SchedulerTournament target, SchedulerTournament source)
+    {
+        target.Name = source.Name;
+        target.GroupCount = source.GroupCount;
+        target.RoundRobinType = source.RoundRobinType;
+        target.QualifyPerGroup = source.QualifyPerGroup;
+        target.KnockoutFormat = source.KnockoutFormat;
+        target.Status = source.Status;
+        target.WinnerTeamId = source.WinnerTeamId;
+        target.CreatedByUserId = source.CreatedByUserId;
+        target.QualificationPicksJson = source.QualificationPicksJson;
+        target.CreatedAtUtc = source.CreatedAtUtc;
+        target.UpdatedAtUtc = source.UpdatedAtUtc;
+        target.IsDeleted = source.IsDeleted;
+        target.Version = source.Version;
+        target.CreatedByUsername = source.CreatedByUsername;
+        target.HasDetailsCached = source.HasDetailsCached || source.Teams.Count > 0 || source.Matches.Count > 0;
+    }
+
+    private static void ReconcileTeams(JplDbContext db, SchedulerTournament target, IEnumerable<SchedulerTeam> source)
+    {
+        var desired = source.ToDictionary(item => item.Id);
+        foreach (var old in target.Teams.ToList())
+        {
+            if (!desired.Remove(old.Id, out var value))
+            {
+                db.SchedulerTeams.Remove(old);
+                target.Teams.Remove(old);
+                continue;
+            }
+            old.Name = value.Name;
+            old.GroupNumber = value.GroupNumber;
+            old.SortOrder = value.SortOrder;
+        }
+        foreach (var value in desired.Values)
+            target.Teams.Add(new SchedulerTeam
+            {
+                Id = value.Id,
+                TournamentId = target.Id,
+                Name = value.Name,
+                GroupNumber = value.GroupNumber,
+                SortOrder = value.SortOrder
+            });
+    }
+
+    private static void ReconcileMatches(JplDbContext db, SchedulerTournament target, IEnumerable<SchedulerMatch> source)
+    {
+        var desired = source.ToDictionary(item => item.Id);
+        foreach (var old in target.Matches.ToList())
+        {
+            if (!desired.Remove(old.Id, out var value))
+            {
+                db.SchedulerMatches.Remove(old);
+                target.Matches.Remove(old);
+                continue;
+            }
+            CopyMatch(old, value);
+        }
+        foreach (var value in desired.Values)
+        {
+            var match = new SchedulerMatch { Id = value.Id, TournamentId = target.Id };
+            CopyMatch(match, value);
+            target.Matches.Add(match);
+        }
+    }
+
+    private static void CopyMatch(SchedulerMatch target, SchedulerMatch source)
+    {
+        target.Stage = source.Stage;
+        target.GroupNumber = source.GroupNumber;
+        target.Sequence = source.Sequence;
+        target.Label = source.Label;
+        target.TeamAId = source.TeamAId;
+        target.TeamBId = source.TeamBId;
+        target.TeamASlot = source.TeamASlot;
+        target.TeamBSlot = source.TeamBSlot;
+        target.Result = source.Result;
+        target.WinnerFeedsMatchId = source.WinnerFeedsMatchId;
+        target.WinnerFeedsIsTeamA = source.WinnerFeedsIsTeamA;
+        target.LoserFeedsMatchId = source.LoserFeedsMatchId;
+        target.LoserFeedsIsTeamA = source.LoserFeedsIsTeamA;
+    }
 
     private void RefreshProgress(SchedulerTournament t, bool reseatKnockout)
     {
@@ -729,7 +1043,8 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
             MetaLine = SchedulerEngine.SetupHint(
                 t.GroupCount, t.QualifyPerGroup, t.KnockoutFormat, t.RoundRobinType, teams.Count, matchesPerTeam),
             WinnerLine = winnerName is null ? string.Empty : $"Champion: {winnerName}",
-            CanEdit = t.Status != SchedulerStatus.Completed,
+            CanEdit = IsCreator(t.CreatedByUserId)
+                && t.Status != SchedulerStatus.Completed,
             GroupStageComplete = groupDone,
             MatchesPerTeam = matchesPerTeam,
             Qualification = qualification,
@@ -797,5 +1112,22 @@ public sealed class TournamentSchedulerService : ITournamentSchedulerService
     {
         if (_auth.Current is null || _auth.Current.IsGuest)
             throw new InvalidOperationException("Login required to use Tournament Scheduler.");
+    }
+
+    private void EnsureCanWrite()
+    {
+        EnsureCanUse();
+        if (_auth.Current?.CanWrite != true)
+            throw new InvalidOperationException("League Admin required to manage Tournament Scheduler.");
+    }
+
+    private bool IsCreator(Guid createdByUserId)
+        => _auth.Current is { CanWrite: true } session && session.UserId == createdByUserId;
+
+    private void EnsureIsCreator(Guid createdByUserId)
+    {
+        EnsureCanWrite();
+        if (!IsCreator(createdByUserId))
+            throw new InvalidOperationException("Only the League Admin who created this tournament can edit it.");
     }
 }

@@ -49,6 +49,28 @@ public sealed class SessionAuthMiddleware
             return;
         }
 
+        // League Admin / League User of a deactivated or deleted league are signed out
+        // (message contains "deactivated"/"deleted" so the app forces logout).
+        if (user.LeagueId is Guid boundLeague && boundLeague != Guid.Empty
+            && user.Role is Models.AppRole.Admin or Models.AppRole.User)
+        {
+            var league = await db.Leagues.IgnoreQueryFilters().AsNoTracking()
+                .Where(l => l.Id == boundLeague)
+                .Select(l => new { l.IsActive, l.IsDeleted })
+                .FirstOrDefaultAsync(context.RequestAborted)
+                .ConfigureAwait(false);
+            if (league is not null && (league.IsDeleted || !league.IsActive))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsync(
+                        league.IsDeleted
+                            ? "Your league was deleted. Contact the platform admin."
+                            : "Your league is deactivated. Contact the platform admin.")
+                    .ConfigureAwait(false);
+                return;
+            }
+        }
+
         var identity = new ClaimsIdentity(
             new[]
             {
@@ -81,8 +103,7 @@ public sealed class SessionAuthMiddleware
             path.StartsWith("/api/health/", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase)
-            || path.Equals("/api/auth/signup", StringComparison.OrdinalIgnoreCase))
+        if (path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase))
             return true;
 
         if (path.StartsWith("/api/public/", StringComparison.OrdinalIgnoreCase))

@@ -109,9 +109,10 @@ public sealed class Match : ILeagueScoped
     public ICollection<Innings> Innings { get; set; } = new List<Innings>();
 }
 
-public sealed class Innings
+public sealed class Innings : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid MatchId { get; set; }
     public Match Match { get; set; } = null!;
     public int InningsNumber { get; set; } = 1;
@@ -126,9 +127,10 @@ public sealed class Innings
 }
 
 /// <summary>One ball event — source of truth for batter-vs-bowler confrontation stats.</summary>
-public sealed class Delivery
+public sealed class Delivery : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid MatchId { get; set; }
     public Guid InningsId { get; set; }
     public Innings Innings { get; set; } = null!;

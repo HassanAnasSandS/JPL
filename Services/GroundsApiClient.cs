@@ -1,6 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using JPL.Data;
+using JPL.Domain;
 
 namespace JPL.Services;
 
@@ -8,6 +11,20 @@ public sealed class BookingConflictException : Exception
 {
     public BookingConflictException(string message) : base(message) { }
 }
+
+public sealed record GroundBookingShopRequest(string Name, int Qty);
+
+public sealed record GroundBookingCreateRequest(
+    DateTime StartAt,
+    DateTime EndAt,
+    string? CustomerName,
+    string? CustomerPhone,
+    string? Notes,
+    string? BookingKind,
+    decimal Hours,
+    IReadOnlyList<string>? Services,
+    IReadOnlyList<GroundBookingShopRequest>? Shop,
+    Guid? ClientRequestId = null);
 
 public sealed record GroundCardDto(
     Guid Id,
@@ -449,8 +466,10 @@ public sealed class GroundsApiClient : IGroundsApiClient
     };
 
     private readonly IHttpClientFactory _http;
-
-    public GroundsApiClient(IHttpClientFactory http) => _http = http;
+    public GroundsApiClient(IHttpClientFactory http)
+    {
+        _http = http;
+    }
 
     private HttpClient Client => _http.CreateClient(GroundsApiOptions.HttpClientName);
 
@@ -485,7 +504,8 @@ public sealed class GroundsApiClient : IGroundsApiClient
             ("country", country),
             ("state", state),
             ("city", city));
-        return await GetAsync<GroundLocationOptionsDto>($"api/grounds/location-options{qs}", ct).ConfigureAwait(false)
+        return await GetAsync<GroundLocationOptionsDto>($"api/grounds/location-options{qs}", ct)
+                   .ConfigureAwait(false)
                ?? new GroundLocationOptionsDto([], [], [], []);
     }
 
@@ -496,8 +516,10 @@ public sealed class GroundsApiClient : IGroundsApiClient
                ?? new GroundSearchPageDto([], null, false);
     }
 
-    public Task<GroundDetailDto?> GetGroundAsync(Guid id, CancellationToken ct = default)
-        => GetAsync<GroundDetailDto>($"api/grounds/{id:D}", ct);
+    public async Task<GroundDetailDto?> GetGroundAsync(Guid id, CancellationToken ct = default)
+    {
+        return await GetAsync<GroundDetailDto>($"api/grounds/{id:D}", ct).ConfigureAwait(false);
+    }
 
     public Task<GroundDetailDto> CreateGroundAsync(object body, CancellationToken ct = default)
         => PostAsync<GroundDetailDto>("api/owner/grounds", body, ct);

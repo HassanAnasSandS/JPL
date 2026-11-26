@@ -5,8 +5,8 @@ namespace JPL.Api.Middleware;
 
 /// <summary>
 /// League Admin may mutate only their bound (home) league.
-/// SuperAdmin may mutate any league. Everyone else is read-only.
-/// GET/HEAD/OPTIONS stay open so other leagues can be viewed like a Public User.
+/// SuperAdmin may mutate platform paths only (users + league shells) — not league sports data.
+/// Everyone else is read-only on mutating league APIs.
 /// </summary>
 public sealed class LeagueWriteGuardMiddleware
 {
@@ -35,7 +35,15 @@ public sealed class LeagueWriteGuardMiddleware
 
         if (string.Equals(role, nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase))
         {
-            await _next(context).ConfigureAwait(false);
+            if (IsPlatformManagementPath(path))
+            {
+                await _next(context).ConfigureAwait(false);
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsync("SuperAdmin manages users and leagues only.")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -58,6 +66,16 @@ public sealed class LeagueWriteGuardMiddleware
         await context.Response.WriteAsync("Only the league admin can change this league.")
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Users + league directory records (create / edit / activate / delete).
+    /// /api/leagues is exact or "/api/leagues/..." — never league sports data.
+    /// </summary>
+    private static bool IsPlatformManagementPath(string path)
+        => path.StartsWith("/api/users", StringComparison.OrdinalIgnoreCase)
+           || path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase)
+           || path.Equals("/api/leagues", StringComparison.OrdinalIgnoreCase)
+           || path.StartsWith("/api/leagues/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsHomeLeagueRequest(HttpContext context)
     {
@@ -89,7 +107,6 @@ public sealed class LeagueWriteGuardMiddleware
         => path.Equals("/api/health", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("/api/health/", StringComparison.OrdinalIgnoreCase)
            || path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase)
-           || path.Equals("/api/auth/signup", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("/api/public/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("/api/scheduler", StringComparison.OrdinalIgnoreCase);
 }

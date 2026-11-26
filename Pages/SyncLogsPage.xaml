@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:JPL.ViewModels"
+             x:Class="JPL.Pages.SyncLogsPage"
+             x:Name="ThisPage"
+             x:DataType="vm:SyncLogsViewModel"
+             Title="Sync logs"
+             HideSoftInputOnTapped="True">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="14" RowSpacing="8">
+        <HorizontalStackLayout Grid.Row="0" Spacing="8">
+            <Button Text="All" Padding="14,8" FontSize="12" CornerRadius="18"
+                    BackgroundColor="{StaticResource Primary}" TextColor="White"
+                    Command="{Binding SetFilterCommand}" CommandParameter="All" />
+            <Button Text="Errors" Padding="14,8" FontSize="12" CornerRadius="18"
+                    BackgroundColor="#FFE8EC" TextColor="{StaticResource Danger}"
+                    Command="{Binding SetFilterCommand}" CommandParameter="Errors" />
+            <Button Text="Warn" Padding="14,8" FontSize="12" CornerRadius="18"
+                    BackgroundColor="#FFF3E0" TextColor="#C77800"
+                    Command="{Binding SetFilterCommand}" CommandParameter="Warn" />
+            <Button Text="OK" Padding="14,8" FontSize="12" CornerRadius="18"
+                    BackgroundColor="#E8F5E9" TextColor="#2E7D32"
+                    Command="{Binding SetFilterCommand}" CommandParameter="Success" />
+        </HorizontalStackLayout>
+
+        <RefreshView Grid.Row="1" IsRefreshing="{Binding IsBusy}" Command="{Binding LoadCommand}">
+            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None"
+                            EmptyView="No sync activity yet. Run Sync now — events appear here.">
+                <CollectionView.Header>
+                    <VerticalStackLayout Spacing="10" Padding="0,2,0,8">
+                        <Border StrokeThickness="0" BackgroundColor="#F4F7FA" Padding="14,12"
+                                StrokeShape="RoundRectangle 14">
+                            <VerticalStackLayout Spacing="5">
+                                <Label Text="{Binding StatusLine}" FontAttributes="Bold" FontSize="16"
+                                       TextColor="{StaticResource Primary}" />
+                                <Label Text="{Binding CursorLine}" Style="{StaticResource MutedLabel}" FontSize="12" />
+                                <Label Text="{Binding PendingLine}" Style="{StaticResource MutedLabel}" FontSize="12" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border BackgroundColor="White" Stroke="#D9E1E8" StrokeThickness="1"
+                                Padding="12" StrokeShape="RoundRectangle 14">
+                            <VerticalStackLayout Spacing="5">
+                                <Label Text="Latest sync report" FontAttributes="Bold" FontSize="14"
+                                       TextColor="{StaticResource Primary}" />
+                                <Label Text="{Binding LatestReportTitle}" FontSize="12"
+                                       TextColor="{StaticResource TextPrimary}" />
+                                <Label Text="{Binding LatestReportSummary}" FontSize="12"
+                                       TextColor="{StaticResource TextPrimary}" />
+                                <Label Text="{Binding LatestReportSteps}" FontSize="11"
+                                       Style="{StaticResource MutedLabel}" LineBreakMode="WordWrap"
+                                       IsVisible="{Binding HasReportSteps}" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border BackgroundColor="#FFF3F3" Stroke="#F2C6C6" StrokeThickness="1"
+                                Padding="10" StrokeShape="RoundRectangle 12" IsVisible="{Binding HasError}">
+                            <Label Text="{Binding ErrorMessage}" TextColor="{StaticResource Danger}"
+                                   FontSize="12" LineBreakMode="WordWrap" />
+                        </Border>
+
+                        <Border BackgroundColor="#FFF9F0" Stroke="#E8C982" StrokeThickness="1"
+                                Padding="12" StrokeShape="RoundRectangle 14" IsVisible="{Binding HasConflicts}">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="{Binding ConflictHeading}" FontAttributes="Bold" FontSize="14"
+                                       TextColor="#9B5C00" />
+                                <Label Text="Compare the device and server copies. Choose which one to keep."
+                                       FontSize="12" Style="{StaticResource MutedLabel}" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Conflicts}" Spacing="8">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SyncConflictRow">
+                                            <Border BackgroundColor="White" Stroke="#E5D6B3" StrokeThickness="1"
+                                                    Padding="10" StrokeShape="RoundRectangle 12">
+                                                <VerticalStackLayout Spacing="7">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                        <Label Text="{Binding Title}" FontAttributes="Bold" FontSize="13"
+                                                               TextColor="{StaticResource Primary}" />
+                                                        <Label Grid.Column="1" Text="{Binding RecordId}" FontSize="10"
+                                                               Style="{StaticResource MutedLabel}" VerticalOptions="Center" />
+                                                    </Grid>
+                                                    <Label Text="{Binding Message}" FontSize="12"
+                                                           TextColor="{StaticResource TextPrimary}" LineBreakMode="WordWrap" />
+                                                    <Border BackgroundColor="#F5F8FB" StrokeThickness="0" Padding="8"
+                                                            StrokeShape="RoundRectangle 8">
+                                                        <VerticalStackLayout Spacing="3">
+                                                            <Label Text="ON THIS DEVICE" FontAttributes="Bold" FontSize="10"
+                                                                   TextColor="{StaticResource Primary}" />
+                                                            <Label Text="{Binding LocalChange}" FontSize="11"
+                                                                   TextColor="{StaticResource TextPrimary}" LineBreakMode="WordWrap" />
+                                                        </VerticalStackLayout>
+                                                    </Border>
+                                                    <Border BackgroundColor="#F4FAF5" StrokeThickness="0" Padding="8"
+                                                            StrokeShape="RoundRectangle 8">
+                                                        <VerticalStackLayout Spacing="3">
+                                                            <Label Text="ON SERVER" FontAttributes="Bold" FontSize="10"
+                                                                   TextColor="#2E7D32" />
+                                                            <Label Text="{Binding ServerCopy}" FontSize="11"
+                                                                   TextColor="{StaticResource TextPrimary}" LineBreakMode="WordWrap" />
+                                                        </VerticalStackLayout>
+                                                    </Border>
+                                                    <Label Text="{Binding DeviceEdit, StringFormat='Your edit: {0}'}"
+                                                           FontSize="11" TextColor="#34495E" LineBreakMode="WordWrap" />
+                                                    <Label Text="{Binding Difference, StringFormat='Server → device: {0}'}"
+                                                           FontSize="11" TextColor="#6D4C00" LineBreakMode="WordWrap" />
+                                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                                        <Button Text="Keep device copy" Padding="8,7" FontSize="11"
+                                                                BackgroundColor="{StaticResource Primary}" TextColor="White"
+                                                                IsEnabled="{Binding HasServerCopy}"
+                                                                Command="{Binding Source={x:Reference ThisPage}, Path=BindingContext.KeepDeviceCopyCommand}"
+                                                                CommandParameter="{Binding .}" />
+                                                        <Button Grid.Column="1" Text="Use server copy" Padding="8,7" FontSize="11"
+                                                                BackgroundColor="#E8F5E9" TextColor="#2E7D32"
+                                                                IsEnabled="{Binding HasServerCopy}"
+                                                                Command="{Binding Source={x:Reference ThisPage}, Path=BindingContext.UseServerCopyCommand}"
+                                                                CommandParameter="{Binding .}" />
+                                                    </Grid>
+                                                </VerticalStackLayout>
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border BackgroundColor="White" Stroke="#D9E1E8" StrokeThickness="1"
+                                Padding="12" StrokeShape="RoundRectangle 14">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="{Binding WaitingHeading}" FontAttributes="Bold" FontSize="14"
+                                       TextColor="{StaticResource Primary}" />
+                                <Label Text="These changes are saved on this device and are still waiting for the server."
+                                       FontSize="12" Style="{StaticResource MutedLabel}" IsVisible="{Binding HasWaitingItems}" />
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding WaitingItems}" Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SyncOutboxRow">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,3">
+                                                <BoxView WidthRequest="4" Color="{Binding Accent}" CornerRadius="2" />
+                                                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                                    <Label Text="{Binding Title}" FontAttributes="Bold" FontSize="12"
+                                                           TextColor="{StaticResource TextPrimary}" />
+                                                    <Label Text="{Binding Summary}" FontSize="11"
+                                                           Style="{StaticResource MutedLabel}" LineBreakMode="WordWrap" />
+                                                    <Label Text="{Binding FailureReason}" FontSize="11"
+                                                           TextColor="{StaticResource Danger}" LineBreakMode="WordWrap"
+                                                           IsVisible="{Binding HasFailureReason}" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="2" Text="{Binding StatusText}" FontSize="10"
+                                                       TextColor="{Binding Accent}" VerticalOptions="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                                <Label Text="No unsynced client changes." FontSize="12"
+                                       Style="{StaticResource MutedLabel}" IsVisible="{Binding HasNoWaitingItems}" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Label Text="Activity" FontAttributes="Bold" FontSize="14"
+                               TextColor="{StaticResource Primary}" Margin="2,3,0,0" />
+                    </VerticalStackLayout>
+                </CollectionView.Header>
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SyncLogRow">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,8" Padding="12,10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                  ColumnSpacing="10" RowSpacing="3">
+                                <BoxView WidthRequest="4" Color="{Binding Accent}" VerticalOptions="Fill"
+                                         CornerRadius="2" Grid.RowSpan="4" />
+                                <HorizontalStackLayout Grid.Column="1" Spacing="8">
+                                    <Label Text="{Binding LevelLabel}" FontAttributes="Bold" FontSize="11"
+                                           TextColor="{Binding Accent}" VerticalOptions="Center" />
+                                    <Label Text="{Binding Phase}" FontAttributes="Bold" FontSize="13"
+                                           TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+                                <Label Grid.Column="2" Text="{Binding TimeLabel}" Style="{StaticResource MutedLabel}"
+                                       FontSize="11" VerticalOptions="Center" />
+                                <Label Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Message}"
+                                       FontSize="13" TextColor="{StaticResource TextPrimary}" LineBreakMode="WordWrap" />
+                                <Label Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Detail}"
+                                       FontSize="11" Style="{StaticResource MutedLabel}" LineBreakMode="TailTruncation"
+                                       MaxLines="3" IsVisible="{Binding HasDetail}" />
+                                <Button Grid.Row="3" Grid.Column="1" Text="{Binding DetailAction}"
+                                        IsVisible="{Binding HasDetail}" Padding="0" HeightRequest="28"
+                                        HorizontalOptions="Start" FontSize="11" BackgroundColor="Transparent"
+                                        TextColor="{StaticResource Primary}"
+                                        Command="{Binding Source={x:Reference ThisPage}, Path=BindingContext.ToggleLogDetailsCommand}"
+                                        CommandParameter="{Binding .}" />
+                                <Label Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Detail}"
+                                       FontSize="11" Style="{StaticResource MutedLabel}" LineBreakMode="WordWrap"
+                                       IsVisible="{Binding IsExpanded}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*" ColumnSpacing="8">
+            <Button Text="Refresh" Style="{StaticResource OutlineButton}" Command="{Binding LoadCommand}" />
+            <Button Grid.Column="1" Text="Clear logs" BackgroundColor="#FFE8EC"
+                    TextColor="{StaticResource Danger}" Command="{Binding ClearCommand}" />
+            <Button Grid.Column="2" Text="{Binding SyncButtonText}" Style="{StaticResource GoldButton}"
+                    IsVisible="{Binding CanSync}" IsEnabled="{Binding CanStartSync}"
+                    Command="{Binding SyncNowCommand}" />
+        </Grid>
+    </Grid>
+</ContentPage>

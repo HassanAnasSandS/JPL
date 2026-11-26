@@ -37,9 +37,10 @@ public enum TournamentKnockoutFormat : byte
     None = 4
 }
 
-public sealed class Tournament
+public sealed class Tournament : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public string Name { get; set; } = string.Empty;
     /// <summary>1, 2, or 4 (Custom always 1).</summary>
     public int GroupCount { get; set; } = 1;
@@ -75,8 +76,9 @@ public sealed class Tournament
     public ICollection<TournamentFixture> Fixtures { get; set; } = new List<TournamentFixture>();
 }
 
-public sealed class TournamentTeam
+public sealed class TournamentTeam : ILeagueScoped
 {
+    public Guid LeagueId { get; set; }
     public Guid TournamentId { get; set; }
     public Tournament Tournament { get; set; } = null!;
     public Guid TeamId { get; set; }
@@ -84,9 +86,10 @@ public sealed class TournamentTeam
     public int GroupNumber { get; set; } = 1;
 }
 
-public sealed class TournamentFixture
+public sealed class TournamentFixture : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid TournamentId { get; set; }
     public Tournament Tournament { get; set; } = null!;
     public TournamentFixtureStage Stage { get; set; } = TournamentFixtureStage.Group;

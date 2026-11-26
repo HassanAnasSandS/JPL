@@ -1,0 +1,36 @@
+---
+description: Local storage and sync rules for JPL
+alwaysApply: true
+---
+
+# Local storage and sync (JPL)
+
+## Topology
+- One server; thousands of MAUI clients.
+- League Admin feature data uses local SQLite. After login, do not call feature APIs outside explicit Sync operations.
+- League User, SuperAdmin, GroundOwner, and Guest feature data uses live APIs and must not be persisted as local feature cache data.
+
+## League Admin
+- Use local SQLite for reads and writes in every feature, including cold start; never fall back to feature APIs.
+- Only the bound home league (`AuthSession.LeagueId`) may push and pull via Sync.
+- Home-league writes queue durably for Sync; keep match and nets live scoring in `LiveOutbox`.
+- Login is server authenticated. Avoid standalone `/api/auth/me` requests after login; validate the session through Sync.
+- The HTTP handler must block every League Admin feature request except explicit Sync routes. Live feed/list routes are not an exception.
+
+## Other roles
+- Read and write league feature data through live APIs; do not use local feature caches or local business-data outboxes.
+- Authentication state and ephemeral UI preferences are not feature data.
+
+## Sync correctness
+- Keep SQLite Guid TEXT lowercase; startup normalizes casing so EF lookups never miss rows and cache inserts never hit duplicate PKs.
+- Push uses idempotency keys and server receipts so retries are safe.
+- Pull uses per-league cursors; protected local work must defer remote rows without losing replayable copies.
+- Conflicts must be resolvable (accept server / keep local), never terminal-only.
+- Do not hard-gate sync on `Connectivity.NetworkAccess`. Attempt HTTP and treat transport failures as offline.
+- Do not sync incomplete match/nets scoring through the completed-match outbox (`LiveOutbox` only).
+- Do not globally block unrelated entity types behind one failed parent row.
+- Prune only after Completed; never delete Pending/Failed/InFlight rows.
+- Do not put ImagePath binaries through the change-feed payload.
+- Manual and automatic full Sync are only for League Admin's home league.
+
+Use `LeagueSyncPolicy.UsesLocalStorage(session)` for League Admin feature data. Use `LeagueSyncPolicy.AllowsLocalOfflineSync(session, selectedLeagueId)` only for home-league Sync and outbox paths.

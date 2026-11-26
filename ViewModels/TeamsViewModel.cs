@@ -150,7 +150,7 @@ public partial class TeamsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = NetworkUi.UserMessage(ex);
             if (Items.Count == 0)
             {
                 TotalCount = 0;
@@ -237,7 +237,7 @@ public partial class TeamsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = NetworkUi.UserMessage(ex);
         }
     }
 

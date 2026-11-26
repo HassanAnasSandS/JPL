@@ -21,6 +21,19 @@ public sealed record ApiLeagueDto(
     int LiveMatchCount = 0,
     int LiveNetsCount = 0);
 
+/// <summary>SuperAdmin League management row (GET api/leagues/manage/...).</summary>
+public sealed record ApiLeagueAdminDto(
+    Guid Id,
+    string Name,
+    string? ImageBase64,
+    bool IsActive,
+    DateTime CreatedAtUtc,
+    DateTime? UpdatedAtUtc = null,
+    int AdminCount = 0,
+    int UserCount = 0,
+    int LiveMatchCount = 0,
+    int LiveNetsCount = 0);
+
 public sealed record ApiUserDto(
     Guid Id,
     string Username,
@@ -87,7 +100,17 @@ public sealed record ApiMatchSummaryDto(
     byte OversMode = 0,
     Guid? TournamentId = null,
     Guid? SeriesId = null,
-    string? LiveStreamUrl = null);
+    string? LiveStreamUrl = null,
+    Guid? PlayerTeamId = null)
+{
+    public string TeamALabel => PlayerTeamId == TeamAId ? $"{TeamAName} (You)" : TeamAName;
+    public string TeamBLabel => PlayerTeamId == TeamBId ? $"{TeamBName} (You)" : TeamBName;
+    public string PlayerOutcomeText => PlayerTeamId is not Guid teamId
+        ? "PLAYED"
+        : WinnerTeamId is not Guid winnerId
+            ? "TIED"
+            : winnerId == teamId ? "WON" : "LOST";
+}
 
 /// <summary>Raw Match + Innings + Delivery rows used to rebuild scoring after a reinstall.</summary>
 public sealed record ApiMatchExportDto(
@@ -521,6 +544,8 @@ public sealed class ApiSchedulerListDto
     public bool CanEdit { get; set; }
     public Guid CreatedByUserId { get; set; }
     public string CreatedByUsername { get; set; } = string.Empty;
+    public long Version { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
 }
 
 public sealed class ApiSchedulerDetailDto
@@ -534,6 +559,11 @@ public sealed class ApiSchedulerDetailDto
     public byte Status { get; set; }
     public Guid? WinnerTeamId { get; set; }
     public string? QualificationPicksJson { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string CreatedByUsername { get; set; } = string.Empty;
+    public long Version { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
     public List<ApiSchedulerTeamDto> Teams { get; set; } = new();
     public List<ApiSchedulerMatchDto> Matches { get; set; } = new();
 }
@@ -564,6 +594,22 @@ public sealed class ApiSchedulerMatchDto
     public bool LoserFeedsIsTeamA { get; set; }
 }
 
+public sealed class ApiSchedulerSyncRequest
+{
+    public Guid OperationId { get; set; }
+    public Guid TournamentId { get; set; }
+    public long ExpectedVersion { get; set; }
+    public string Operation { get; set; } = "Upsert";
+    public object Payload { get; set; } = new();
+}
+
+public sealed class ApiSchedulerSyncResponse
+{
+    public Guid TournamentId { get; set; }
+    public long AppliedVersion { get; set; }
+    public bool WasDuplicate { get; set; }
+}
+
 /// <summary>
 /// JPL.Api only (jpl.shoptick.shop → :5025).
 /// Login, GroundOwner/Admin/User accounts, leagues, matches, venues, live hub.
@@ -574,7 +620,6 @@ public interface IApiClient
 {
     Task<bool> PingAsync(CancellationToken ct = default);
     Task<ApiLoginResult?> LoginAsync(string username, string password, CancellationToken ct = default);
-    Task<ApiLoginResult> SignupAsync(string username, string password, string whatsApp, CancellationToken ct = default);
     /// <summary>Validates current Bearer session; inactive/deleted account → SessionExpiredException.</summary>
     Task<ApiLoginResult?> GetMeAsync(CancellationToken ct = default);
 
@@ -628,6 +673,8 @@ public interface IApiClient
         int skip, string? q = null, string? date = null, CancellationToken ct = default);
     Task<IReadOnlyList<ApiNetSessionSummaryDto>> GetLiveNetSessionsAsync(CancellationToken ct = default);
     Task<NetSessionScorecard?> GetNetSessionScorecardAsync(Guid sessionId, CancellationToken ct = default);
+    Task<ApiPagedResult<NetSessionAwardsRow>> GetNetSessionAwardsPageAsync(
+        int skip, string? q = null, CancellationToken ct = default);
 
     Task<StatsFilterOptionsDto> GetStatsFilterOptionsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PlayerCareerSummary>> GetStatsLeaderboardAsync(
@@ -665,6 +712,7 @@ public interface IApiClient
         bool asPlayer = false,
         CancellationToken ct = default);
     Task<PlayerCareerSummary?> GetPlayerCareerAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
+    Task<IReadOnlyList<ApiMatchSummaryDto>> GetPlayerMatchesAsync(Guid playerId, CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<ConfrontationStat>> GetBowlingVsBattersAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
     Task<IReadOnlyList<FieldingVsStat>> GetFieldingVsAsync(Guid playerId, string source = "matches", CancellationToken ct = default);
@@ -831,6 +879,7 @@ public interface IApiClient
     Task<ApiSchedulerDetailDto> CreateSchedulerAsync(object body, CancellationToken ct = default);
     Task<ApiSchedulerDetailDto> UpdateSchedulerAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteSchedulerAsync(Guid id, CancellationToken ct = default);
+    Task<ApiSchedulerSyncResponse> SyncSchedulerMutationAsync(ApiSchedulerSyncRequest request, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiLeagueDto>> GetLeaguesAsync(CancellationToken ct = default);
     Task<ApiPagedResult<ApiLeagueDto>> GetLeaguesPageAsync(int skip, string? q = null, CancellationToken ct = default);
@@ -838,6 +887,12 @@ public interface IApiClient
     Task<ApiLeagueDto> CreateLeagueAsync(object body, CancellationToken ct = default);
     Task<ApiLeagueDto> UpdateLeagueAsync(Guid id, object body, CancellationToken ct = default);
     Task DeleteLeagueAsync(Guid id, CancellationToken ct = default);
+    /// <summary>SuperAdmin: all non-deleted leagues incl. inactive. status = active | inactive | null.</summary>
+    Task<ApiPagedResult<ApiLeagueAdminDto>> GetManagedLeaguesPageAsync(int skip, string? q = null, string? status = null, CancellationToken ct = default);
+    Task<ApiLeagueAdminDto?> GetManagedLeagueAsync(Guid id, CancellationToken ct = default);
+    Task<ApiLeagueAdminDto> CreateManagedLeagueAsync(object body, CancellationToken ct = default);
+    Task<ApiLeagueAdminDto> UpdateManagedLeagueAsync(Guid id, object body, CancellationToken ct = default);
+    Task<ApiLeagueAdminDto> SetLeagueActiveAsync(Guid id, bool isActive, CancellationToken ct = default);
 }
 
 public sealed class ApiClient : IApiClient
@@ -906,13 +961,6 @@ public sealed class ApiClient : IApiClient
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             return null;
         }, ct);
-
-    public Task<ApiLoginResult> SignupAsync(string username, string password, string whatsApp, CancellationToken ct = default)
-        => SendJsonAsync<ApiLoginResult>(
-            HttpMethod.Post,
-            "api/auth/signup",
-            new { username, password, whatsApp },
-            ct);
 
     public Task<ApiLoginResult?> GetMeAsync(CancellationToken ct = default)
         => RunAsync(async http =>
@@ -1240,6 +1288,11 @@ public sealed class ApiClient : IApiClient
             return await response.Content.ReadFromJsonAsync<NetSessionScorecard>(JsonOptions, ct).ConfigureAwait(false);
         }, ct);
 
+    public Task<ApiPagedResult<NetSessionAwardsRow>> GetNetSessionAwardsPageAsync(
+        int skip, string? q = null, CancellationToken ct = default)
+        => GetPagedAsync<NetSessionAwardsRow>(
+            "api/stats/nets/awards/page" + ListPaging.Query(skip, ("q", q)), ct);
+
     public Task<StatsFilterOptionsDto> GetStatsFilterOptionsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -1510,6 +1563,16 @@ public sealed class ApiClient : IApiClient
         AppendGuidIds(queryParams, "matchIds", matchIds);
         return GetPagedAsync<PartnershipStat>("api/stats/partnerships/page?" + string.Join("&", queryParams), ct);
     }
+
+    public Task<IReadOnlyList<ApiMatchSummaryDto>> GetPlayerMatchesAsync(Guid playerId, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/stats/players/{playerId:D}/matches", ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return (IReadOnlyList<ApiMatchSummaryDto>)(await response.Content
+                .ReadFromJsonAsync<List<ApiMatchSummaryDto>>(JsonOptions, ct).ConfigureAwait(false)
+                ?? new List<ApiMatchSummaryDto>());
+        }, ct);
 
     public Task<RankingsBundle> GetRankingsAsync(CancellationToken ct = default)
         => RunAsync(async http =>
@@ -2024,6 +2087,9 @@ public sealed class ApiClient : IApiClient
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
 
+    public Task<ApiSchedulerSyncResponse> SyncSchedulerMutationAsync(ApiSchedulerSyncRequest request, CancellationToken ct = default)
+        => SendJsonAsync<ApiSchedulerSyncResponse>(HttpMethod.Post, "api/scheduler/sync", request, ct);
+
     public Task<IReadOnlyList<ApiLeagueDto>> GetLeaguesAsync(CancellationToken ct = default)
         => RunAsync(async http =>
         {
@@ -2059,6 +2125,34 @@ public sealed class ApiClient : IApiClient
             using var response = await http.DeleteAsync($"api/leagues/{id:D}", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
+
+    public Task<ApiPagedResult<ApiLeagueAdminDto>> GetManagedLeaguesPageAsync(
+        int skip, string? q = null, string? status = null, CancellationToken ct = default)
+        => GetPagedAsync<ApiLeagueAdminDto>(
+            "api/leagues/manage/page" + ListPaging.Query(skip, ("q", q), ("status", status)), ct);
+
+    public Task<ApiLeagueAdminDto?> GetManagedLeagueAsync(Guid id, CancellationToken ct = default)
+        => RunAsync(async http =>
+        {
+            using var response = await http.GetAsync($"api/leagues/manage/{id:D}", ct).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+            return await response.Content.ReadFromJsonAsync<ApiLeagueAdminDto>(JsonOptions, ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<ApiLeagueAdminDto> CreateManagedLeagueAsync(object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiLeagueAdminDto>(HttpMethod.Post, "api/leagues", body, ct);
+
+    public Task<ApiLeagueAdminDto> UpdateManagedLeagueAsync(Guid id, object body, CancellationToken ct = default)
+        => SendJsonAsync<ApiLeagueAdminDto>(HttpMethod.Put, $"api/leagues/{id:D}", body, ct);
+
+    public Task<ApiLeagueAdminDto> SetLeagueActiveAsync(Guid id, bool isActive, CancellationToken ct = default)
+        => SendJsonAsync<ApiLeagueAdminDto>(
+            HttpMethod.Post,
+            $"api/leagues/{id:D}/{(isActive ? "activate" : "deactivate")}",
+            new { },
+            ct);
 
     private static string StatsPageQuery(
         int skip,
@@ -2163,10 +2257,21 @@ public sealed class ApiClient : IApiClient
         {
             throw;
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException ex) when (NetworkUi.IsHttpTimeout(ex))
         {
-            // HttpClient.Timeout throws TaskCanceledException without cancelling `ct`.
-            throw new OfflineException(NetworkUi.OfflineMessage, ex);
+            // Reachable host, slow Cloudflare/API — not "offline / unreachable".
+            throw new TimeoutException(NetworkUi.SlowServerMessage, ex);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException)
+        {
+            // Never mask parse/schema mismatches as Offline — Sync UI must show the real cause.
+            throw new InvalidDataException(
+                "The API returned data this app could not read. Check the deployed API version.",
+                ex);
         }
         catch (Exception ex) when (NetworkUi.IsNetworkFailure(ex))
         {
@@ -2193,9 +2298,10 @@ public sealed class ApiClient : IApiClient
         var reason = string.IsNullOrWhiteSpace(detail) ? response.ReasonPhrase : detail.Trim();
         if (reason is { Length: >= 2 } && reason[0] == '"' && reason[^1] == '"')
             reason = reason[1..^1];
+        // Origin down behind Cloudflare — true unreachable.
         if (code is 502 or 503 or 504)
             throw new OfflineException(NetworkUi.OfflineMessage);
 
-        throw new HttpRequestException($"API {code}: {reason}");
+        throw new HttpRequestException($"API {code}: {reason}", null, response.StatusCode);
     }
 }

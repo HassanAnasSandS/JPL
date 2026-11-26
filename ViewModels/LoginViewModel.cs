@@ -17,31 +17,23 @@ public partial class LoginViewModel : ObservableObject
     private string password = string.Empty;
 
     [ObservableProperty]
-    private string whatsApp = string.Empty;
-
-    [ObservableProperty]
     private string? errorMessage;
 
     [ObservableProperty]
     private bool isBusy;
 
     [ObservableProperty]
-    private bool showSignup;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PasswordToggleIcon))]
     private bool isPasswordHidden = true;
 
     public string PasswordToggleIcon => IsPasswordHidden ? "👁" : "🙈";
-    public bool ShowLogin => !ShowSignup;
-    public bool ShowLoginForm => ShowLogin && IsFormEnabled;
-    public bool ShowSignupForm => ShowSignup && IsFormEnabled;
+    public bool ShowLoginForm => IsFormEnabled;
 
     public bool ShowBusyOverlay => IsBusy || _startup.IsBusy;
     public bool IsFormEnabled => !ShowBusyOverlay;
     public string BusyOverlayMessage =>
         IsBusy
-            ? (ShowSignup ? "Creating account…" : "Signing in…")
+            ? "Signing in…"
             : string.IsNullOrWhiteSpace(_startup.Message) ? "Please wait…" : _startup.Message;
 
     private bool CanSubmit => IsFormEnabled;
@@ -56,79 +48,25 @@ public partial class LoginViewModel : ObservableObject
         NotifyOverlay();
     }
 
-    public void PrepareSignup()
-    {
-        ShowSignup = true;
-        Username = string.Empty;
-        Password = string.Empty;
-        WhatsApp = string.Empty;
-        ErrorMessage = null;
-    }
-
     public void Detach() => _startup.Changed -= OnStartupChanged;
 
     private void OnStartupChanged(object? sender, EventArgs e)
         => MainThread.BeginInvokeOnMainThread(NotifyOverlay);
 
     partial void OnIsBusyChanged(bool value) => NotifyOverlay();
-    partial void OnShowSignupChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShowLogin));
-        NotifyOverlay();
-    }
 
     private void NotifyOverlay()
     {
         OnPropertyChanged(nameof(ShowBusyOverlay));
         OnPropertyChanged(nameof(IsFormEnabled));
         OnPropertyChanged(nameof(ShowLoginForm));
-        OnPropertyChanged(nameof(ShowSignupForm));
         OnPropertyChanged(nameof(BusyOverlayMessage));
         LoginCommand.NotifyCanExecuteChanged();
-        SignupCommand.NotifyCanExecuteChanged();
         ContinueWithoutLoginCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
     private void TogglePasswordVisibility() => IsPasswordHidden = !IsPasswordHidden;
-
-    [RelayCommand]
-    private void ToggleSignup()
-    {
-        ShowSignup = !ShowSignup;
-        ErrorMessage = null;
-    }
-
-    [RelayCommand(CanExecute = nameof(CanSubmit))]
-    private async Task SignupAsync()
-    {
-        if (!CanSubmit)
-            return;
-
-        try
-        {
-            IsBusy = true;
-            ErrorMessage = null;
-            await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
-            if (!PakistanWhatsApp.TryNormalize(WhatsApp, out _))
-            {
-                ErrorMessage = PakistanWhatsApp.RequiredError;
-                return;
-            }
-            await _auth.SignupAsync(Username, Password, WhatsApp).ConfigureAwait(true);
-            Password = string.Empty;
-            WhatsApp = string.Empty;
-            await _navigator.ContinueAfterAuthAsync(freshLogin: true).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = AuthMessages.ForSignup(ex);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
 
     [RelayCommand(CanExecute = nameof(CanSubmit))]
     private Task ContinueWithoutLoginAsync()

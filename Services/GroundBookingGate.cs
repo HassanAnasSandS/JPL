@@ -12,19 +12,19 @@ public static class GroundBookingGate
         if (page is null)
             return false;
 
-        // Guest (or not signed in): must create a real account to book.
+        // Guest (or not signed in): must use a real account to book.
         if (auth.Current is null || auth.Current.IsGuest)
         {
-            var signup = await page.DisplayAlert(
+            var login = await page.DisplayAlert(
                 "Login required",
-                "Please login or sign up to book a ground. Browsing stays open without an account.",
-                "Login / Sign up",
+                "Please login to book a ground. Browsing stays open without an account.",
+                "Login",
                 "Cancel").ConfigureAwait(true);
-            if (!signup)
+            if (!login)
                 return false;
 
             await auth.LogoutAsync().ConfigureAwait(true);
-            await navigator.ShowLoginAsync(openSignup: true).ConfigureAwait(true);
+            await navigator.ShowLoginAsync().ConfigureAwait(true);
             return false;
         }
 

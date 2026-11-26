@@ -17,7 +17,10 @@ public partial class NetsScoringViewModel : ObservableObject
 
     public ObservableCollection<SquadPlayer> Players { get; } = new();
     public ObservableCollection<BattingCardRow> BattingCard { get; } = new();
+    public ObservableCollection<BattingCardRow> CombinedBattingCard { get; } = new();
     public ObservableCollection<BowlingCardRow> BowlingCard { get; } = new();
+    public bool HasCombinedBattingCard => CombinedBattingCard.Count > 0;
+    public ObservableCollection<OverBallChip> ThisOverBalls { get; } = new();
     public ObservableCollection<SelectOption<ExtraType>> ExtraOptions { get; } = new();
     public ObservableCollection<SelectOption<WicketType>> WicketOptions { get; } = new();
 
@@ -29,6 +32,9 @@ public partial class NetsScoringViewModel : ObservableObject
     [ObservableProperty] private string scoreText = "0/0 (0.0)";
     [ObservableProperty] private string sessionName = string.Empty;
     [ObservableProperty] private string duelText = "Select batter & bowler";
+    [ObservableProperty] private string thisOverLabel = "Current Over · 1";
+    [ObservableProperty] private bool hasThisOverBalls;
+    [ObservableProperty] private bool showThisOverEmpty = true;
     [ObservableProperty] private string extrasText = "Extras 0";
     [ObservableProperty] private string scorecardTotalText = "0/0";
     [ObservableProperty] private string scorecardHeaderText = "Nets session";
@@ -39,6 +45,7 @@ public partial class NetsScoringViewModel : ObservableObject
     [ObservableProperty] private bool isDroppedCatch;
     [ObservableProperty] private bool needsFielder;
     private bool _suppressFieldingToggle;
+    private int _ballsSinceFullCard;
 
     public bool CanScoreBalls => CanWrite && !IsBusy && Batter is not null && Bowler is not null;
 
@@ -251,16 +258,30 @@ public partial class NetsScoringViewModel : ObservableObject
             IsWicket = false;
             IsDroppedCatch = false;
 
-            await RefreshScoreAsync().ConfigureAwait(true);
-            await RefreshScorecardAsync().ConfigureAwait(true);
-            await RefreshDuelAsync().ConfigureAwait(true);
+            // Snapshot every ball; full scorecard on wicket / over end / every 6 legal balls.
+            var snap = await _sessions.GetLiveSnapshotAsync(_sessionId).ConfigureAwait(true);
+            ApplySnapshot(snap);
+
+            var justCompletedOver = extra is not ExtraType.Wide and not ExtraType.NoBall
+                                    && snap is { BallsInCurrentOver: 0, Overs: > 0 };
+            var legalBall = extra is not ExtraType.Wide and not ExtraType.NoBall;
+            if (legalBall)
+                _ballsSinceFullCard++;
+            var needFullCard = wasWicket
+                               || justCompletedOver
+                               || BattingCard.Count == 0
+                               || _ballsSinceFullCard >= 6;
+            if (needFullCard)
+            {
+                _ballsSinceFullCard = 0;
+                var card = await _sessions.GetScorecardAsync(_sessionId, Batter?.Id).ConfigureAwait(true);
+                ApplyScorecard(card);
+            }
+            ApplyDuelFromCards();
 
             if (wasWicket)
                 await PromptNextBatterAsync().ConfigureAwait(true);
 
-            var snap = await _sessions.GetLiveSnapshotAsync(_sessionId).ConfigureAwait(true);
-            var justCompletedOver = extra is not ExtraType.Wide and not ExtraType.NoBall
-                                    && snap is { BallsInCurrentOver: 0, Overs: > 0 };
             if (justCompletedOver)
                 await PromptNextBowlerAsync(previousBowlerId).ConfigureAwait(true);
         }
@@ -397,23 +418,88 @@ public partial class NetsScoringViewModel : ObservableObject
     private async Task RefreshScoreAsync()
     {
         var snap = await _sessions.GetLiveSnapshotAsync(_sessionId).ConfigureAwait(true);
+        ApplySnapshot(snap);
+    }
+
+    private void ApplySnapshot(NetLiveSnapshot? snap)
+    {
         ScoreText = snap?.ScoreText ?? "0/0 (0.0)";
         ScorecardTotalText = snap is null ? "0/0" : $"{snap.Runs}/{snap.Wickets}";
+        ReplaceThisOver(snap);
+    }
+
+    private void ReplaceThisOver(NetLiveSnapshot? snapshot)
+    {
+        ThisOverBalls.Clear();
+        var marks = snapshot?.ThisOver ?? Array.Empty<NetOverBallMark>();
+        foreach (var mark in marks)
+        {
+            var chip = OverBallChip.From(new OverBallMark { Text = mark.Text, Kind = mark.Kind });
+            ThisOverBalls.Add(new OverBallChip
+            {
+                Text = mark.BallNumber > 0 ? $"{mark.BallNumber}:{chip.Text}" : chip.Text,
+                Background = chip.Background,
+                Foreground = chip.Foreground
+            });
+        }
+
+        HasThisOverBalls = ThisOverBalls.Count > 0;
+        ShowThisOverEmpty = !HasThisOverBalls;
+        ThisOverLabel = $"Current Over · {snapshot?.CurrentOverNumber ?? 1}";
     }
 
     private async Task RefreshScorecardAsync()
     {
         var card = await _sessions.GetScorecardAsync(_sessionId, Batter?.Id).ConfigureAwait(true);
+        ApplyScorecard(card);
+        ApplyDuelFromCards();
+    }
+
+    private void ApplyScorecard(NetSessionScorecard? card)
+    {
         BattingCard.Clear();
+        CombinedBattingCard.Clear();
         BowlingCard.Clear();
         if (card is null)
+        {
+            OnPropertyChanged(nameof(HasCombinedBattingCard));
             return;
+        }
         foreach (var row in card.Batting)
             BattingCard.Add(row);
+        var combined = card.CombinedBatting is { Count: > 0 }
+            ? card.CombinedBatting
+            : card.Batting
+                .GroupBy(row => row.PlayerId)
+                .Select(group =>
+                {
+                    var rows = group.ToList();
+                    var first = rows[0];
+                    var last = rows[^1];
+                    var outs = rows.Sum(r => r.Outs);
+                    return new BattingCardRow
+                    {
+                        PlayerId = first.PlayerId,
+                        Name = first.Name,
+                        Runs = rows.Sum(r => r.Runs),
+                        Balls = rows.Sum(r => r.Balls),
+                        Fours = rows.Sum(r => r.Fours),
+                        Sixes = rows.Sum(r => r.Sixes),
+                        Outs = outs,
+                        IsOut = last.IsOut,
+                        IsOnStrike = last.IsOnStrike,
+                        IsCaptain = first.IsCaptain,
+                        Dismissal = outs == 0 ? string.Empty : $"{outs} out{(outs == 1 ? string.Empty : "s")}"
+                    };
+                })
+                .ToList();
+        foreach (var row in combined)
+            CombinedBattingCard.Add(row);
         foreach (var row in card.Bowling)
             BowlingCard.Add(row);
         ExtrasText = card.ExtrasText;
         ScorecardTotalText = card.TotalText;
+        OnPropertyChanged(nameof(HasCombinedBattingCard));
     }
 
     private async Task RefreshDuelAsync()
@@ -424,9 +510,29 @@ public partial class NetsScoringViewModel : ObservableObject
             return;
         }
 
+        // Prefer already-loaded card rows; only hit SQLite when picker changes mid-session.
+        if (BattingCard.Count > 0 || BowlingCard.Count > 0)
+        {
+            ApplyDuelFromCards();
+            return;
+        }
+
         var card = await _sessions.GetScorecardAsync(_sessionId, Batter.Id).ConfigureAwait(true);
-        var bat = card?.Batting.FirstOrDefault(r => r.PlayerId == Batter.Id);
-        var bowl = card?.Bowling.FirstOrDefault(r => r.PlayerId == Bowler.Id);
+        ApplyScorecard(card);
+        ApplyDuelFromCards();
+    }
+
+    private void ApplyDuelFromCards()
+    {
+        if (Batter is null || Bowler is null)
+        {
+            DuelText = "Select batter & bowler";
+            return;
+        }
+
+        var bat = BattingCard.FirstOrDefault(r => r.PlayerId == Batter.Id)
+                  ?? CombinedBattingCard.FirstOrDefault(r => r.PlayerId == Batter.Id);
+        var bowl = BowlingCard.FirstOrDefault(r => r.PlayerId == Bowler.Id);
         var batBit = bat is null ? "—" : $"{bat.Runs} ({bat.Balls})";
         var bowlBit = bowl is null ? "—" : bowl.FiguresText;
         DuelText = $"{Batter.DisplayName} {batBit}  ·  {Bowler.DisplayName} {bowlBit}";

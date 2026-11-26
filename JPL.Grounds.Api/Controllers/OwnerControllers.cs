@@ -27,19 +27,14 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     [HttpGet]
     public async Task<ActionResult<GroundSearchPage>> List(string? cursor, int take = 15, CancellationToken ct = default)
     {
-        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (!GroundsCaller.IsGroundOwner(HttpContext))
             return Forbid();
 
         take = Paging.ClampTake(take);
         var ownerId = GroundsCaller.UserId(HttpContext);
-        var super = GroundsCaller.IsSuperAdmin(HttpContext);
-        var query = _db.Grounds.AsNoTracking().Where(g => !g.IsDeleted);
-        if (!super)
-        {
-            if (ownerId == Guid.Empty)
-                return Ok(new GroundSearchPage([], null, false, 0));
-            query = query.Where(g => g.OwnerUserId == ownerId);
-        }
+        if (ownerId == Guid.Empty)
+            return Ok(new GroundSearchPage([], null, false, 0));
+        var query = _db.Grounds.AsNoTracking().Where(g => !g.IsDeleted && g.OwnerUserId == ownerId);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
 
@@ -94,7 +89,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     [HttpPost("resolve-maps")]
     public async Task<ActionResult<MapsLocationDto>> ResolveMaps([FromBody] MapsResolveRequest request, CancellationToken ct)
     {
-        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (!GroundsCaller.IsGroundOwner(HttpContext))
             return Forbid();
         try
         {
@@ -109,7 +104,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
     [HttpPost]
     public async Task<ActionResult<GroundDetailDto>> Create([FromBody] GroundUpsertRequest request, CancellationToken ct)
     {
-        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (!GroundsCaller.IsGroundOwner(HttpContext))
             return Forbid();
         var ownerId = GroundsCaller.UserId(HttpContext);
         if (ownerId == Guid.Empty)
@@ -367,7 +362,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
 
     private async Task<Ground?> LoadOwnedAsync(Guid id, CancellationToken ct)
     {
-        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (!GroundsCaller.IsGroundOwner(HttpContext))
             return null;
         var ground = await _db.Grounds
             .AsSplitQuery()
@@ -389,7 +384,7 @@ public sealed class OwnerGroundsController : ControllerBase, IAsyncDisposable
 
     private async Task<Ground?> LoadOwnedForUpdateAsync(Guid id, GroundUpsertRequest request, CancellationToken ct)
     {
-        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (!GroundsCaller.IsGroundOwner(HttpContext))
             return null;
 
         var query = _db.Grounds.Where(g => g.Id == id && !g.IsDeleted);
@@ -831,25 +826,20 @@ public sealed class BookingsController : ControllerBase, IAsyncDisposable
         DateTime? from = null, DateTime? to = null,
         CancellationToken ct = default)
     {
-        if (!GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (!GroundsCaller.IsGroundOwner(HttpContext))
             return Forbid();
 
         var ranged = from is DateTime start && to is DateTime end && end > start;
         take = Math.Clamp(take <= 0 ? Paging.DefaultTake : take, 1, ranged ? 500 : Paging.MaxTake);
         var ownerId = GroundsCaller.UserId(HttpContext);
-        var super = GroundsCaller.IsSuperAdmin(HttpContext);
+        if (ownerId == Guid.Empty)
+            return Ok(new BookingPage([], null, false, 0));
         var query = _db.Bookings.AsNoTracking()
             .Include(b => b.Ground)
             .Include(b => b.Services)
             .Include(b => b.ShopItems)
             .Include(b => b.Review)
-            .Where(b => !b.IsDeleted && !b.Ground.IsDeleted);
-        if (!super)
-        {
-            if (ownerId == Guid.Empty)
-                return Ok(new BookingPage([], null, false, 0));
-            query = query.Where(b => b.Ground.OwnerUserId == ownerId);
-        }
+            .Where(b => !b.IsDeleted && !b.Ground.IsDeleted && b.Ground.OwnerUserId == ownerId);
         if (groundId is Guid gid && gid != Guid.Empty)
             query = query.Where(b => b.GroundId == gid);
 

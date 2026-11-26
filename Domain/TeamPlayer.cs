@@ -1,8 +1,9 @@
 namespace JPL.Domain;
 
 /// <summary>Many-to-many: one player can belong to multiple teams.</summary>
-public sealed class TeamPlayer
+public sealed class TeamPlayer : ILeagueScoped
 {
+    public Guid LeagueId { get; set; }
     public Guid TeamId { get; set; }
 
     public Team Team { get; set; } = null!;

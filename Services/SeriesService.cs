@@ -119,118 +119,233 @@ public sealed class SeriesService : ISeriesService
 {
     private readonly IApiClient _api;
     private readonly IAuthService _auth;
+    private readonly ILeagueContext _league;
     private readonly ISyncService _sync;
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
+    private readonly IOutboxWriter _outbox;
+    private readonly ISyncTrigger _syncTrigger;
 
     public SeriesService(
         IApiClient api,
         IAuthService auth,
+        ILeagueContext league,
         ISyncService sync,
-        IDbContextFactory<JplDbContext> dbFactory)
+        IDbContextFactory<JplDbContext> dbFactory,
+        IOutboxWriter outbox,
+        ISyncTrigger syncTrigger)
     {
         _api = api;
         _auth = auth;
+        _league = league;
         _sync = sync;
         _dbFactory = dbFactory;
+        _outbox = outbox;
+        _syncTrigger = syncTrigger;
     }
 
     public async Task<IReadOnlyList<SeriesListItem>> GetAllAsync(CancellationToken ct = default)
     {
-        var remote = await _api.GetSeriesListAsync(ct).ConfigureAwait(false);
-        var pending = await _sync.GetPendingSeriesIdsAsync(ct).ConfigureAwait(false);
-        var list = new List<SeriesListItem>();
-        foreach (var s in remote)
-        {
-            var waiting = pending.Contains(s.Id);
-            var ready = waiting && await IsReadyToSyncAsync(s.Id, ct).ConfigureAwait(false);
-            var score = $"{s.TeamAWins}–{s.TeamBWins}";
-            var winner = s.IsTied
-                ? "Series tied"
-                : string.IsNullOrWhiteSpace(s.WinnerTeamName) ? "" : $"Winner: {s.WinnerTeamName}";
-            list.Add(new SeriesListItem
-            {
-                Id = s.Id,
-                Name = s.Name,
-                Status = s.Status,
-                StatusText = s.StatusText,
-                MetaLine = $"{s.TeamAName} vs {s.TeamBName} · {s.MatchCount} matches · {score}",
-                WinnerLine = winner,
-                NeedsSync = ready
-            });
-        }
+        var canUseLocal = LeagueSyncPolicy.UsesLocalStorage(_auth.Current);
+        if (canUseLocal)
+            return await LoadLocalListAsync(ct).ConfigureAwait(false);
 
-        return list;
+        try
+        {
+            var remote = await _api.GetSeriesListAsync(ct).ConfigureAwait(false);
+            var pending = await _sync.GetPendingSeriesIdsAsync(ct).ConfigureAwait(false);
+            var list = new List<SeriesListItem>();
+            foreach (var s in remote)
+            {
+                var waiting = pending.Contains(s.Id);
+                var ready = waiting && await IsReadyToSyncAsync(s.Id, ct).ConfigureAwait(false);
+                var score = $"{s.TeamAWins}–{s.TeamBWins}";
+                var winner = s.IsTied
+                    ? "Series tied"
+                    : string.IsNullOrWhiteSpace(s.WinnerTeamName) ? "" : $"Winner: {s.WinnerTeamName}";
+                list.Add(new SeriesListItem
+                {
+                    Id = s.Id,
+                    Name = s.Name,
+                    Status = s.Status,
+                    StatusText = s.StatusText,
+                    MetaLine = $"{s.TeamAName} vs {s.TeamBName} · {s.MatchCount} matches · {score}",
+                    WinnerLine = winner,
+                    NeedsSync = ready
+                });
+            }
+            return list;
+        }
+        catch (Exception ex) when (ex is OfflineException || NetworkUi.IsNetworkFailure(ex))
+        {
+            if (canUseLocal)
+                return await LoadLocalListAsync(ct).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<IReadOnlyList<SeriesListItem>> LoadLocalListAsync(CancellationToken ct)
+    {
+        await using var localDb = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var ids = await localDb.Series.AsNoTracking().OrderByDescending(row => row.UpdatedAtUtc)
+            .Select(row => row.Id).ToListAsync(ct).ConfigureAwait(false);
+        var localList = new List<SeriesListItem>(ids.Count);
+        foreach (var id in ids)
+        {
+            var detail = await GetLocalDetailAsync(id, ct).ConfigureAwait(false);
+            if (detail is not null) localList.Add(ToListItem(detail));
+        }
+        return localList;
     }
 
     public async Task<ApiPagedResult<SeriesListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
     {
-        var remote = await _api.GetSeriesPageAsync(skip, q, ct).ConfigureAwait(false);
-        var pending = await _sync.GetPendingSeriesIdsAsync(ct).ConfigureAwait(false);
-        var list = new List<SeriesListItem>();
-        foreach (var s in remote.Items ?? [])
-        {
-            var waiting = pending.Contains(s.Id);
-            var ready = waiting && await IsReadyToSyncAsync(s.Id, ct).ConfigureAwait(false);
-            var score = $"{s.TeamAWins}–{s.TeamBWins}";
-            var winner = s.IsTied
-                ? "Series tied"
-                : string.IsNullOrWhiteSpace(s.WinnerTeamName) ? "" : $"Winner: {s.WinnerTeamName}";
-            list.Add(new SeriesListItem
-            {
-                Id = s.Id,
-                Name = s.Name,
-                Status = s.Status,
-                StatusText = s.StatusText,
-                MetaLine = $"{s.TeamAName} vs {s.TeamBName} · {s.MatchCount} matches · {score}",
-                WinnerLine = winner,
-                NeedsSync = ready
-            });
-        }
-
-        return remote.WithItems(list);
+        var local = await GetAllAsync(ct).ConfigureAwait(false);
+        var filteredLocal = string.IsNullOrWhiteSpace(q) ? local
+            : local.Where(row => row.Name.Contains(q.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        var localRows = filteredLocal.ToList();
+        return new ApiPagedResult<SeriesListItem>(localRows.Skip(Math.Max(0, skip))
+            .Take(ListPaging.PageSize).ToList(), localRows.Count, Math.Max(0, skip), ListPaging.PageSize);
     }
 
     public async Task<SeriesDetail?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        var dto = await _api.GetSeriesAsync(id, ct).ConfigureAwait(false);
-        if (dto is null) return null;
-        var detail = ToDetail(dto);
-        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
-        return detail;
+        var canUseLocal = LeagueSyncPolicy.UsesLocalStorage(_auth.Current);
+        if (canUseLocal)
+            return await GetLocalDetailAsync(id, ct).ConfigureAwait(false);
+
+        try
+        {
+            var dto = await _api.GetSeriesAsync(id, ct).ConfigureAwait(false);
+            if (dto is null) return canUseLocal ? await GetLocalDetailAsync(id, ct).ConfigureAwait(false) : null;
+            var detail = ToDetail(dto);
+            if (canUseLocal)
+                await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
+            return detail;
+        }
+        catch (Exception ex) when (ex is OfflineException || NetworkUi.IsNetworkFailure(ex))
+        {
+            if (canUseLocal)
+                return await GetLocalDetailAsync(id, ct).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<SeriesDetail> CreateAsync(SeriesDraft draft, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
         Validate(draft);
-        var remote = await _api.CreateSeriesAsync(ToBody(draft), ct).ConfigureAwait(false);
-        return ToDetail(remote);
+        var now = DateTime.UtcNow;
+        var entity = new Series
+        {
+            Id = Guid.NewGuid(), Name = draft.Name.Trim(), TeamAId = draft.TeamAId,
+            TeamBId = draft.TeamBId, MatchCount = draft.MatchCount, VenueId = draft.VenueId,
+            FormatId = draft.FormatId, Format = (MatchFormat)draft.Format,
+            OversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
+            OversMode = draft.OversMode, LastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket,
+            BowlerMaxOvers = draft.BowlerMaxOvers, Status = SeriesStatus.Draft,
+            Version = 1, CreatedAtUtc = now, UpdatedAtUtc = now
+        };
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await ValidateLocalReferencesAsync(db, draft, ct).ConfigureAwait(false);
+        db.Series.Add(entity);
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        return await GetLocalDetailAsync(entity.Id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The series was saved locally but could not be loaded.");
     }
 
     public async Task<SeriesDetail> UpdateAsync(Guid id, SeriesDraft draft, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
         Validate(draft);
-        var remote = await _api.UpdateSeriesAsync(id, ToBody(draft), ct).ConfigureAwait(false);
-        return ToDetail(remote);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await ValidateLocalReferencesAsync(db, draft, ct).ConfigureAwait(false);
+        var entity = await db.Series.FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Series not found.");
+        if (entity.Status != SeriesStatus.Draft)
+            throw new InvalidOperationException("Only draft series can be edited. Saved series are locked.");
+        entity.Name = draft.Name.Trim(); entity.TeamAId = draft.TeamAId; entity.TeamBId = draft.TeamBId;
+        entity.MatchCount = draft.MatchCount; entity.VenueId = draft.VenueId; entity.FormatId = draft.FormatId;
+        entity.Format = (MatchFormat)draft.Format;
+        entity.OversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit);
+        entity.OversMode = draft.OversMode;
+        entity.LastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket;
+        entity.BowlerMaxOvers = draft.BowlerMaxOvers; entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        return await GetLocalDetailAsync(id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The series was saved locally but could not be loaded.");
     }
 
     public async Task<SeriesDetail> GenerateAsync(Guid id, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
-        var remote = await _api.GenerateSeriesAsync(id, ct).ConfigureAwait(false);
-        var detail = ToDetail(remote);
-        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
-        return detail;
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Series.Include(row => row.Fixtures)
+            .FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Series not found.");
+        if (entity.Status != SeriesStatus.Draft)
+            throw new InvalidOperationException("Series already saved. Edit / delete is only allowed while Draft.");
+        foreach (var fixture in entity.Fixtures.ToList())
+        {
+            db.SeriesFixtures.Remove(fixture);
+            _outbox.EnqueueEntity(db, fixture, "Delete");
+        }
+        entity.Fixtures.Clear();
+        for (var sequence = 1; sequence <= entity.MatchCount; sequence++)
+        {
+            var fixture = new SeriesFixture
+            {
+                Id = Guid.NewGuid(), SeriesId = entity.Id, Sequence = sequence,
+                Label = $"Match {sequence}", TeamAId = entity.TeamAId, TeamBId = entity.TeamBId
+            };
+            db.SeriesFixtures.Add(fixture);
+            _outbox.EnqueueEntity(db, fixture, "Upsert");
+        }
+        entity.Status = SeriesStatus.Scheduled; entity.WinnerTeamId = null;
+        entity.PlayerOfTheSeriesPlayerId = null; entity.BestBatsmanPlayerId = null;
+        entity.BestBowlerPlayerId = null; entity.BestFielderPlayerId = null; entity.IsTied = false;
+        entity.UpdatedAtUtc = DateTime.UtcNow; entity.Version++;
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        return await GetLocalDetailAsync(id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The generated series was saved locally but could not be loaded.");
     }
 
-    public Task LinkMatchAsync(Guid seriesId, Guid fixtureId, Guid matchId, CancellationToken ct = default)
-        => _api.LinkSeriesMatchAsync(seriesId, fixtureId, matchId, ct);
+    public async Task LinkMatchAsync(Guid seriesId, Guid fixtureId, Guid matchId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Series.Include(row => row.Fixtures)
+            .FirstOrDefaultAsync(row => row.Id == seriesId, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Series not found.");
+        if (entity.Status == SeriesStatus.Draft)
+            throw new InvalidOperationException("Save the series first before starting matches.");
+        var fixture = entity.Fixtures.FirstOrDefault(row => row.Id == fixtureId)
+            ?? throw new InvalidOperationException("Series fixture not found.");
+        fixture.MatchId = matchId;
+        if (entity.Status == SeriesStatus.Scheduled) entity.Status = SeriesStatus.InProgress;
+        entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        _outbox.EnqueueEntity(db, fixture, "Upsert");
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+    }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
-        await _api.DeleteSeriesAsync(id, ct).ConfigureAwait(false);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Series.FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false);
+        if (entity is null) return;
+        if (entity.Status != SeriesStatus.Draft)
+            throw new InvalidOperationException("Only draft series can be deleted. Saved series are locked.");
+        entity.IsDeleted = true; entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        _outbox.EnqueueEntity(db, entity, "Delete");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
     }
 
     public async Task<bool> IsReadyToSyncAsync(Guid seriesId, CancellationToken ct = default)
@@ -267,6 +382,18 @@ public sealed class SeriesService : ISeriesService
         return detail.Fixtures.All(f =>
             string.Equals(f.MatchStatusText, "Completed", StringComparison.OrdinalIgnoreCase)
             || string.Equals(f.MatchStatusText, "Abandoned", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static async Task ValidateLocalReferencesAsync(JplDbContext db, SeriesDraft draft, CancellationToken ct)
+    {
+        if (!await db.Teams.AnyAsync(row => row.Id == draft.TeamAId, ct).ConfigureAwait(false)
+            || !await db.Teams.AnyAsync(row => row.Id == draft.TeamBId, ct).ConfigureAwait(false))
+            throw new InvalidOperationException("A selected team is missing from local league data. Sync before creating this series.");
+        if (!await db.Venues.AnyAsync(row => row.Id == draft.VenueId, ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Venue not found in local league data. Sync before creating this series.");
+        if (draft.FormatId is Guid formatId
+            && !await db.Formats.AnyAsync(row => row.Id == formatId, ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Format not found in local league data. Sync before creating this series.");
     }
 
     private static void Validate(SeriesDraft draft)
@@ -368,6 +495,108 @@ public sealed class SeriesService : ISeriesService
                 NetRunRate = s.NetRunRate
             }).ToList()
         };
+    }
+
+    private async Task<SeriesDetail?> GetLocalDetailAsync(Guid id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Series.AsNoTracking().Include(row => row.Fixtures)
+            .FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false);
+        if (entity is null) return null;
+
+        var teamIds = new[] { entity.TeamAId, entity.TeamBId };
+        var teams = await db.Teams.AsNoTracking().Where(row => teamIds.Contains(row.Id))
+            .ToDictionaryAsync(row => row.Id, row => row.Name, ct).ConfigureAwait(false);
+        var venueName = await db.Venues.AsNoTracking().Where(row => row.Id == entity.VenueId)
+            .Select(row => row.Name).FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? string.Empty;
+        var awardIds = new[] { entity.PlayerOfTheSeriesPlayerId, entity.BestBatsmanPlayerId,
+            entity.BestBowlerPlayerId, entity.BestFielderPlayerId }.OfType<Guid>().Distinct().ToArray();
+        var awards = awardIds.Length == 0 ? new Dictionary<Guid, string>()
+            : await db.Players.AsNoTracking().Where(row => awardIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, row => row.FullName, ct).ConfigureAwait(false);
+        var fixtureIds = entity.Fixtures.Select(fixture => fixture.Id).ToArray();
+        var matches = await db.Matches.AsNoTracking().Where(row => row.SeriesId == id
+                || (row.SeriesFixtureId != null && fixtureIds.Contains(row.SeriesFixtureId.Value)))
+            .ToListAsync(ct).ConfigureAwait(false);
+        var matchesById = matches.ToDictionary(row => row.Id);
+        var matchesByFixture = matches.Where(row => row.SeriesFixtureId is not null)
+            .GroupBy(row => row.SeriesFixtureId!.Value)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(row => row.UpdatedAtUtc).First());
+
+        var dto = new ApiSeriesDetailDto
+        {
+            Id = entity.Id, Name = entity.Name, TeamAId = entity.TeamAId, TeamBId = entity.TeamBId,
+            TeamAName = teams.GetValueOrDefault(entity.TeamAId, string.Empty),
+            TeamBName = teams.GetValueOrDefault(entity.TeamBId, string.Empty), MatchCount = entity.MatchCount,
+            VenueId = entity.VenueId, VenueName = venueName, FormatId = entity.FormatId,
+            Format = (byte)entity.Format,
+            FormatText = entity.FormatId is Guid formatId
+                ? await db.Formats.AsNoTracking().Where(row => row.Id == formatId).Select(row => row.Name)
+                    .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? FormatRules.DetailsLine(entity.Format, entity.OversMode, entity.OversLimit)
+                : FormatRules.DetailsLine(entity.Format, entity.OversMode, entity.OversLimit),
+            OversLimit = entity.OversLimit, OversMode = (byte)entity.OversMode,
+            LastBatsmanCanBatAsSingleWicket = entity.LastBatsmanCanBatAsSingleWicket,
+            BowlerMaxOvers = entity.BowlerMaxOvers, Status = (byte)entity.Status,
+            StatusText = entity.Status.ToString(), WinnerTeamId = entity.WinnerTeamId,
+            WinnerTeamName = entity.WinnerTeamId is Guid winnerId ? teams.GetValueOrDefault(winnerId) : null,
+            PlayerOfTheSeriesPlayerId = entity.PlayerOfTheSeriesPlayerId,
+            PlayerOfTheSeriesName = entity.PlayerOfTheSeriesPlayerId is Guid playerOfSeriesId
+                ? awards.GetValueOrDefault(playerOfSeriesId) : null,
+            BestBatsmanPlayerId = entity.BestBatsmanPlayerId,
+            BestBatsmanName = entity.BestBatsmanPlayerId is Guid batsmanId ? awards.GetValueOrDefault(batsmanId) : null,
+            BestBowlerPlayerId = entity.BestBowlerPlayerId,
+            BestBowlerName = entity.BestBowlerPlayerId is Guid bowlerId ? awards.GetValueOrDefault(bowlerId) : null,
+            BestFielderPlayerId = entity.BestFielderPlayerId,
+            BestFielderName = entity.BestFielderPlayerId is Guid fielderId ? awards.GetValueOrDefault(fielderId) : null,
+            IsTied = entity.IsTied,
+            Fixtures = entity.Fixtures.OrderBy(row => row.Sequence).Select(row =>
+            {
+                var match = row.MatchId is Guid linkedId && matchesById.TryGetValue(linkedId, out var direct)
+                    ? direct : matchesByFixture.GetValueOrDefault(row.Id);
+                return new ApiSeriesFixtureDto
+                {
+                    Id = row.Id, Sequence = row.Sequence, Label = row.Label,
+                    TeamAId = row.TeamAId, TeamBId = row.TeamBId,
+                    TeamAName = teams.GetValueOrDefault(row.TeamAId, string.Empty),
+                    TeamBName = teams.GetValueOrDefault(row.TeamBId, string.Empty), MatchId = match?.Id,
+                    MatchStatus = match is null ? null : (byte)match.Status,
+                    MatchStatusText = match?.Status.ToString() ?? string.Empty,
+                    CanStart = match is null && entity.Status is not SeriesStatus.Draft and not SeriesStatus.Completed,
+                    CanOpenScorecard = match is not null
+                };
+            }).ToList(),
+            Standings = new List<ApiSeriesStandingDto>
+            {
+                new() { TeamId = entity.TeamAId, TeamName = teams.GetValueOrDefault(entity.TeamAId, string.Empty) },
+                new() { TeamId = entity.TeamBId, TeamName = teams.GetValueOrDefault(entity.TeamBId, string.Empty) }
+            }
+        };
+
+        var detail = ToDetail(dto);
+        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
+        return detail;
+    }
+
+    private static SeriesListItem ToListItem(SeriesDetail detail)
+    {
+        var aWins = detail.Standings.FirstOrDefault(row => row.TeamId == detail.TeamAId)?.Won ?? 0;
+        var bWins = detail.Standings.FirstOrDefault(row => row.TeamId == detail.TeamBId)?.Won ?? 0;
+        var score = $"{aWins}–{bWins}";
+        var winner = detail.IsTied ? "Series tied"
+            : string.IsNullOrWhiteSpace(detail.WinnerTeamName) ? string.Empty : $"Winner: {detail.WinnerTeamName}";
+        return new SeriesListItem
+        {
+            Id = detail.Id, Name = detail.Name, Status = detail.Status,
+            StatusText = detail.StatusText,
+            MetaLine = $"{detail.TeamAName} vs {detail.TeamBName} · {detail.MatchCount} matches · {score}",
+            WinnerLine = winner
+        };
+    }
+
+    private async Task<bool> IsBootstrappedAsync(CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await LocalCacheGate.PreferLocalAsync(db, _auth.Current, ct).ConfigureAwait(false);
     }
 
     private async Task OverlayLocalMatchStateAsync(SeriesDetail detail, CancellationToken ct)

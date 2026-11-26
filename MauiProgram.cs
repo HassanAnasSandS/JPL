@@ -145,11 +145,12 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<ILeagueContext, LeagueContext>();
         builder.Services.AddSingleton<IAppWorkspace, AppWorkspaceStore>();
-        builder.Services.AddDbContextFactory<JplDbContext>((_, options) =>
-        {
-            options.ConfigureSqlite();
-        });
+        builder.Services.AddSingleton<AccountDatabaseScope>();
+        builder.Services.AddSingleton<IAccountDatabaseScope>(sp => sp.GetRequiredService<AccountDatabaseScope>());
+        builder.Services.AddSingleton<IDbContextFactory<JplDbContext>, AccountScopedDbContextFactory>();
+        builder.Services.AddSingleton<IMasterJplDbContextFactory, MasterJplDbContextFactory>();
 
+        builder.Services.AddSingleton<ISessionLifetime, SessionLifetime>();
         builder.Services.AddSingleton<AuthTokenStore>();
         builder.Services.AddSingleton<IAuthService, AuthService>();
         builder.Services.AddSingleton<IAuthForcedLogout, AuthForcedLogout>();
@@ -159,8 +160,7 @@ public static class MauiProgram
 
         builder.Services.Configure<ApiOptions>(options =>
         {
-            // Same hosted API for all platforms (Windows DEBUG used to hit localhost:5025,
-            // while Android already used production — phones worked, Windows looked "offline").
+            // Always use hosted league API (streaks + leaderboard must match production data).
             options.BaseUrl = Cric360Hosts.LeagueApi;
         });
         builder.Services.Configure<GroundsApiOptions>(options =>
@@ -174,8 +174,9 @@ public static class MauiProgram
             var baseUrl = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiOptions>>().Value.BaseUrl
                 .TrimEnd('/') + "/";
             client.BaseAddress = new Uri(baseUrl);
-            // Bound hung requests without aborting sockets via a separate short CTS.
-            client.Timeout = TimeSpan.FromSeconds(15);
+            // Cloudflare + large sync/snapshot payloads routinely exceed 15s; that used to
+            // surface as OfflineException (TaskCanceled) even when the host was reachable.
+            client.Timeout = TimeSpan.FromSeconds(90);
         }).AddHttpMessageHandler<AuthHttpMessageHandler>();
 
         builder.Services.AddHttpClient(GroundsApiOptions.HttpClientName, (sp, client) =>
@@ -183,7 +184,7 @@ public static class MauiProgram
             var baseUrl = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GroundsApiOptions>>().Value.BaseUrl
                 .TrimEnd('/') + "/";
             client.BaseAddress = new Uri(baseUrl);
-            client.Timeout = TimeSpan.FromSeconds(20);
+            client.Timeout = TimeSpan.FromSeconds(60);
         }).AddHttpMessageHandler<AuthHttpMessageHandler>();
 
         builder.Services.AddSingleton<IApiClient, ApiClient>();
@@ -194,6 +195,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<LivePublisher>();
         builder.Services.AddSingleton<ILivePublisher>(sp => sp.GetRequiredService<LivePublisher>());
         builder.Services.AddSingleton<ILiveHubClient, LiveHubClient>();
+        builder.Services.AddSingleton<ISchedulerOutboxSyncService, SchedulerOutboxSyncService>();
+        builder.Services.AddSingleton<IStatsOfflineCacheWarmer, StatsOfflineCacheWarmer>();
+        builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
         builder.Services.AddSingleton<SyncService>();
         builder.Services.AddSingleton<ISyncService>(sp => sp.GetRequiredService<SyncService>());
         builder.Services.AddSingleton<ISyncTrigger>(sp => sp.GetRequiredService<SyncService>());
@@ -218,6 +222,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISeriesService, SeriesService>();
         builder.Services.AddSingleton<ITournamentSchedulerService, TournamentSchedulerService>();
         builder.Services.AddSingleton<ILeagueService, LeagueService>();
+        builder.Services.AddSingleton<ILeagueAdminService, LeagueAdminService>();
         builder.Services.AddSingleton<IFormatService, FormatService>();
 
         builder.Services.AddTransient<LoginViewModel>();
@@ -247,6 +252,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<AuctionReportViewModel>();
         builder.Services.AddSingleton<UsersViewModel>();
         builder.Services.AddTransient<UserEditViewModel>();
+        builder.Services.AddSingleton<LeagueManagementViewModel>();
+        builder.Services.AddTransient<LeagueManageEditViewModel>();
         builder.Services.AddSingleton<VenueBookingsViewModel>();
         builder.Services.AddTransient<VenueBookingEditViewModel>();
         builder.Services.AddSingleton<ExpensesViewModel>();
@@ -255,6 +262,7 @@ public static class MauiProgram
         builder.Services.AddTransient<VenueEditViewModel>();
         builder.Services.AddSingleton<FormatsViewModel>();
         builder.Services.AddTransient<FormatEditViewModel>();
+        builder.Services.AddTransient<SyncLogsViewModel>();
         builder.Services.AddSingleton<TournamentsViewModel>();
         builder.Services.AddTransient<TournamentEditViewModel>();
         builder.Services.AddTransient<TournamentDetailViewModel>();
@@ -309,6 +317,8 @@ public static class MauiProgram
         builder.Services.AddTransient<AuctionReportPage>();
         builder.Services.AddTransient<UsersPage>();
         builder.Services.AddTransient<UserEditPage>();
+        builder.Services.AddTransient<LeagueManagementPage>();
+        builder.Services.AddTransient<LeagueManageEditPage>();
         builder.Services.AddTransient<VenueBookingsPage>();
         builder.Services.AddTransient<VenueBookingEditPage>();
         builder.Services.AddTransient<ExpensesPage>();
@@ -317,6 +327,7 @@ public static class MauiProgram
         builder.Services.AddTransient<VenueEditPage>();
         builder.Services.AddTransient<FormatsPage>();
         builder.Services.AddTransient<FormatEditPage>();
+        builder.Services.AddTransient<SyncLogsPage>();
         builder.Services.AddTransient<TournamentsPage>();
         builder.Services.AddTransient<TournamentEditPage>();
         builder.Services.AddTransient<TournamentDetailPage>();
@@ -379,6 +390,7 @@ public static class MauiProgram
                         await DbBootstrap.EnsureNetSessionTablesAsync(db).ConfigureAwait(false);
                         await DbBootstrap.EnsureLiveOutboxTableAsync(db).ConfigureAwait(false);
                         await DbBootstrap.EnsureSchedulerTablesAsync(db).ConfigureAwait(false);
+                        await DbBootstrap.EnsureSyncSchemaAsync(db).ConfigureAwait(false);
                     }
                     catch
                     {

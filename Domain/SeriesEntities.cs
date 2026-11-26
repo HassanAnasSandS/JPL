@@ -8,9 +8,10 @@ public enum SeriesStatus : byte
     Completed = 3
 }
 
-public sealed class Series
+public sealed class Series : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public string Name { get; set; } = string.Empty;
     public Guid TeamAId { get; set; }
     public Guid TeamBId { get; set; }
@@ -40,9 +41,10 @@ public sealed class Series
     public ICollection<SeriesFixture> Fixtures { get; set; } = new List<SeriesFixture>();
 }
 
-public sealed class SeriesFixture
+public sealed class SeriesFixture : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid SeriesId { get; set; }
     public Series Series { get; set; } = null!;
     public int Sequence { get; set; }

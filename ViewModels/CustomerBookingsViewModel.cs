@@ -20,7 +20,10 @@ public partial class CustomerBookingsViewModel : ObservableObject
 
     public string CountLabel => TotalCount <= 0 ? "No bookings" : $"{Items.Count} of {TotalCount}";
 
-    public CustomerBookingsViewModel(IGroundsApiClient api) => _api = api;
+    public CustomerBookingsViewModel(IGroundsApiClient api)
+    {
+        _api = api;
+    }
 
     [RelayCommand]
     private Task ReloadAsync()
@@ -41,9 +44,13 @@ public partial class CustomerBookingsViewModel : ObservableObject
             if (Items.Count == 0)
                 IsBusy = true;
             ErrorMessage = null;
+            // Ground bookings are live Grounds API only — no local outbox rows.
             var page = await _api.GetMyBookingsAsync(_cursor).ConfigureAwait(true);
             foreach (var row in page.Items)
-                Items.Add(row);
+            {
+                if (Items.All(item => item.Id != row.Id))
+                    Items.Add(row);
+            }
             TotalCount = page.TotalCount;
             HasMore = page.HasMore;
             _cursor = page.NextCursor;

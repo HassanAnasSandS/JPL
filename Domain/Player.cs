@@ -1,8 +1,9 @@
 namespace JPL.Domain;
 
-public sealed class Player
+public sealed class Player : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
 
     public string FullName { get; set; } = string.Empty;
 

@@ -172,6 +172,10 @@ public partial class LeaguePickerViewModel : ObservableObject
     {
         if (row is null)
             return;
+
+        if (_auth.Current?.CanManagePlatform == true)
+            return;
+
         await AppBusy.RunAsync(async () =>
         {
             _league.Set(row.Id, row.Name);

@@ -113,7 +113,10 @@ public partial class GroundBookRequestViewModel : ObservableObject
     private int _nightStartsHour = 18;
     private int _nightEndsHour = 6;
 
-    public GroundBookRequestViewModel(IGroundsApiClient api, IAuthService auth, IAppNavigator navigator)
+    public GroundBookRequestViewModel(
+        IGroundsApiClient api,
+        IAuthService auth,
+        IAppNavigator navigator)
     {
         _api = api;
         _auth = auth;
@@ -146,7 +149,7 @@ public partial class GroundBookRequestViewModel : ObservableObject
                 }
                 catch
                 {
-                    /* window already switched to signup */
+                    /* window already switched to login */
                 }
             }
             return;
@@ -275,20 +278,24 @@ public partial class GroundBookRequestViewModel : ObservableObject
             }
             var hours = ShowHours ? ParseHours() : SelectedOffer.DurationHours;
             var end = start.AddHours((double)(hours <= 0 ? 1 : hours));
-            await _api.RequestBookingAsync(id, new
-            {
-                startAt = start,
-                endAt = end,
-                bookingKind = SelectedOffer.Kind,
+            var requestId = Guid.NewGuid();
+            var request = new GroundBookingCreateRequest(
+                start,
+                end,
+                CustomerName,
+                customerPhone,
+                Notes,
+                SelectedOffer.Kind,
                 hours,
-                customerName = CustomerName,
-                customerPhone = customerPhone,
-                notes = Notes,
-                services = ServiceChoices.Where(s => s.IsSelected).Select(s => s.Name).ToList(),
-                shop = ShopChoices.Where(s => s.Qty > 0).Select(s => new { name = s.Name, qty = s.Qty }).ToList()
-            }).ConfigureAwait(true);
-            await Shell.Current.DisplayAlert("Requested", "Booking sent. The ground owner will confirm.", "OK")
-                .ConfigureAwait(true);
+                ServiceChoices.Where(s => s.IsSelected).Select(s => s.Name).ToList(),
+                ShopChoices.Where(s => s.Qty > 0)
+                    .Select(s => new GroundBookingShopRequest(s.Name, s.Qty)).ToList(),
+                requestId);
+            // Grounds are live-API only — no local outbox / Sync now path.
+            await _api.RequestBookingAsync(id, request).ConfigureAwait(true);
+            await Shell.Current.DisplayAlert("Requested",
+                "Request sent. The ground owner will confirm.",
+                "OK").ConfigureAwait(true);
             await Shell.Current.GoToAsync("..").ConfigureAwait(true);
         }
         catch (BookingConflictException ex)

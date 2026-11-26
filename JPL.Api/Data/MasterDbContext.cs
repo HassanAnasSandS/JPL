@@ -17,6 +17,7 @@ public sealed class MasterDbContext : DbContext
     public DbSet<SchedulerTournament> SchedulerTournaments => Set<SchedulerTournament>();
     public DbSet<SchedulerTeam> SchedulerTeams => Set<SchedulerTeam>();
     public DbSet<SchedulerMatch> SchedulerMatches => Set<SchedulerMatch>();
+    public DbSet<SchedulerSyncReceipt> SchedulerSyncReceipts => Set<SchedulerSyncReceipt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,6 +26,8 @@ public sealed class MasterDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(160).IsRequired();
             e.Property(x => x.DatabaseName).HasMaxLength(LeagueDatabaseManager.NameMaxLength);
+            // Soft-deleted leagues are invisible to every query; use IgnoreQueryFilters() to see them.
+            e.HasQueryFilter(x => !x.IsDeleted);
         });
 
         modelBuilder.Entity<AppUser>(e =>
@@ -71,6 +74,14 @@ public sealed class MasterDbContext : DbContext
             e.Property(x => x.TeamBSlot).HasMaxLength(80);
             e.HasOne(x => x.Tournament).WithMany(t => t.Matches)
                 .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.TournamentId);
+        });
+
+        modelBuilder.Entity<SchedulerSyncReceipt>(e =>
+        {
+            e.HasKey(x => x.OperationId);
+            e.Property(x => x.PayloadHash).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2");
             e.HasIndex(x => x.TournamentId);
         });
 

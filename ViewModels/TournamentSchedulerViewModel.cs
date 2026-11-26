@@ -46,7 +46,7 @@ public partial class TournamentSchedulerViewModel : ObservableObject
     [ObservableProperty] private string? errorMessage;
     [ObservableProperty] private SchedulerUserOption? selectedUserFilter;
 
-    public bool CanWrite => _auth.Current is { IsGuest: false };
+    public bool CanWrite => _auth.Current?.CanWrite == true;
     public bool ShowUserFilter => _auth.Current?.CanManageLeagues == true;
     public bool HasFilter =>
         !string.IsNullOrWhiteSpace(NameFilter)
@@ -148,8 +148,8 @@ public partial class TournamentSchedulerViewModel : ObservableObject
         OwnerLine = ShowUserFilter && !string.IsNullOrWhiteSpace(s.CreatedByUsername)
             ? $"Owner: {s.CreatedByUsername}"
             : string.Empty,
-        CanEdit = CanWrite && s.CanEdit,
-        CanDelete = CanWrite && s.CanEdit
+        CanEdit = s.CanEdit,
+        CanDelete = s.CanEdit
     };
 
     private void MergeUserFilter(IReadOnlyList<SchedulerListItem> rows)
@@ -181,6 +181,13 @@ public partial class TournamentSchedulerViewModel : ObservableObject
     private async Task OpenAsync(SchedulerRow? row)
     {
         if (row is null) return;
+        // Non-creators (other league admins / users) always open view-only.
+        if (!row.CanEdit)
+        {
+            await ViewAsync(row).ConfigureAwait(true);
+            return;
+        }
+
         await Shell.Current.GoToAsync($"{nameof(Pages.TournamentSchedulerDetailPage)}?id={row.Id}")
             .ConfigureAwait(true);
     }

@@ -44,9 +44,10 @@ public enum SchedulerMatchResult : byte
     Tied = 3
 }
 
-public sealed class SchedulerTournament
+public sealed class SchedulerTournament : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; } = 1;
     public SchedulerRoundRobinType RoundRobinType { get; set; } = SchedulerRoundRobinType.Single;
@@ -60,14 +61,20 @@ public sealed class SchedulerTournament
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; set; }
+    /// <summary>Last server version accepted by the scheduler sync endpoint (0 for a new offline record).</summary>
+    public long Version { get; set; }
+    /// <summary>Cached display name; scheduler ownership is held by the platform account.</summary>
+    public string CreatedByUsername { get; set; } = string.Empty;
+    public bool HasDetailsCached { get; set; }
 
     public ICollection<SchedulerTeam> Teams { get; set; } = new List<SchedulerTeam>();
     public ICollection<SchedulerMatch> Matches { get; set; } = new List<SchedulerMatch>();
 }
 
-public sealed class SchedulerTeam
+public sealed class SchedulerTeam : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid TournamentId { get; set; }
     public SchedulerTournament Tournament { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
@@ -75,9 +82,10 @@ public sealed class SchedulerTeam
     public int SortOrder { get; set; }
 }
 
-public sealed class SchedulerMatch
+public sealed class SchedulerMatch : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid TournamentId { get; set; }
     public SchedulerTournament Tournament { get; set; } = null!;
     public SchedulerMatchStage Stage { get; set; } = SchedulerMatchStage.Group;
@@ -93,4 +101,21 @@ public sealed class SchedulerMatch
     public bool WinnerFeedsIsTeamA { get; set; }
     public Guid? LoserFeedsMatchId { get; set; }
     public bool LoserFeedsIsTeamA { get; set; }
+}
+
+/// <summary>Durable, idempotent queue for the independent scheduler API.</summary>
+public sealed class SchedulerSyncOutboxItem : ILeagueScoped
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
+    public Guid TournamentId { get; set; }
+    public Guid OperationId { get; set; } = Guid.NewGuid();
+    public long ExpectedVersion { get; set; }
+    public string Operation { get; set; } = "Upsert";
+    public string PayloadJson { get; set; } = "{}";
+    public SyncOutboxStatus Status { get; set; } = SyncOutboxStatus.Pending;
+    public int AttemptCount { get; set; }
+    public string? LastError { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? LastAttemptAtUtc { get; set; }
 }

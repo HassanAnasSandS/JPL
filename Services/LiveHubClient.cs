@@ -18,6 +18,7 @@ public sealed class LiveHubClient : ILiveHubClient, IAsyncDisposable
     private readonly IOptions<ApiOptions> _options;
     private readonly AuthTokenStore _tokens;
     private readonly ILeagueContext _league;
+    private readonly IAuthService _auth;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private HubConnection? _connection;
@@ -25,11 +26,12 @@ public sealed class LiveHubClient : ILiveHubClient, IAsyncDisposable
     private Guid? _sessionId;
     private Func<Task>? _onUpdated;
 
-    public LiveHubClient(IOptions<ApiOptions> options, AuthTokenStore tokens, ILeagueContext league)
+    public LiveHubClient(IOptions<ApiOptions> options, AuthTokenStore tokens, ILeagueContext league, IAuthService auth)
     {
         _options = options;
         _tokens = tokens;
         _league = league;
+        _auth = auth;
     }
 
     public Task WatchMatchAsync(Guid matchId, Func<Task> onUpdated, CancellationToken ct = default)
@@ -40,6 +42,9 @@ public sealed class LiveHubClient : ILiveHubClient, IAsyncDisposable
 
     private async Task WatchAsync(Guid? matchId, Guid? sessionId, Func<Task> onUpdated, CancellationToken ct)
     {
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+            return;
+
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -103,6 +108,9 @@ public sealed class LiveHubClient : ILiveHubClient, IAsyncDisposable
 
     private async Task<bool> EnsureConnectedAsync(CancellationToken ct)
     {
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+            return false;
+
         var token = _tokens.Token;
         if (string.IsNullOrWhiteSpace(token))
             return false;

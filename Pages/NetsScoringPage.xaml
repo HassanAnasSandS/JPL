@@ -54,6 +54,51 @@
                 </VerticalStackLayout>
             </Border>
 
+            <Border Style="{StaticResource CardBorder}" Padding="12">
+                <Border StrokeThickness="0"
+                        BackgroundColor="#1B2B40"
+                        Padding="12,10"
+                        StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="{Binding ThisOverLabel}"
+                               FontSize="11"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}" />
+                        <ScrollView Orientation="Horizontal"
+                                    HorizontalScrollBarVisibility="Never"
+                                    VerticalScrollBarVisibility="Never">
+                            <HorizontalStackLayout Spacing="6"
+                                                   BindableLayout.ItemsSource="{Binding ThisOverBalls}"
+                                                   IsVisible="{Binding HasThisOverBalls}">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:OverBallChip">
+                                        <Border StrokeThickness="0"
+                                                MinimumWidthRequest="42"
+                                                HeightRequest="32"
+                                                Padding="4,0"
+                                                BackgroundColor="{Binding Background}"
+                                                StrokeShape="RoundRectangle 16">
+                                            <Label Text="{Binding Text}"
+                                                   FontSize="10"
+                                                   FontAttributes="Bold"
+                                                   TextColor="{Binding Foreground}"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center"
+                                                   HorizontalTextAlignment="Center"
+                                                   VerticalTextAlignment="Center" />
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </HorizontalStackLayout>
+                        </ScrollView>
+                        <Label Text="No balls yet this over"
+                               FontSize="12"
+                               TextColor="#8FA3B8"
+                               IsVisible="{Binding ShowThisOverEmpty}" />
+                    </VerticalStackLayout>
+                </Border>
+            </Border>
+
             <Border Style="{StaticResource CardBorder}" Padding="12" IsVisible="{Binding CanWrite}">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="RUNS" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Secondary}" />
@@ -266,6 +311,26 @@
                             <Label Grid.Column="1" Text="{Binding ScorecardTotalText}" FontSize="15"
                                    FontAttributes="Bold" TextColor="{StaticResource Primary}" />
                         </Grid>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="0" Padding="10,10,10,6"
+                                         IsVisible="{Binding HasCombinedBattingCard}">
+                        <Label Text="COMBINED BATTING" FontSize="11" FontAttributes="Bold"
+                               TextColor="{StaticResource Secondary}" Margin="2,0,0,6" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding CombinedBattingCard}" Spacing="0">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="svc:BattingCardRow">
+                                    <Grid ColumnDefinitions="*,Auto" Padding="6,8">
+                                        <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource White}}" />
+                                        <Label Grid.Column="1" Text="{Binding CombinedLineText}" FontSize="12"
+                                               HorizontalTextAlignment="End" VerticalOptions="Center"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
 
                     <VerticalStackLayout Spacing="0" Padding="10,4,10,12">

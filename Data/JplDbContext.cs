@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System.Linq.Expressions;
 using JPL.Domain;
 using JPL.Services;
 
@@ -16,12 +18,29 @@ public sealed class JplDbContext : DbContext
     /// <summary>Used by global query filters; Empty means "no league selected" (return none).</summary>
     public Guid CurrentLeagueId => _league.CurrentLeagueId ?? Guid.Empty;
 
+    /// <summary>
+    /// SQLite keeps Guid as TEXT. EF Core's default writes/compares UPPERCASE text, but
+    /// <see cref="DbBootstrap"/> lowercases every Guid column before each sync (and all raw SQL uses
+    /// lowercase). That mismatch made tracked UPDATE/DELETE hit 0 rows (DbUpdateConcurrencyException
+    /// on the 2nd sync after a login), missed SyncCursor lookups (re-bootstrap every run) and created
+    /// duplicate cache rows. Always store and compare Guids in lowercase "D" format.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Guid>().HaveConversion<LowercaseGuidConverter>();
+        configurationBuilder.Properties<Guid?>().HaveConversion<LowercaseGuidConverter>();
+    }
+
     public DbSet<League> Leagues => Set<League>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamPlayer> TeamPlayers => Set<TeamPlayer>();
     public DbSet<SyncOutboxItem> SyncOutbox => Set<SyncOutboxItem>();
     public DbSet<LiveOutboxItem> LiveOutbox => Set<LiveOutboxItem>();
+    public DbSet<SyncCursor> SyncCursors => Set<SyncCursor>();
+    public DbSet<SyncDeferredPullItem> SyncDeferredPulls => Set<SyncDeferredPullItem>();
+    public DbSet<SyncLogEntry> SyncLogs => Set<SyncLogEntry>();
+    public DbSet<LocalStatsCacheItem> LocalStatsCache => Set<LocalStatsCacheItem>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<Innings> Innings => Set<Innings>();
@@ -45,6 +64,9 @@ public sealed class JplDbContext : DbContext
     public DbSet<SchedulerTournament> SchedulerTournaments => Set<SchedulerTournament>();
     public DbSet<SchedulerTeam> SchedulerTeams => Set<SchedulerTeam>();
     public DbSet<SchedulerMatch> SchedulerMatches => Set<SchedulerMatch>();
+    public DbSet<SchedulerSyncOutboxItem> SchedulerSyncOutbox => Set<SchedulerSyncOutboxItem>();
+    public DbSet<LocalGroundCacheItem> LocalGroundCache => Set<LocalGroundCacheItem>();
+    public DbSet<GroundBookingRequestOutboxItem> GroundBookingRequestOutbox => Set<GroundBookingRequestOutboxItem>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -73,7 +95,6 @@ public sealed class JplDbContext : DbContext
             if (entry.Entity is AppUser user && user.LeagueId is null
                 && user.Role != AppRole.SuperAdmin
                 && user.Role != AppRole.GroundOwner
-                && user.Role != AppRole.PublicUser
                 && user.Role != AppRole.Guest)
                 user.LeagueId = leagueId;
         }
@@ -154,6 +175,40 @@ public sealed class JplDbContext : DbContext
             e.HasIndex(x => new { x.Status, x.CreatedAtUtc, x.SortId });
             e.Property(x => x.EntityType).HasMaxLength(64).IsRequired();
             e.Property(x => x.Operation).HasMaxLength(32).IsRequired();
+        });
+
+        modelBuilder.Entity<SyncCursor>(e =>
+        {
+            e.HasKey(x => x.LeagueId);
+        });
+
+        modelBuilder.Entity<SyncDeferredPullItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EntityType).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Operation).HasMaxLength(32).IsRequired();
+            e.Property(x => x.EntityKeyJson).IsRequired();
+            e.Property(x => x.PayloadJson).IsRequired();
+            e.HasIndex(x => new { x.LeagueId, x.Sequence }).IsUnique();
+            e.HasIndex(x => new { x.LeagueId, x.EntityType, x.EntityKeyJson });
+        });
+
+        modelBuilder.Entity<SyncLogEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Phase).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Message).HasMaxLength(280).IsRequired();
+            e.Property(x => x.Detail).HasMaxLength(1200);
+            e.HasIndex(x => new { x.LeagueId, x.AtUtc });
+        });
+
+        modelBuilder.Entity<LocalStatsCacheItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CacheKey).HasMaxLength(80).IsRequired();
+            e.Property(x => x.PayloadJson).IsRequired();
+            e.HasIndex(x => new { x.LeagueId, x.CacheKey }).IsUnique();
+            e.HasIndex(x => new { x.LeagueId, x.UpdatedAtUtc });
         });
 
         modelBuilder.Entity<Match>(e =>
@@ -368,5 +423,60 @@ public sealed class JplDbContext : DbContext
                 .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => x.TournamentId);
         });
+
+        modelBuilder.Entity<SchedulerSyncOutboxItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.LeagueId, x.TournamentId, x.CreatedAtUtc });
+            e.HasIndex(x => x.OperationId).IsUnique();
+        });
+
+        modelBuilder.Entity<LocalGroundCacheItem>(e =>
+        {
+            e.HasKey(x => x.CacheKey);
+            e.Property(x => x.CacheKey).HasMaxLength(128);
+            e.Property(x => x.PayloadJson).IsRequired();
+            e.HasIndex(x => x.UpdatedAtUtc);
+        });
+
+        modelBuilder.Entity<GroundBookingRequestOutboxItem>(e =>
+        {
+            e.HasKey(x => x.RequestId);
+            e.Property(x => x.GroundName).HasMaxLength(160).IsRequired();
+            e.Property(x => x.PayloadJson).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.CreatedAtUtc });
+            e.HasIndex(x => x.Status);
+        });
+
+        ApplyLeagueQueryFilters(modelBuilder);
+    }
+
+    private void ApplyLeagueQueryFilters(ModelBuilder modelBuilder)
+    {
+        var scopedTypes = modelBuilder.Model.GetEntityTypes()
+            .Where(type => typeof(ILeagueScoped).IsAssignableFrom(type.ClrType))
+            .ToArray();
+
+        foreach (var type in scopedTypes)
+        {
+            var parameter = Expression.Parameter(type.ClrType, "row");
+            var leagueId = Expression.Property(parameter, nameof(ILeagueScoped.LeagueId));
+            var currentLeagueId = Expression.Property(Expression.Constant(this), nameof(CurrentLeagueId));
+            Expression body = Expression.Equal(leagueId, currentLeagueId);
+            var isDeleted = type.FindProperty("IsDeleted");
+            if (isDeleted?.ClrType == typeof(bool))
+                body = Expression.AndAlso(body, Expression.Not(Expression.Property(parameter, "IsDeleted")));
+
+            modelBuilder.Entity(type.ClrType).HasQueryFilter(Expression.Lambda(body, parameter));
+        }
+    }
+}
+
+/// <summary>Guid &lt;-&gt; lowercase TEXT so EF parameters always match normalized SQLite rows.</summary>
+public sealed class LowercaseGuidConverter : ValueConverter<Guid, string>
+{
+    public LowercaseGuidConverter()
+        : base(value => value.ToString("D"), text => Guid.Parse(text))
+    {
     }
 }

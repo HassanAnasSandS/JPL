@@ -15,6 +15,7 @@ public sealed class SchedulerTournament
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; set; }
+    public long Version { get; set; } = 1;
 
     public ICollection<SchedulerTeam> Teams { get; set; } = new List<SchedulerTeam>();
     public ICollection<SchedulerMatch> Matches { get; set; } = new List<SchedulerMatch>();
@@ -48,4 +49,14 @@ public sealed class SchedulerMatch
     public bool WinnerFeedsIsTeamA { get; set; }
     public Guid? LoserFeedsMatchId { get; set; }
     public bool LoserFeedsIsTeamA { get; set; }
+}
+
+/// <summary>Durable idempotency receipt for offline scheduler mutations.</summary>
+public sealed class SchedulerSyncReceipt
+{
+    public Guid OperationId { get; set; }
+    public Guid TournamentId { get; set; }
+    public long AppliedVersion { get; set; }
+    public string PayloadHash { get; set; } = string.Empty;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

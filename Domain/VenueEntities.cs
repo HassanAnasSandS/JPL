@@ -1,9 +1,10 @@
 namespace JPL.Domain;
 
 /// <summary>Master venue (ground) — referenced by venue bookings.</summary>
-public sealed class Venue
+public sealed class Venue : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public string Name { get; set; } = string.Empty;
     public long Version { get; set; } = 1;
     public DateTime CreatedAtUtc { get; set; } = DateTime.Now;

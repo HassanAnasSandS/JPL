@@ -97,7 +97,7 @@
         </Style>
         <DataTemplate x:Key="MatchRowTemplate" x:DataType="svc:PlayerCareerSummary">
             <Grid Style="{StaticResource StatsRowGrid}"
-                  ColumnDefinitions="52,44,44,44,52"
+                  ColumnDefinitions="52,44,44,44,52,84,100,84,100"
                   ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
@@ -109,11 +109,15 @@
                 <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Loss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="Loss" ctrl:StatsColumn.Width="44" />
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Tied}" ctrl:StatsColumn.Key="Tied" ctrl:StatsColumn.Width="44" />
                 <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding MatchWinPctText}" ctrl:StatsColumn.Key="MatchWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding BestWinningStreak}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="BestWinningStreak" ctrl:StatsColumn.Width="84" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CurrentWinningStreak}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="CurrentWinningStreak" ctrl:StatsColumn.Width="100" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding WorstLosingStreak}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="WorstLosingStreak" ctrl:StatsColumn.Width="84" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CurrentLosingStreak}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="CurrentLosingStreak" ctrl:StatsColumn.Width="100" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="TournamentRowTemplate" x:DataType="svc:PlayerCareerSummary">
             <Grid Style="{StaticResource StatsRowGrid}"
-                  ColumnDefinitions="52,44,44,44,52"
+                  ColumnDefinitions="52,44,44,44,52,84,100,84,100"
                   ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
@@ -125,11 +129,15 @@
                 <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding TournamentLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="TournamentLoss" ctrl:StatsColumn.Width="44" />
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding TournamentTied}" ctrl:StatsColumn.Key="TournamentTied" ctrl:StatsColumn.Width="44" />
                 <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding TournamentWinPctText}" ctrl:StatsColumn.Key="TournamentWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding BestTournamentWinningStreak}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="BestTournamentWinningStreak" ctrl:StatsColumn.Width="84" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CurrentTournamentWinningStreak}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="CurrentTournamentWinningStreak" ctrl:StatsColumn.Width="100" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding WorstTournamentLosingStreak}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="WorstTournamentLosingStreak" ctrl:StatsColumn.Width="84" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CurrentTournamentLosingStreak}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="CurrentTournamentLosingStreak" ctrl:StatsColumn.Width="100" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="SeriesRowTemplate" x:DataType="svc:PlayerCareerSummary">
             <Grid Style="{StaticResource StatsRowGrid}"
-                  ColumnDefinitions="52,44,44,44,52"
+                  ColumnDefinitions="52,44,44,44,52,84,100,84,100"
                   ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
@@ -141,6 +149,10 @@
                 <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding SeriesLoss}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="SeriesLoss" ctrl:StatsColumn.Width="44" />
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding SeriesTied}" ctrl:StatsColumn.Key="SeriesTied" ctrl:StatsColumn.Width="44" />
                 <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding SeriesWinPctText}" ctrl:StatsColumn.Key="SeriesWinPct" ctrl:StatsColumn.Width="52" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding BestSeriesWinningStreak}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="BestSeriesWinningStreak" ctrl:StatsColumn.Width="84" />
+                <Label Grid.Column="6" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CurrentSeriesWinningStreak}" TextColor="{StaticResource Success}" ctrl:StatsColumn.Key="CurrentSeriesWinningStreak" ctrl:StatsColumn.Width="100" />
+                <Label Grid.Column="7" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding WorstSeriesLosingStreak}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="WorstSeriesLosingStreak" ctrl:StatsColumn.Width="84" />
+                <Label Grid.Column="8" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding CurrentSeriesLosingStreak}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="CurrentSeriesLosingStreak" ctrl:StatsColumn.Width="100" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="BattingRowTemplate" x:DataType="svc:PlayerCareerSummary">
@@ -152,7 +164,7 @@
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding MatchesOrSessions}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
                 <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding InningsBatted}" ctrl:StatsColumn.Key="InningsBatted" ctrl:StatsColumn.Width="40" />
                 <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding BallsFaced}" ctrl:StatsColumn.Key="BallsFaced" ctrl:StatsColumn.Width="40" />
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding Runs}" ctrl:StatsColumn.Key="Runs" ctrl:StatsColumn.Width="40" />
@@ -183,7 +195,7 @@
         </DataTemplate>
         <DataTemplate x:Key="NetsBattingRowTemplate" x:DataType="svc:PlayerCareerSummary">
             <Grid Style="{StaticResource StatsRowGrid}"
-                  ColumnDefinitions="40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,48,72,72,56"
+                  ColumnDefinitions="40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,48,72,72,56,52"
                   ctrl:StatsColumnGrid.Provider="{Binding BindingContext.Columns, Source={x:Reference ThisPage}, x:DataType={x:Null}}">
                 <Grid.Triggers>
                     <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
@@ -216,6 +228,7 @@
                 <Label Grid.Column="23" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AvgPerSessionText}" ctrl:StatsColumn.Key="AvgPerSession" ctrl:StatsColumn.Width="72" />
                 <Label Grid.Column="24" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding AvgPerOutText}" ctrl:StatsColumn.Key="AvgPerOut" ctrl:StatsColumn.Width="72" />
                 <Label Grid.Column="25" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding BoundaryPctText}" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
+                <Label Grid.Column="26" Style="{StaticResource StatCell}" Text="{Binding Sessions}" ctrl:StatsColumn.Key="Sessions" ctrl:StatsColumn.Width="52" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="BowlingRowTemplate" x:DataType="svc:PlayerCareerSummary">
@@ -227,7 +240,7 @@
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding MatchesOrSessions}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
                 <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding InningsBowled}" ctrl:StatsColumn.Key="InningsBowled" ctrl:StatsColumn.Width="40" />
                 <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding OversBowledText}" ctrl:StatsColumn.Key="OversBowled" ctrl:StatsColumn.Width="48" />
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding OversBowledBalls}" ctrl:StatsColumn.Key="OversBowledBalls" ctrl:StatsColumn.Width="40" />
@@ -266,12 +279,12 @@
                         <Setter Property="BackgroundColor" Value="#F0F3F7" />
                     </DataTrigger>
                 </Grid.Triggers>
-                <Label Style="{StaticResource StatCell}" Text="{Binding Matches}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                <Label Style="{StaticResource StatCell}" Text="{Binding MatchesOrSessions}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
                 <Label Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Catches}" ctrl:StatsColumn.Key="Catches" ctrl:StatsColumn.Width="64" />
                 <Label Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding RunOutsEffected}" ctrl:StatsColumn.Key="RunOutsEffected" ctrl:StatsColumn.Width="72" />
                 <Label Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Stumpings}" ctrl:StatsColumn.Key="Stumpings" ctrl:StatsColumn.Width="72" />
                 <Label Grid.Column="4" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding FieldingTotal}" ctrl:StatsColumn.Key="FieldingTotal" ctrl:StatsColumn.Width="52" />
-                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding FieldingPerMatchText}" ctrl:StatsColumn.Key="FieldingPerMatch" ctrl:StatsColumn.Width="64" />
+                <Label Grid.Column="5" Style="{StaticResource StatCell}" FontAttributes="Bold" Text="{Binding FieldingRateText}" ctrl:StatsColumn.Key="FieldingPerMatch" ctrl:StatsColumn.Width="64" />
                 <Label Grid.Column="6" Style="{StaticResource StatCell}" Text="{Binding DroppedCatches}" TextColor="{StaticResource Danger}" ctrl:StatsColumn.Key="DroppedCatches" ctrl:StatsColumn.Width="56" />
             </Grid>
         </DataTemplate>
@@ -1960,6 +1973,18 @@
                             </DataTrigger>
                         </Button.Triggers>
                     </ctrl:TabChipButton>
+                    <ctrl:TabChipButton Text="Awards"
+                            Style="{StaticResource StatsChip}"
+                            Command="{Binding SelectCategoryCommand}"
+                            CommandParameter="awards"
+                            IsVisible="{Binding IsNetsSource}">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsNetsAwardsStats}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                <Setter Property="TextColor" Value="{StaticResource Secondary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </ctrl:TabChipButton>
                     <ctrl:TabChipButton Text="Captaincy"
                             Style="{StaticResource StatsChip}"
                             Command="{Binding SelectCategoryCommand}"
@@ -2059,7 +2084,7 @@
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="0" VerticalOptions="Start">
                         <Grid WidthRequest="{OnIdiom Phone=220, Default=260}">
                             <VerticalStackLayout Spacing="0">
-                            <BoxView HeightRequest="44" Color="Transparent" IsVisible="{Binding HasFlatColumnHeader}" />
+                            <BoxView HeightRequest="{Binding StatsHeaderSpacer}" Color="Transparent" IsVisible="{Binding HasFlatColumnHeader}" />
                             <BoxView HeightRequest="71" Color="Transparent" IsVisible="{Binding HasGroupedColumnHeader}" />
                             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Leaderboard}"
                                                  Spacing="0"
@@ -2072,7 +2097,7 @@
                                 </BindableLayout.EmptyView>
                                 <BindableLayout.ItemTemplate>
                                     <DataTemplate x:DataType="svc:PlayerCareerSummary">
-                                        <Grid ColumnDefinitions="32,*,Auto"
+                                        <Grid ColumnDefinitions="32,*"
                                               HeightRequest="40"
                                               Padding="8,0,4,0">
                                             <Grid.Triggers>
@@ -2097,15 +2122,6 @@
                                                    TextColor="{StaticResource Primary}"
                                                    LineBreakMode="TailTruncation"
                                                    VerticalOptions="Center" />
-                                            <Label Grid.Column="2"
-                                                   Text="{Binding Sessions}"
-                                                   WidthRequest="52"
-                                                   FontSize="12"
-                                                   FontAttributes="Bold"
-                                                   HorizontalTextAlignment="Center"
-                                                   VerticalOptions="Center"
-                                                   TextColor="{StaticResource Primary}"
-                                                   IsVisible="{Binding BindingContext.IsNetsSource, Source={x:Reference ThisPage}, x:DataType={x:Null}}" />
                                         </Grid>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
@@ -2166,8 +2182,8 @@
                                 <BoxView HeightRequest="27"
                                          Color="{StaticResource Primary}"
                                          IsVisible="{Binding HasGroupedColumnHeader}" />
-                                <Grid ColumnDefinitions="32,*,Auto"
-                                      HeightRequest="42"
+                                <Grid ColumnDefinitions="32,*"
+                                      HeightRequest="{Binding StatsHeaderBarHeight}"
                                       Padding="8,0,4,0"
                                       BackgroundColor="{StaticResource Primary}">
                                     <Label Text="#"
@@ -2181,13 +2197,6 @@
                                             HorizontalOptions="Start"
                                             Command="{Binding SortCommand}"
                                             CommandParameter="{Binding NameSortParameter}" />
-                                    <Button Grid.Column="2"
-                                            Text="Sess"
-                                            WidthRequest="52"
-                                            Style="{StaticResource StatsSortButton}"
-                                            IsVisible="{Binding IsNetsSource}"
-                                            Command="{Binding SortCommand}"
-                                            CommandParameter="Sessions" />
                                 </Grid>
                                 <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
                             </VerticalStackLayout>
@@ -2200,7 +2209,7 @@
                                     VerticalScrollBarVisibility="Never">
                             <Grid>
                             <VerticalStackLayout Spacing="0">
-                                <BoxView HeightRequest="44" Color="Transparent" IsVisible="{Binding HasFlatColumnHeader}" />
+                                <BoxView HeightRequest="{Binding StatsHeaderSpacer}" Color="Transparent" IsVisible="{Binding HasFlatColumnHeader}" />
                                 <BoxView HeightRequest="71" Color="Transparent" IsVisible="{Binding HasGroupedColumnHeader}" />
 
                                 <VerticalStackLayout BindingContext="{Binding .}"
@@ -2221,8 +2230,8 @@
                                                  Spacing="0"
                                                  BackgroundColor="{StaticResource Primary}">
                                 <Grid IsVisible="{Binding IsMatchStats}"
-                                      ColumnDefinitions="52,44,44,44,52"
-                                      HeightRequest="42"
+                                      ColumnDefinitions="52,44,44,44,52,84,100,84,100"
+                                      HeightRequest="{Binding StatsHeaderBarHeight}"
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
                                       ctrl:StatsColumnGrid.Provider="{Binding Columns}">
@@ -2231,10 +2240,46 @@
                                     <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Loss" ctrl:StatsColumn.Key="Loss" ctrl:StatsColumn.Width="44" />
                                     <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Tied" ctrl:StatsColumn.Key="Tied" ctrl:StatsColumn.Width="44" />
                                     <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="MatchWinPct" ctrl:StatsColumn.Key="MatchWinPct" ctrl:StatsColumn.Width="52" />
+                                    <Border Grid.Column="5" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="BestWinningStreak" ctrl:StatsColumn.Width="84">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="BestWinningStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Best winning" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="6" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="CurrentWinningStreak" ctrl:StatsColumn.Width="100">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="CurrentWinningStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Current winning" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="7" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="WorstLosingStreak" ctrl:StatsColumn.Width="84">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="WorstLosingStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Worst losing" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="8" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="CurrentLosingStreak" ctrl:StatsColumn.Width="100">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="CurrentLosingStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Current losing" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
                                 </Grid>
                                 <Grid IsVisible="{Binding IsTournamentStats}"
-                                      ColumnDefinitions="52,44,44,44,52"
-                                      HeightRequest="42"
+                                      ColumnDefinitions="52,44,44,44,52,84,100,84,100"
+                                      HeightRequest="{Binding StatsHeaderBarHeight}"
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
                                       ctrl:StatsColumnGrid.Provider="{Binding Columns}">
@@ -2243,10 +2288,46 @@
                                     <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentLoss" ctrl:StatsColumn.Key="TournamentLoss" ctrl:StatsColumn.Width="44" />
                                     <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentTied" ctrl:StatsColumn.Key="TournamentTied" ctrl:StatsColumn.Width="44" />
                                     <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="TournamentWinPct" ctrl:StatsColumn.Key="TournamentWinPct" ctrl:StatsColumn.Width="52" />
+                                    <Border Grid.Column="5" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="BestTournamentWinningStreak" ctrl:StatsColumn.Width="84">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="BestTournamentWinningStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Best winning" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="6" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="CurrentTournamentWinningStreak" ctrl:StatsColumn.Width="100">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="CurrentTournamentWinningStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Current winning" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="7" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="WorstTournamentLosingStreak" ctrl:StatsColumn.Width="84">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="WorstTournamentLosingStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Worst losing" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="8" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="CurrentTournamentLosingStreak" ctrl:StatsColumn.Width="100">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="CurrentTournamentLosingStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Current losing" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
                                 </Grid>
                                 <Grid IsVisible="{Binding IsSeriesStats}"
-                                      ColumnDefinitions="52,44,44,44,52"
-                                      HeightRequest="42"
+                                      ColumnDefinitions="52,44,44,44,52,84,100,84,100"
+                                      HeightRequest="{Binding StatsHeaderBarHeight}"
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
                                       ctrl:StatsColumnGrid.Provider="{Binding Columns}">
@@ -2255,6 +2336,42 @@
                                     <Button Grid.Column="2" Text="Lost" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesLoss" ctrl:StatsColumn.Key="SeriesLoss" ctrl:StatsColumn.Width="44" />
                                     <Button Grid.Column="3" Text="Tied" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesTied" ctrl:StatsColumn.Key="SeriesTied" ctrl:StatsColumn.Width="44" />
                                     <Button Grid.Column="4" Text="Win%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="SeriesWinPct" ctrl:StatsColumn.Key="SeriesWinPct" ctrl:StatsColumn.Width="52" />
+                                    <Border Grid.Column="5" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="BestSeriesWinningStreak" ctrl:StatsColumn.Width="84">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="BestSeriesWinningStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Best winning" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="6" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="CurrentSeriesWinningStreak" ctrl:StatsColumn.Width="100">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="CurrentSeriesWinningStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Current winning" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="7" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="WorstSeriesLosingStreak" ctrl:StatsColumn.Width="84">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="WorstSeriesLosingStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Worst losing" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    <Border Grid.Column="8" BackgroundColor="Transparent" StrokeThickness="0" ctrl:StatsColumn.Key="CurrentSeriesLosingStreak" ctrl:StatsColumn.Width="100">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding SortCommand}" CommandParameter="CurrentSeriesLosingStreak" />
+                                        </Border.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="0" VerticalOptions="Center" HorizontalOptions="Center">
+                                            <Label Text="Current losing" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                            <Label Text="streak" FontSize="9" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="Center" />
+                                        </VerticalStackLayout>
+                                    </Border>
                                 </Grid>
                                 <Grid IsVisible="{Binding IsMatchBattingStats}"
                                       ColumnDefinitions="48,40,40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,44,44,56"
@@ -2262,7 +2379,13 @@
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
                                       ctrl:StatsColumnGrid.Provider="{Binding Columns}">
-                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="{Binding SessionOrMatchSortParameter}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsNetsSource}" Value="True">
+                                                <Setter Property="Text" Value="Session" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
                                     <Button Grid.Column="1" Text="Inns" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="InningsBatted" ctrl:StatsColumn.Key="InningsBatted" ctrl:StatsColumn.Width="40" />
                                     <Button Grid.Column="2" Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BallsFaced" ctrl:StatsColumn.Key="BallsFaced" ctrl:StatsColumn.Width="40" />
                                     <Button Grid.Column="3" Text="Runs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Runs" ctrl:StatsColumn.Key="Runs" ctrl:StatsColumn.Width="40" />
@@ -2291,7 +2414,7 @@
                                     <Button Grid.Column="26" Text="Bound%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BoundaryPct" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsNetsBattingStats}"
-                                      ColumnDefinitions="40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,48,72,72,56"
+                                      ColumnDefinitions="40,40,80,36,40,40,48,32,32,32,32,32,32,36,40,36,36,36,36,40,36,56,48,72,72,56,52"
                                       HeightRequest="42"
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
@@ -2322,6 +2445,7 @@
                                     <Button Grid.Column="23" Text="Avg/Sess" FontSize="9" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AvgPerSession" ctrl:StatsColumn.Key="AvgPerSession" ctrl:StatsColumn.Width="72" />
                                     <Button Grid.Column="24" Text="Avg/Out" FontSize="9" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="AvgPerOut" ctrl:StatsColumn.Key="AvgPerOut" ctrl:StatsColumn.Width="72" />
                                     <Button Grid.Column="25" Text="Bound%" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="BoundaryPct" ctrl:StatsColumn.Key="BoundaryPct" ctrl:StatsColumn.Width="56" />
+                                    <Button Grid.Column="26" Text="Session" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Sessions" ctrl:StatsColumn.Key="Sessions" ctrl:StatsColumn.Width="52" />
                                 </Grid>
                                 <Grid IsVisible="{Binding IsBowlingStats}"
                                       ColumnDefinitions="48,40,48,40,40,36,48,36,40,40,40,48,32,32,32,36,36,32,32,32,32,32,32,56,32,44,44,44"
@@ -2329,7 +2453,13 @@
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
                                       ctrl:StatsColumnGrid.Provider="{Binding Columns}">
-                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="{Binding SessionOrMatchSortParameter}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsNetsSource}" Value="True">
+                                                <Setter Property="Text" Value="Session" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
                                     <Button Grid.Column="1" Text="Inns" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="InningsBowled" ctrl:StatsColumn.Key="InningsBowled" ctrl:StatsColumn.Width="40" />
                                     <Button Grid.Column="2" Text="Overs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="OversBowled" ctrl:StatsColumn.Key="OversBowled" ctrl:StatsColumn.Width="48" />
                                     <Button Grid.Column="3" Text="Balls" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="OversBowledBalls" ctrl:StatsColumn.Key="OversBowledBalls" ctrl:StatsColumn.Width="40" />
@@ -2364,12 +2494,24 @@
                                       Padding="2,0"
                                       BackgroundColor="{StaticResource Primary}"
                                       ctrl:StatsColumnGrid.Provider="{Binding Columns}">
-                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Matches" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48" />
+                                    <Button Text="Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="{Binding SessionOrMatchSortParameter}" ctrl:StatsColumn.Key="Matches" ctrl:StatsColumn.Width="48">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsNetsSource}" Value="True">
+                                                <Setter Property="Text" Value="Session" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
                                     <Button Grid.Column="1" Text="Catches" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Catches" ctrl:StatsColumn.Key="Catches" ctrl:StatsColumn.Width="64" />
                                     <Button Grid.Column="2" Text="Run outs" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="RunOutsEffected" ctrl:StatsColumn.Key="RunOutsEffected" ctrl:StatsColumn.Width="72" />
                                     <Button Grid.Column="3" Text="Stumpings" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="Stumpings" ctrl:StatsColumn.Key="Stumpings" ctrl:StatsColumn.Width="72" />
                                     <Button Grid.Column="4" Text="Total" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="FieldingTotal" ctrl:StatsColumn.Key="FieldingTotal" ctrl:StatsColumn.Width="52" />
-                                    <Button Grid.Column="5" Text="Per Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="FieldingPerMatch" ctrl:StatsColumn.Key="FieldingPerMatch" ctrl:StatsColumn.Width="64" />
+                                    <Button Grid.Column="5" Text="Per Match" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="{Binding FieldingRateSortParameter}" ctrl:StatsColumn.Key="FieldingPerMatch" ctrl:StatsColumn.Width="64">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsNetsSource}" Value="True">
+                                                <Setter Property="Text" Value="Per Session" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
                                     <Button Grid.Column="6" Text="Drops" Style="{StaticResource StatsSortButton}" Command="{Binding SortCommand}" CommandParameter="DroppedCatches" ctrl:StatsColumn.Key="DroppedCatches" ctrl:StatsColumn.Width="56" />
                                 </Grid>
                                 <VerticalStackLayout IsVisible="{Binding IsCaptaincyStats}" Spacing="0">
@@ -2506,6 +2648,94 @@
                         </Grid>
                         </ScrollView>
                     </Grid>
+                </ScrollView>
+            </Border>
+
+            <Border Grid.Row="3"
+                    IsVisible="{Binding IsNetsAwardsStats}"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 12"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+                    VerticalOptions="Fill">
+                <ScrollView x:Name="NetsAwardsScroll"
+                            Orientation="Vertical"
+                            VerticalOptions="Fill"
+                            VerticalScrollBarVisibility="Always"
+                            HorizontalScrollBarVisibility="Never">
+                    <ScrollView Orientation="Horizontal"
+                                HorizontalScrollBarVisibility="Always"
+                                VerticalScrollBarVisibility="Never">
+                        <VerticalStackLayout WidthRequest="1160" Spacing="0" VerticalOptions="Start">
+                            <Grid ColumnDefinitions="220,*,*,*,*"
+                                  HeightRequest="46"
+                                  Padding="12,0"
+                                  ColumnSpacing="4"
+                                  BackgroundColor="{StaticResource Primary}">
+                                <Label Text="Session" FontAttributes="Bold" FontSize="12"
+                                       VerticalOptions="Center" TextColor="{StaticResource White}" />
+                                <Label Grid.Column="1" Text="Player of the Session" FontAttributes="Bold" FontSize="12"
+                                       VerticalOptions="Center" TextColor="{StaticResource White}" />
+                                <Label Grid.Column="2" Text="Best Batsman" FontAttributes="Bold" FontSize="12"
+                                       VerticalOptions="Center" TextColor="{StaticResource White}" />
+                                <Label Grid.Column="3" Text="Best Bowler" FontAttributes="Bold" FontSize="12"
+                                       VerticalOptions="Center" TextColor="{StaticResource White}" />
+                                <Label Grid.Column="4" Text="Best Fielder" FontAttributes="Bold" FontSize="12"
+                                       VerticalOptions="Center" TextColor="{StaticResource White}" />
+                            </Grid>
+                            <BoxView HeightRequest="2" Color="{StaticResource Secondary}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding NetSessionAwards}" Spacing="0">
+                                <BindableLayout.EmptyView>
+                                    <Label Text="{Binding EmptyStatsHint}"
+                                           Margin="16,22"
+                                           FontSize="13"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                </BindableLayout.EmptyView>
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:NetSessionAwardsRow">
+                                        <Grid ColumnDefinitions="220,*,*,*,*"
+                                              HeightRequest="50"
+                                              Padding="12,0"
+                                              ColumnSpacing="4">
+                                            <Grid.Triggers>
+                                                <DataTrigger TargetType="Grid" Binding="{Binding IsAltRow}" Value="True">
+                                                    <Setter Property="BackgroundColor" Value="#F0F3F7" />
+                                                </DataTrigger>
+                                            </Grid.Triggers>
+                                            <Label Text="{Binding SessionDisplay}"
+                                                   FontAttributes="Bold" FontSize="12"
+                                                   LineBreakMode="TailTruncation"
+                                                   VerticalOptions="Center"
+                                                   TextColor="{StaticResource Primary}" />
+                                            <Button Grid.Column="1" Text="{Binding PlayerOfTheSessionDisplay}"
+                                                    Command="{Binding BindingContext.OpenNetsAwardPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding PlayerOfTheSessionPlayerId}"
+                                                    BackgroundColor="Transparent" TextColor="{StaticResource Primary}"
+                                                    FontAttributes="Bold" FontSize="12" Padding="2,0"
+                                                    HorizontalOptions="Fill" VerticalOptions="Center" />
+                                            <Button Grid.Column="2" Text="{Binding BestBatsmanDisplay}"
+                                                    Command="{Binding BindingContext.OpenNetsAwardPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding BestBatsmanPlayerId}"
+                                                    BackgroundColor="Transparent" TextColor="{StaticResource Primary}"
+                                                    FontAttributes="Bold" FontSize="12" Padding="2,0"
+                                                    HorizontalOptions="Fill" VerticalOptions="Center" />
+                                            <Button Grid.Column="3" Text="{Binding BestBowlerDisplay}"
+                                                    Command="{Binding BindingContext.OpenNetsAwardPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding BestBowlerPlayerId}"
+                                                    BackgroundColor="Transparent" TextColor="{StaticResource Primary}"
+                                                    FontAttributes="Bold" FontSize="12" Padding="2,0"
+                                                    HorizontalOptions="Fill" VerticalOptions="Center" />
+                                            <Button Grid.Column="4" Text="{Binding BestFielderDisplay}"
+                                                    Command="{Binding BindingContext.OpenNetsAwardPlayerCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding BestFielderPlayerId}"
+                                                    BackgroundColor="Transparent" TextColor="{StaticResource Primary}"
+                                                    FontAttributes="Bold" FontSize="12" Padding="2,0"
+                                                    HorizontalOptions="Fill" VerticalOptions="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </ScrollView>
                 </ScrollView>
             </Border>
 
@@ -2927,6 +3157,427 @@
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                     </CollectionView>
+                </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowPlayerMatchHistory}" ZIndex="21"
+              Padding="12" BackgroundColor="#AA0D1B2A">
+            <Border StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+                    Padding="16" HorizontalOptions="Fill" VerticalOptions="Center"
+                    MaximumWidthRequest="780" MaximumHeightRequest="760"
+                    HeightRequest="{OnIdiom Phone=620, Default=720}">
+                <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label Text="{Binding PlayerMatchHistoryTitle}" FontSize="18" FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                        <Button Grid.Column="1" Text="Close" Style="{StaticResource GhostButton}"
+                                Command="{Binding ClosePlayerMatchHistoryCommand}" Padding="12,6" />
+                    </Grid>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <Border StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Best winning streak" FontSize="11" TextColor="#1B7A3A" />
+                                <Label Text="{Binding BestWinningStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Current winning streak" FontSize="11" TextColor="#1B7A3A" />
+                                <Label Text="{Binding CurrentWinningStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Row="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Worst losing streak" FontSize="11" TextColor="#C62828" />
+                                <Label Text="{Binding WorstLosingStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Current losing streak" FontSize="11" TextColor="#C62828" />
+                                <Label Text="{Binding CurrentLosingStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                          IsVisible="{Binding IsLoadingPlayerMatchHistory}" HorizontalOptions="Center">
+                        <ActivityIndicator IsRunning="{Binding IsLoadingPlayerMatchHistory}" Color="{StaticResource Primary}" />
+                        <Label Grid.Column="1" Text="Loading match history…" TextColor="{StaticResource TextSecondary}" />
+                    </Grid>
+                    <CollectionView Grid.Row="3" ItemsSource="{Binding PlayerMatchHistory}" SelectionMode="None">
+                        <CollectionView.EmptyView>
+                            <Label Text="No completed matches found for this player." Margin="12,24"
+                                   HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                        </CollectionView.EmptyView>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="svc:ApiMatchSummaryDto">
+                                <Border StrokeThickness="0" StrokeShape="RoundRectangle 12"
+                                        BackgroundColor="{StaticResource SurfaceMuted}" Padding="12" Margin="0,0,0,8">
+                                    <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                                <Label Text="{Binding Title}" FontSize="14" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" LineBreakMode="WordWrap" />
+                                                <Label Text="{Binding MatchDateUtc, StringFormat='{0:dd MMM yyyy}'}"
+                                                       FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                            </VerticalStackLayout>
+                                            <Border Grid.Column="1" Padding="10,4" StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 8" VerticalOptions="Center"
+                                                    BackgroundColor="#EEF1F4">
+                                                <Border.Triggers>
+                                                    <DataTrigger TargetType="Border" Binding="{Binding PlayerOutcomeText}" Value="WON">
+                                                        <Setter Property="BackgroundColor" Value="#E8F6EC" />
+                                                    </DataTrigger>
+                                                    <DataTrigger TargetType="Border" Binding="{Binding PlayerOutcomeText}" Value="LOST">
+                                                        <Setter Property="BackgroundColor" Value="#FDECEC" />
+                                                    </DataTrigger>
+                                                </Border.Triggers>
+                                                <Label Text="{Binding PlayerOutcomeText}" FontSize="11" FontAttributes="Bold"
+                                                       TextColor="{StaticResource TextSecondary}" HorizontalTextAlignment="Center">
+                                                    <Label.Triggers>
+                                                        <DataTrigger TargetType="Label" Binding="{Binding PlayerOutcomeText}" Value="WON"><Setter Property="TextColor" Value="#218838" /></DataTrigger>
+                                                        <DataTrigger TargetType="Label" Binding="{Binding PlayerOutcomeText}" Value="LOST"><Setter Property="TextColor" Value="#D32F2F" /></DataTrigger>
+                                                    </Label.Triggers>
+                                                </Label>
+                                            </Border>
+                                        </Grid>
+                                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                            <Label Text="{Binding TeamALabel}" FontSize="12" FontAttributes="Bold"
+                                                   TextColor="{StaticResource TextPrimary}" LineBreakMode="TailTruncation" />
+                                            <Label Grid.Column="1" Text="vs" FontSize="11" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" />
+                                            <Label Grid.Column="2" Text="{Binding TeamBLabel}" FontSize="12" FontAttributes="Bold"
+                                                   TextColor="{StaticResource TextPrimary}" HorizontalTextAlignment="End" LineBreakMode="TailTruncation" />
+                                        </Grid>
+                                        <Label Grid.Row="2" Text="{Binding Venue, StringFormat='Venue: {0}'}" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Label Grid.Row="3" Text="{Binding PlayerMatchHistoryError}" TextColor="{StaticResource Danger}"
+                           HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowPlayerTournamentHistory}" ZIndex="22"
+              Padding="12" BackgroundColor="#AA0D1B2A">
+            <Border StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+                    Padding="16" HorizontalOptions="Fill" VerticalOptions="Center"
+                    MaximumWidthRequest="780" MaximumHeightRequest="760"
+                    HeightRequest="{OnIdiom Phone=620, Default=720}">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="12">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label Text="{Binding PlayerTournamentHistoryTitle}" FontSize="18" FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                        <Button Grid.Column="1" Text="Close" Style="{StaticResource GhostButton}"
+                                Command="{Binding ClosePlayerTournamentHistoryCommand}" Padding="12,6" />
+                    </Grid>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Border StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="{StaticResource SurfaceMuted}">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Played" FontSize="11" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding PlayerTournamentPlayed}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Won" FontSize="11" HorizontalTextAlignment="Center" TextColor="#1B7A3A" />
+                                <Label Text="{Binding PlayerTournamentWon}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="2" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Lost" FontSize="11" HorizontalTextAlignment="Center" TextColor="#C62828" />
+                                <Label Text="{Binding PlayerTournamentLoss}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="3" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="{StaticResource SurfaceMuted}">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Tied" FontSize="11" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding PlayerTournamentTied}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <Border StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Best winning streak" FontSize="11" TextColor="#1B7A3A" />
+                                <Label Text="{Binding BestTournamentWinningStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Current winning streak" FontSize="11" TextColor="#1B7A3A" />
+                                <Label Text="{Binding CurrentTournamentWinningStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Row="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Worst losing streak" FontSize="11" TextColor="#C62828" />
+                                <Label Text="{Binding WorstTournamentLosingStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Current losing streak" FontSize="11" TextColor="#C62828" />
+                                <Label Text="{Binding CurrentTournamentLosingStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                          IsVisible="{Binding IsLoadingPlayerTournamentHistory}" HorizontalOptions="Center">
+                        <ActivityIndicator IsRunning="{Binding IsLoadingPlayerTournamentHistory}" Color="{StaticResource Primary}" />
+                        <Label Grid.Column="1" Text="Loading tournament history…" TextColor="{StaticResource TextSecondary}" />
+                    </Grid>
+                    <CollectionView Grid.Row="4" ItemsSource="{Binding PlayerTournamentHistory}" SelectionMode="None">
+                        <CollectionView.EmptyView>
+                            <Label Text="No tournament matches found for this player." Margin="12,24"
+                                   HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                        </CollectionView.EmptyView>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="svc:PlayerTournamentHistoryItem">
+                                <Border StrokeThickness="0" StrokeShape="RoundRectangle 12"
+                                        BackgroundColor="{StaticResource SurfaceMuted}" Padding="12" Margin="0,0,0,8">
+                                    <VerticalStackLayout Spacing="8">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer
+                                                    Command="{Binding BindingContext.TogglePlayerTournamentCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                            </Grid.GestureRecognizers>
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding TournamentName}" FontSize="15" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding StatusText}" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                            </VerticalStackLayout>
+                                            <Label Grid.Column="1" Text="{Binding Matches.Count, StringFormat='{0} matches  ⌄'}"
+                                                   FontSize="12" FontAttributes="Bold" TextColor="{StaticResource SecondaryDarkText}"
+                                                   VerticalOptions="Center" />
+                                        </Grid>
+                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Matches}" IsVisible="{Binding IsExpanded}" Spacing="6">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="svc:ApiMatchSummaryDto">
+                                                    <Border StrokeThickness="0" StrokeShape="RoundRectangle 10"
+                                                            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                                                            Padding="10">
+                                                        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                <VerticalStackLayout Spacing="1" VerticalOptions="Center">
+                                                                    <Label Text="{Binding Title}" FontSize="13" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource Primary}" LineBreakMode="WordWrap" />
+                                                                    <Label Text="{Binding MatchDateUtc, StringFormat='{0:dd MMM yyyy}'}"
+                                                                           FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                                </VerticalStackLayout>
+                                                                <Border Grid.Column="1" Padding="8,3" StrokeThickness="0"
+                                                                        StrokeShape="RoundRectangle 8" VerticalOptions="Center"
+                                                                        BackgroundColor="#EEF1F4">
+                                                                    <Border.Triggers>
+                                                                        <DataTrigger TargetType="Border" Binding="{Binding PlayerOutcomeText}" Value="WON">
+                                                                            <Setter Property="BackgroundColor" Value="#E8F6EC" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger TargetType="Border" Binding="{Binding PlayerOutcomeText}" Value="LOST">
+                                                                            <Setter Property="BackgroundColor" Value="#FDECEC" />
+                                                                        </DataTrigger>
+                                                                    </Border.Triggers>
+                                                                    <Label Text="{Binding PlayerOutcomeText}" FontSize="10" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource TextSecondary}">
+                                                                        <Label.Triggers>
+                                                                            <DataTrigger TargetType="Label" Binding="{Binding PlayerOutcomeText}" Value="WON"><Setter Property="TextColor" Value="#218838" /></DataTrigger>
+                                                                            <DataTrigger TargetType="Label" Binding="{Binding PlayerOutcomeText}" Value="LOST"><Setter Property="TextColor" Value="#D32F2F" /></DataTrigger>
+                                                                        </Label.Triggers>
+                                                                    </Label>
+                                                                </Border>
+                                                            </Grid>
+                                                            <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                                                <Label Text="{Binding TeamALabel}" FontSize="11" FontAttributes="Bold" LineBreakMode="TailTruncation" />
+                                                                <Label Grid.Column="1" Text="vs" FontSize="10" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" />
+                                                                <Label Grid.Column="2" Text="{Binding TeamBLabel}" FontSize="11" FontAttributes="Bold"
+                                                                       HorizontalTextAlignment="End" LineBreakMode="TailTruncation" />
+                                                            </Grid>
+                                                            <Label Grid.Row="2" Text="{Binding Venue, StringFormat='Venue: {0}'}" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Label Grid.Row="4" Text="{Binding PlayerTournamentHistoryError}" TextColor="{StaticResource Danger}"
+                           HorizontalTextAlignment="Center" VerticalOptions="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowPlayerSeriesHistory}" ZIndex="23"
+              Padding="12" BackgroundColor="#AA0D1B2A">
+            <Border StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+                    Padding="16" HorizontalOptions="Fill" VerticalOptions="Center"
+                    MaximumWidthRequest="780" MaximumHeightRequest="760"
+                    HeightRequest="{OnIdiom Phone=620, Default=720}">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="12">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label Text="{Binding PlayerSeriesHistoryTitle}" FontSize="18" FontAttributes="Bold"
+                               TextColor="{StaticResource Primary}" VerticalOptions="Center" />
+                        <Button Grid.Column="1" Text="Close" Style="{StaticResource GhostButton}"
+                                Command="{Binding ClosePlayerSeriesHistoryCommand}" Padding="12,6" />
+                    </Grid>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                        <Border StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="{StaticResource SurfaceMuted}">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Played" FontSize="11" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding PlayerSeriesPlayed}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Won" FontSize="11" HorizontalTextAlignment="Center" TextColor="#1B7A3A" />
+                                <Label Text="{Binding PlayerSeriesWon}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="2" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Lost" FontSize="11" HorizontalTextAlignment="Center" TextColor="#C62828" />
+                                <Label Text="{Binding PlayerSeriesLoss}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="3" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8"
+                                BackgroundColor="{StaticResource SurfaceMuted}">
+                            <VerticalStackLayout Spacing="2" HorizontalOptions="Center">
+                                <Label Text="Tied" FontSize="11" HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding PlayerSeriesTied}" FontSize="16" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" TextColor="{StaticResource Primary}" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                        <Border StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Best winning streak" FontSize="11" TextColor="#1B7A3A" />
+                                <Label Text="{Binding BestSeriesWinningStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#E8F6EC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Current winning streak" FontSize="11" TextColor="#1B7A3A" />
+                                <Label Text="{Binding CurrentSeriesWinningStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#1B7A3A" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Row="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Worst losing streak" FontSize="11" TextColor="#C62828" />
+                                <Label Text="{Binding WorstSeriesLosingStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 10" Padding="10,8" BackgroundColor="#FDECEC">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Current losing streak" FontSize="11" TextColor="#C62828" />
+                                <Label Text="{Binding CurrentSeriesLosingStreakText}" FontSize="16" FontAttributes="Bold" TextColor="#C62828" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                          IsVisible="{Binding IsLoadingPlayerSeriesHistory}" HorizontalOptions="Center">
+                        <ActivityIndicator IsRunning="{Binding IsLoadingPlayerSeriesHistory}" Color="{StaticResource Primary}" />
+                        <Label Grid.Column="1" Text="Loading series history…" TextColor="{StaticResource TextSecondary}" />
+                    </Grid>
+                    <CollectionView Grid.Row="4" ItemsSource="{Binding PlayerSeriesHistory}" SelectionMode="None">
+                        <CollectionView.EmptyView>
+                            <Label Text="No series matches found for this player." Margin="12,24"
+                                   HorizontalTextAlignment="Center" TextColor="{StaticResource TextSecondary}" />
+                        </CollectionView.EmptyView>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="svc:PlayerSeriesHistoryItem">
+                                <Border StrokeThickness="0" StrokeShape="RoundRectangle 12"
+                                        BackgroundColor="{StaticResource SurfaceMuted}" Padding="12" Margin="0,0,0,8">
+                                    <VerticalStackLayout Spacing="8">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer
+                                                    Command="{Binding BindingContext.TogglePlayerSeriesCommand, Source={x:Reference ThisPage}, x:DataType={x:Null}}"
+                                                    CommandParameter="{Binding .}" />
+                                            </Grid.GestureRecognizers>
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding SeriesName}" FontSize="15" FontAttributes="Bold"
+                                                       TextColor="{StaticResource Primary}" />
+                                                <Label Text="{Binding SummaryText}" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                                <Label Text="{Binding StatusText}" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                            </VerticalStackLayout>
+                                            <Label Grid.Column="1" Text="{Binding Matches.Count, StringFormat='{0} matches  ⌄'}"
+                                                   FontSize="12" FontAttributes="Bold" TextColor="{StaticResource SecondaryDarkText}"
+                                                   VerticalOptions="Center" />
+                                        </Grid>
+                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Matches}" IsVisible="{Binding IsExpanded}" Spacing="6">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="svc:ApiMatchSummaryDto">
+                                                    <Border StrokeThickness="0" StrokeShape="RoundRectangle 10"
+                                                            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                                                            Padding="10">
+                                                        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                <VerticalStackLayout Spacing="1" VerticalOptions="Center">
+                                                                    <Label Text="{Binding Title}" FontSize="13" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource Primary}" LineBreakMode="WordWrap" />
+                                                                    <Label Text="{Binding MatchDateUtc, StringFormat='{0:dd MMM yyyy}'}"
+                                                                           FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                                </VerticalStackLayout>
+                                                                <Border Grid.Column="1" Padding="8,3" StrokeThickness="0"
+                                                                        StrokeShape="RoundRectangle 8" VerticalOptions="Center"
+                                                                        BackgroundColor="#EEF1F4">
+                                                                    <Border.Triggers>
+                                                                        <DataTrigger TargetType="Border" Binding="{Binding PlayerOutcomeText}" Value="WON">
+                                                                            <Setter Property="BackgroundColor" Value="#E8F6EC" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger TargetType="Border" Binding="{Binding PlayerOutcomeText}" Value="LOST">
+                                                                            <Setter Property="BackgroundColor" Value="#FDECEC" />
+                                                                        </DataTrigger>
+                                                                    </Border.Triggers>
+                                                                    <Label Text="{Binding PlayerOutcomeText}" FontSize="10" FontAttributes="Bold"
+                                                                           TextColor="{StaticResource TextSecondary}">
+                                                                        <Label.Triggers>
+                                                                            <DataTrigger TargetType="Label" Binding="{Binding PlayerOutcomeText}" Value="WON"><Setter Property="TextColor" Value="#218838" /></DataTrigger>
+                                                                            <DataTrigger TargetType="Label" Binding="{Binding PlayerOutcomeText}" Value="LOST"><Setter Property="TextColor" Value="#D32F2F" /></DataTrigger>
+                                                                        </Label.Triggers>
+                                                                    </Label>
+                                                                </Border>
+                                                            </Grid>
+                                                            <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+                                                                <Label Text="{Binding TeamALabel}" FontSize="11" FontAttributes="Bold" LineBreakMode="TailTruncation" />
+                                                                <Label Grid.Column="1" Text="vs" FontSize="10" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" />
+                                                                <Label Grid.Column="2" Text="{Binding TeamBLabel}" FontSize="11" FontAttributes="Bold"
+                                                                       HorizontalTextAlignment="End" LineBreakMode="TailTruncation" />
+                                                            </Grid>
+                                                            <Label Grid.Row="2" Text="{Binding Venue, StringFormat='Venue: {0}'}" FontSize="10" TextColor="{StaticResource TextSecondary}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Label Grid.Row="4" Text="{Binding PlayerSeriesHistoryError}" TextColor="{StaticResource Danger}"
+                           HorizontalTextAlignment="Center" VerticalOptions="Center" />
                 </Grid>
             </Border>
         </Grid>

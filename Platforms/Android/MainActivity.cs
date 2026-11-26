@@ -3,6 +3,7 @@ using Android.Content.PM;
 using Android.OS;
 using Android.Views;
 using AndroidX.Activity;
+using JPL.Services;
 
 namespace JPL;
 
@@ -17,8 +18,15 @@ public class MainActivity : MauiAppCompatActivity
 {
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        AndroidScreenState.RestoreFromBundle(savedInstanceState);
         base.OnCreate(savedInstanceState);
         OnBackPressedDispatcher.AddCallback(this, new AppBackCallback(this));
+    }
+
+    protected override void OnSaveInstanceState(Bundle outState)
+    {
+        AndroidScreenState.SaveToBundle(outState);
+        base.OnSaveInstanceState(outState);
     }
 
     sealed class AppBackCallback : OnBackPressedCallback

@@ -1,3 +1,7 @@
+using System.Collections;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -52,50 +56,32 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
         if (result == PasswordVerificationResult.Failed)
             return Unauthorized(new { code = "wrong_password", message = "Password is not correct." });
 
+        // Deactivated / deleted league blocks its League Admins and League Users (SuperAdmin League management).
+        if (user.LeagueId is Guid homeLeague && homeLeague != Guid.Empty
+            && user.Role is AppRole.Admin or AppRole.User)
+        {
+            var league = await _db.Leagues.IgnoreQueryFilters().AsNoTracking()
+                .Where(l => l.Id == homeLeague)
+                .Select(l => new { l.IsActive, l.IsDeleted })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (league is not null && (league.IsDeleted || !league.IsActive))
+                return Unauthorized(new
+                {
+                    code = "league_inactive",
+                    message = league.IsDeleted
+                        ? "Your league was deleted. Contact the platform admin."
+                        : "Your league is deactivated. Contact the platform admin."
+                });
+        }
+
         // Lightweight opaque token for mobile clients (persist on device until logout).
         // Format: {opaque}.{userId:N} — middleware re-validates user IsActive on every API call.
         var token = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + "." + user.Id.ToString("N");
         var needsPicker = user.Role is not AppRole.GroundOwner
-                          and not AppRole.PublicUser
                           and not AppRole.Guest
                           && user.LeagueId is null;
         return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, user.LeagueId, needsPicker, user.WhatsAppNumber));
-    }
-
-    [HttpPost("signup")]
-    public async Task<ActionResult<LoginResponse>> Signup([FromBody] SignupRequest request, CancellationToken ct)
-    {
-        var username = request.Username?.Trim() ?? string.Empty;
-        if (username.Length == 0)
-            return BadRequest("Name is required.");
-        if (username.Length > 64)
-            return BadRequest("Name must be 64 characters or fewer.");
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Trim().Length < 4)
-            return BadRequest("Password must be at least 4 characters.");
-        var whatsApp = request.WhatsApp;
-        if (!PakistanWhatsApp.TryNormalize(whatsApp, out var normalizedWhatsApp))
-            return BadRequest(PakistanWhatsApp.RequiredError);
-
-        if (await _db.Users.AsNoTracking().AnyAsync(u => u.Username == username, ct).ConfigureAwait(false))
-            return BadRequest($"Username \"{username}\" already exists.");
-        if (string.Equals(username, "user", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("That name is reserved.");
-
-        var user = new AppUser
-        {
-            Username = username,
-            Role = AppRole.PublicUser,
-            LeagueId = null,
-            WhatsAppNumber = normalizedWhatsApp,
-            IsActive = true,
-            CreatedAtUtc = DateTime.Now
-        };
-        user.PasswordHash = _hasher.HashPassword(user, request.Password.Trim());
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-
-        var token = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + "." + user.Id.ToString("N");
-        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, null, false, user.WhatsAppNumber));
     }
 
     /// <summary>Current session user (requires Bearer token; inactive/deleted → 401 from middleware).</summary>
@@ -115,7 +101,6 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
         var whatsApp = User.FindFirst("whatsapp")?.Value
                        ?? HttpContext.Items["JplWhatsApp"] as string;
         var needsPicker = !string.Equals(role, nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(role, nameof(AppRole.PublicUser), StringComparison.OrdinalIgnoreCase)
                           && !string.Equals(role, nameof(AppRole.Guest), StringComparison.OrdinalIgnoreCase)
                           && leagueId is null;
         return Ok(new LoginResponse(userId, username, role, string.Empty, leagueId, NeedsLeaguePicker: needsPicker, WhatsAppNumber: whatsApp));
@@ -233,8 +218,6 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             return Forbid();
         if (!TryValidateUser(request, requirePassword: true, out var username, out var role, out var error))
             return BadRequest(error);
-        if (role == AppRole.PublicUser)
-            return BadRequest("Public users sign up from the login screen.");
         if (role == AppRole.Guest)
             return BadRequest("Guest is a built-in system account.");
 
@@ -242,9 +225,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             return BadRequest($"Username \"{username}\" already exists.");
 
         Guid? leagueId = null;
-        if (role == AppRole.PublicUser)
-            leagueId = null;
-        else if (role != AppRole.GroundOwner)
+        if (role != AppRole.GroundOwner)
         {
             leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
             if (leagueId is null)
@@ -297,7 +278,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             return BadRequest("Guest is a built-in system account.");
 
         Guid? leagueId = null;
-        if (role is AppRole.PublicUser or AppRole.Guest)
+        if (role == AppRole.Guest)
             leagueId = null;
         else if (role != AppRole.GroundOwner)
         {
@@ -393,9 +374,9 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
         var roleText = request.Role?.Trim() ?? string.Empty;
         if (!Enum.TryParse<AppRole>(roleText, ignoreCase: true, out role) ||
             (role != AppRole.Admin && role != AppRole.User && role != AppRole.GroundOwner
-             && role != AppRole.PublicUser && role != AppRole.Guest))
+             && role != AppRole.Guest))
         {
-            error = "Role must be League Admin, League User, Ground Owner, Public User, or Guest.";
+            error = "Role must be League Admin, League User, Ground Owner, or Guest.";
             return false;
         }
 
@@ -2248,7 +2229,31 @@ public sealed class NetSessionsController : ControllerBase
             Extras = deliveries.Sum(d => d.ExtraRuns),
             OversText = $"{legalAll / 6}.{legalAll % 6}",
             Batting = batting,
-            Bowling = bowling
+            Bowling = bowling,
+            Players = names.Select(kv => new NetScorecardPlayerDto
+            {
+                Id = kv.Key,
+                FullName = kv.Value
+            }).ToList(),
+            Deliveries = deliveries.Select(d => new NetScorecardDeliveryDto
+            {
+                Id = d.Id,
+                Sequence = d.Sequence,
+                OverNumber = d.OverNumber,
+                BallInOver = d.BallInOver,
+                BatterId = d.BatterId,
+                NonStrikerId = d.NonStrikerId,
+                BowlerId = d.BowlerId,
+                RunsOffBat = d.RunsOffBat,
+                ExtraRuns = d.ExtraRuns,
+                ExtraType = (byte)d.ExtraType,
+                IsWicket = d.IsWicket,
+                WicketType = (byte)d.WicketType,
+                DismissedPlayerId = d.DismissedPlayerId,
+                FielderId = d.FielderId,
+                IsDroppedCatch = d.IsDroppedCatch,
+                IsLegalDelivery = d.IsLegalDelivery
+            }).ToList()
         });
     }
 
@@ -2287,7 +2292,8 @@ public sealed class NetSessionsController : ControllerBase
         var ids = names.Keys
             .Concat(deliveries.SelectMany(d => new[]
             {
-                d.BatterId, d.BowlerId, d.DismissedPlayerId ?? Guid.Empty, d.FielderId ?? Guid.Empty
+                d.BatterId, d.NonStrikerId, d.BowlerId,
+                d.DismissedPlayerId ?? Guid.Empty, d.FielderId ?? Guid.Empty
             }))
             .Where(id => id != Guid.Empty)
             .Distinct()
@@ -2392,6 +2398,10 @@ public sealed class SyncController : ControllerBase
     {
         PropertyNameCaseInsensitive = true
     };
+    private static readonly JsonSerializerOptions SyncJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     private readonly ApiDbContext _db;
     private readonly ILiveFeed _live;
@@ -2401,6 +2411,46 @@ public sealed class SyncController : ControllerBase
         _db = db;
         _live = live;
     }
+
+    private sealed class SyncConflictException(string message, string? serverPayloadJson = null) : Exception(message)
+    {
+        public string? ServerPayloadJson { get; } = serverPayloadJson;
+    }
+
+    private string SerializeTrackedSyncPayload(object entity)
+    {
+        var entry = _db.Entry(entity);
+        var properties = entry.Properties
+            .Where(property => !property.Metadata.IsShadowProperty()
+                               && !string.Equals(property.Metadata.Name, "ImagePath", StringComparison.Ordinal)
+                               && !string.Equals(property.Metadata.Name, "ImageBytes", StringComparison.Ordinal))
+            .ToDictionary(
+                property => JsonNamingPolicy.CamelCase.ConvertName(property.Metadata.Name),
+                property => property.CurrentValue);
+        return JsonSerializer.Serialize(properties, SyncJsonOptions);
+    }
+
+    private string SerializeTeamConflictPayload(Team team)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["id"] = team.Id,
+            ["name"] = team.Name,
+            ["captainPlayerId"] = team.CaptainPlayerId,
+            ["isActive"] = team.IsActive,
+            ["isDeleted"] = team.IsDeleted,
+            ["version"] = team.Version,
+            ["createdAtUtc"] = team.CreatedAtUtc,
+            ["updatedAtUtc"] = team.UpdatedAtUtc,
+            ["playerIds"] = team.TeamPlayers.Select(tp => tp.PlayerId).ToList(),
+            ["playingPlayerIds"] = team.TeamPlayers.Where(tp => tp.IsPlaying).Select(tp => tp.PlayerId).ToList()
+        };
+        return JsonSerializer.Serialize(payload, SyncJsonOptions);
+    }
+
+    [HttpGet("entity-types")]
+    public ActionResult<IReadOnlyList<string>> EntityTypes()
+        => Ok(ApiDbContext.SyncEntityTypeNames);
 
     [HttpPost]
     public async Task<ActionResult<SyncPushResponse>> Push([FromBody] SyncPushRequest request, CancellationToken ct)
@@ -2422,31 +2472,42 @@ public sealed class SyncController : ControllerBase
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
-        switch (request.EntityType)
+        try
         {
-            case "Player":
-                await ApplyPlayerAsync(request, ct).ConfigureAwait(false);
-                break;
-            case "Team":
-                await ApplyTeamAsync(request, ct).ConfigureAwait(false);
-                break;
-            case "Match":
-                await ApplyMatchAsync(request, ct).ConfigureAwait(false);
-                break;
-            case "Innings":
-                await ApplyInningsAsync(request, ct).ConfigureAwait(false);
-                break;
-            case "Delivery":
-                await ApplyDeliveryAsync(request, ct).ConfigureAwait(false);
-                break;
-            case "NetSession":
-                await ApplyNetSessionAsync(request, ct).ConfigureAwait(false);
-                break;
-            case "NetDelivery":
-                await ApplyNetDeliveryAsync(request, ct).ConfigureAwait(false);
-                break;
-            default:
-                return BadRequest(new SyncPushResponse(false, $"Unknown entity type: {request.EntityType}"));
+            switch (request.EntityType)
+            {
+                case "Player":
+                    await ApplyPlayerAsync(request, ct).ConfigureAwait(false);
+                    break;
+                case "Team":
+                    await ApplyTeamAsync(request, ct).ConfigureAwait(false);
+                    break;
+                case "Match":
+                    await ApplyMatchAsync(request, ct).ConfigureAwait(false);
+                    break;
+                case "Innings":
+                    await ApplyInningsAsync(request, ct).ConfigureAwait(false);
+                    break;
+                case "Delivery":
+                    await ApplyDeliveryAsync(request, ct).ConfigureAwait(false);
+                    break;
+                case "NetSession":
+                    await ApplyNetSessionAsync(request, ct).ConfigureAwait(false);
+                    break;
+                case "NetDelivery":
+                    await ApplyNetDeliveryAsync(request, ct).ConfigureAwait(false);
+                    break;
+                default:
+                    if (!ApiDbContext.SyncEntityTypes.Contains(request.EntityType))
+                        return BadRequest(new SyncPushResponse(false, $"Unknown entity type: {request.EntityType}"));
+                    await ApplyGenericSyncEntityAsync(request, ct).ConfigureAwait(false);
+                    break;
+            }
+        }
+        catch (SyncConflictException ex)
+        {
+            await tx.RollbackAsync(ct).ConfigureAwait(false);
+            return Conflict(new SyncPushResponse(false, ex.Message, ex.ServerPayloadJson));
         }
 
         _db.SyncReceipts.Add(new SyncReceipt
@@ -2465,22 +2526,433 @@ public sealed class SyncController : ControllerBase
         return Ok(new SyncPushResponse(true, "Applied."));
     }
 
-    private async Task ApplyPlayerAsync(SyncPushRequest request, CancellationToken ct)
+    /// <summary>
+    /// Pulls a stable, resumable page from this league database. The first request
+    /// fixes ThroughSequence; subsequent requests must pass that same watermark.
+    /// </summary>
+    [HttpGet("changes")]
+    public async Task<ActionResult<SyncChangesPageDto>> Changes(
+        [FromQuery] long afterSequence = 0,
+        [FromQuery] long? throughSequence = null,
+        [FromQuery] int take = 200,
+        CancellationToken ct = default)
     {
-        if (string.Equals(request.Operation, "Delete", StringComparison.OrdinalIgnoreCase))
+        if (afterSequence < 0 || throughSequence is < 0 || (throughSequence is long through && through < afterSequence))
+            return BadRequest("Invalid sync cursor.");
+
+        take = Math.Clamp(take, 1, 500);
+        try
         {
-            var player = await _db.Players.FirstOrDefaultAsync(p => p.Id == request.EntityId, ct).ConfigureAwait(false);
-            if (player is not null)
+            // Materialize SyncChange rows first — EF cannot reliably project into SyncChangeDto
+            // records on SQL Server (was returning empty HTTP 500 and breaking client Sync).
+            var watermark = throughSequence
+                            ?? await _db.SyncChanges.AsNoTracking()
+                                .Select(x => (long?)x.Sequence)
+                                .MaxAsync(ct)
+                                .ConfigureAwait(false)
+                            ?? 0;
+
+            var entities = await _db.SyncChanges.AsNoTracking()
+                .Where(x => x.Sequence > afterSequence && x.Sequence <= watermark)
+                .OrderBy(x => x.Sequence)
+                .Take(take)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            var rows = entities.Select(x => new SyncChangeDto(
+                x.Sequence,
+                x.EntityType,
+                x.EntityKey,
+                x.Operation,
+                x.EntityVersion,
+                x.ChangedAtUtc,
+                x.PayloadJson)).ToList();
+
+            var next = rows.Count == 0 ? afterSequence : rows[^1].Sequence;
+            var hasMore = rows.Count > 0 && await _db.SyncChanges.AsNoTracking()
+                .AnyAsync(x => x.Sequence > next && x.Sequence <= watermark, ct)
+                .ConfigureAwait(false);
+
+            return Ok(new SyncChangesPageDto(afterSequence, watermark, next, hasMore, rows));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                $"Sync changes failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Paged initial snapshot. The client captures a change-feed watermark first;
+    /// after the snapshot it pulls every change above that watermark, so writes
+    /// racing the snapshot converge without gaps.
+    /// </summary>
+    [HttpGet("snapshot")]
+    public async Task<ActionResult<SyncSnapshotPageDto>> Snapshot(
+        [FromQuery] string entityType,
+        [FromQuery] string? cursor = null,
+        [FromQuery] int take = 200,
+        CancellationToken ct = default)
+    {
+        if (!ApiDbContext.SyncEntityTypes.Contains(entityType))
+            return BadRequest("Invalid snapshot request.");
+
+        take = Math.Clamp(take, 1, 500);
+        var entityMetadata = _db.Model.GetEntityTypes()
+            .FirstOrDefault(x => string.Equals(x.ClrType.Name, entityType, StringComparison.Ordinal));
+        if (entityMetadata is null)
+            return BadRequest($"Entity type is unavailable: {entityType}.");
+
+        var setMethod = typeof(DbContext).GetMethods()
+            .Single(x => x.Name == nameof(DbContext.Set)
+                         && x.IsGenericMethodDefinition
+                         && x.GetParameters().Length == 0);
+        var source = (IQueryable)setMethod.MakeGenericMethod(entityMetadata.ClrType)
+            .Invoke(_db, null)!;
+        if (entityMetadata.FindProperty("IsDeleted") is not null)
+        {
+            var ignoreFilters = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+                .Single(x => x.Name == nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters)
+                             && x.IsGenericMethodDefinition
+                             && x.GetParameters().Length == 1);
+            source = (IQueryable)ignoreFilters.MakeGenericMethod(entityMetadata.ClrType)
+                .Invoke(null, new object[] { source })!;
+        }
+
+        Expression orderedExpression = source.Expression;
+        var keyProperties = entityMetadata.FindPrimaryKey()?.Properties;
+        if (keyProperties is null || keyProperties.Count == 0)
+            return BadRequest($"Entity has no key: {entityType}.");
+
+        var parameter = Expression.Parameter(entityMetadata.ClrType, "entity");
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            Dictionary<string, JsonElement>? cursorValues;
+            try
             {
-                player.IsDeleted = true;
-                player.UpdatedAtUtc = DateTime.Now;
-                player.Version++;
+                var cursorJson = Encoding.UTF8.GetString(FromBase64Url(cursor));
+                cursorValues = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(cursorJson, SyncJsonOptions);
             }
+            catch (Exception ex) when (ex is FormatException or JsonException)
+            {
+                return BadRequest("Invalid snapshot cursor.");
+            }
+
+            if (cursorValues is null)
+                return BadRequest("Invalid snapshot cursor.");
+
+            Expression? after = null;
+            Expression? equalPrefix = null;
+            foreach (var key in keyProperties)
+            {
+                var jsonName = JsonNamingPolicy.CamelCase.ConvertName(key.Name);
+                if (!cursorValues.TryGetValue(jsonName, out var jsonValue))
+                    return BadRequest($"Snapshot cursor is missing '{jsonName}'.");
+                var value = JsonSerializer.Deserialize(jsonValue.GetRawText(), key.ClrType, SyncJsonOptions);
+                if (value is null)
+                    return BadRequest("Snapshot cursor has a null key.");
+
+                var property = Expression.Property(parameter, key.Name);
+                var constant = Expression.Constant(value, key.ClrType);
+                var greater = BuildKeyGreaterThan(property, constant, key.ClrType);
+                var branch = equalPrefix is null ? greater : Expression.AndAlso(equalPrefix, greater);
+                after = after is null ? branch : Expression.OrElse(after, branch);
+                var equal = Expression.Equal(property, constant);
+                equalPrefix = equalPrefix is null ? equal : Expression.AndAlso(equalPrefix, equal);
+            }
+
+            if (after is not null)
+            {
+                var predicate = Expression.Lambda(after, parameter);
+                var filtered = Expression.Call(
+                    typeof(Queryable), nameof(Queryable.Where), new[] { entityMetadata.ClrType },
+                    orderedExpression, Expression.Quote(predicate));
+                orderedExpression = filtered;
+            }
+        }
+
+        for (var i = 0; i < keyProperties.Count; i++)
+        {
+            var key = keyProperties[i];
+            var property = Expression.Property(parameter, key.Name);
+            var selector = Expression.Lambda(property, parameter);
+            orderedExpression = Expression.Call(
+                typeof(Queryable),
+                i == 0 ? nameof(Queryable.OrderBy) : nameof(Queryable.ThenBy),
+                new[] { entityMetadata.ClrType, key.ClrType },
+                orderedExpression,
+                Expression.Quote(selector));
+        }
+
+        orderedExpression = Expression.Call(
+            typeof(Queryable), nameof(Queryable.Take), new[] { entityMetadata.ClrType },
+            orderedExpression, Expression.Constant(take + 1));
+
+        var pageQuery = source.Provider.CreateQuery(orderedExpression);
+        var entities = await ToObjectListAsync(pageQuery, entityMetadata.ClrType, ct).ConfigureAwait(false);
+        var hasMore = entities.Count > take;
+        if (hasMore)
+            entities.RemoveAt(entities.Count - 1);
+
+        var rows = entities.Select(entity =>
+        {
+            var entry = _db.Entry(entity);
+            var properties = entry.Properties
+                .Where(property => !property.Metadata.IsShadowProperty())
+                .ToDictionary(
+                    property => JsonNamingPolicy.CamelCase.ConvertName(property.Metadata.Name),
+                    property => property.CurrentValue);
+            var keys = keyProperties.ToDictionary(
+                property => JsonNamingPolicy.CamelCase.ConvertName(property.Name),
+                property => entry.Property(property.Name).CurrentValue);
+            var deleted = entityMetadata.FindProperty("IsDeleted") is not null
+                          && entry.Property("IsDeleted").CurrentValue is true;
+            properties.Remove("imagePath");
+
+            return new SyncSnapshotRowDto(
+                entityType,
+                JsonSerializer.Serialize(keys, SyncJsonOptions),
+                deleted ? "Delete" : "Upsert",
+                JsonSerializer.Serialize(properties, SyncJsonOptions));
+        }).ToList();
+
+        var nextCursor = hasMore && entities.Count > 0
+            ? EncodeSnapshotCursor(keyProperties.ToDictionary(
+                property => JsonNamingPolicy.CamelCase.ConvertName(property.Name),
+                property => _db.Entry(entities[^1]).Property(property.Name).CurrentValue))
+            : null;
+
+        return Ok(new SyncSnapshotPageDto(entityType, cursor, nextCursor, hasMore, rows));
+    }
+
+    private static Expression BuildKeyGreaterThan(Expression left, Expression right, Type keyType)
+    {
+        if (keyType == typeof(Guid))
+        {
+            var compare = typeof(Guid).GetMethod(nameof(Guid.CompareTo), new[] { typeof(Guid) })!;
+            return Expression.GreaterThan(Expression.Call(left, compare, right), Expression.Constant(0));
+        }
+
+        if (keyType == typeof(string))
+        {
+            var compare = typeof(string).GetMethod(nameof(string.Compare), new[] { typeof(string), typeof(string) })!;
+            return Expression.GreaterThan(Expression.Call(compare, left, right), Expression.Constant(0));
+        }
+
+        if (keyType.IsEnum)
+        {
+            var underlying = Enum.GetUnderlyingType(keyType);
+            return Expression.GreaterThan(Expression.Convert(left, underlying), Expression.Convert(right, underlying));
+        }
+
+        try
+        {
+            return Expression.GreaterThan(left, right);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Unsupported snapshot key type '{keyType.Name}'.", ex);
+        }
+    }
+
+    private static string EncodeSnapshotCursor(object keyValues)
+        => ToBase64Url(JsonSerializer.SerializeToUtf8Bytes(keyValues, SyncJsonOptions));
+
+    private static string ToBase64Url(byte[] bytes)
+        => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static byte[] FromBase64Url(string value)
+    {
+        var base64 = value.Replace('-', '+').Replace('_', '/');
+        base64 = base64.PadRight(base64.Length + ((4 - base64.Length % 4) % 4), '=');
+        return Convert.FromBase64String(base64);
+    }
+
+    private static async Task<List<object>> ToObjectListAsync(
+        IQueryable query,
+        Type entityType,
+        CancellationToken ct)
+    {
+        var toList = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+            .Single(method => method.Name == nameof(EntityFrameworkQueryableExtensions.ToListAsync)
+                              && method.IsGenericMethodDefinition
+                              && method.GetParameters().Length == 2);
+        var task = (Task)toList.MakeGenericMethod(entityType)
+            .Invoke(null, new object[] { query, ct })!;
+        await task.ConfigureAwait(false);
+        var result = (IEnumerable)task.GetType().GetProperty("Result")!.GetValue(task)!;
+        return result.Cast<object>().ToList();
+    }
+
+    private static readonly MethodInfo FindApiEntityAsyncMethod = typeof(SyncController)
+        .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+        .Single(method => method.Name == nameof(FindApiEntityAsync)
+            && method.IsGenericMethodDefinition && method.GetParameters().Length == 3);
+
+    private async Task ApplyGenericSyncEntityAsync(SyncPushRequest request, CancellationToken ct)
+    {
+        var clrType = typeof(Player).Assembly.GetType($"JPL.Api.Models.{request.EntityType}", throwOnError: false)
+                      ?? throw new InvalidOperationException($"Unknown sync entity type '{request.EntityType}'.");
+        var metadata = _db.Model.FindEntityType(clrType)
+                       ?? throw new InvalidOperationException($"Entity is not mapped: {request.EntityType}.");
+        var keys = metadata.FindPrimaryKey()?.Properties
+                   ?? throw new InvalidOperationException($"Entity has no primary key: {request.EntityType}.");
+        using var payloadDocument = JsonDocument.Parse(request.PayloadJson);
+        var keyValues = new object?[keys.Count];
+        for (var i = 0; i < keys.Count; i++)
+        {
+            if (!TryGetJsonProperty(payloadDocument.RootElement,
+                    JsonNamingPolicy.CamelCase.ConvertName(keys[i].Name), out var keyValue))
+                throw new InvalidOperationException($"Sync payload is missing key '{keys[i].Name}'.");
+            keyValues[i] = ConvertSyncJsonValue(keyValue, keys[i].ClrType);
+        }
+
+        var entity = JsonSerializer.Deserialize(request.PayloadJson, clrType, SyncJsonOptions)
+                     ?? throw new InvalidOperationException($"Invalid {request.EntityType} sync payload.");
+        var existing = await FindApiEntityAsync(_db, clrType, keyValues, ct).ConfigureAwait(false);
+        var isDelete = string.Equals(request.Operation, "Delete", StringComparison.OrdinalIgnoreCase);
+        if (existing is null)
+        {
+            if (isDelete)
+                return;
+            _db.Add(entity);
             return;
         }
 
+        if (isDelete && metadata.FindProperty("IsDeleted")?.ClrType == typeof(bool)
+            && _db.Entry(existing).Property("IsDeleted").CurrentValue is true)
+            return;
+        if (!isDelete && SyncPayloadMatches(_db, metadata, existing, request.PayloadJson))
+            return; // Safe replay after the server accepted a write but the client missed its response.
+
+        if (!string.IsNullOrWhiteSpace(request.BasePayloadJson)
+            && !SyncPayloadMatches(_db, metadata, existing, request.BasePayloadJson))
+            throw new SyncConflictException(
+                $"{request.EntityType} changed on the server after this device read it. Sync and review the local change before retrying.",
+                SerializeTrackedSyncPayload(existing));
+
+        var versionProperty = metadata.FindProperty("Version");
+        if (string.IsNullOrWhiteSpace(request.BasePayloadJson) && versionProperty is not null)
+        {
+            var currentVersion = Convert.ToInt64(_db.Entry(existing).Property("Version").CurrentValue ?? 0);
+            var incomingVersion = Convert.ToInt64(_db.Entry(entity).Property("Version").CurrentValue ?? 0);
+            if (incomingVersion <= currentVersion)
+                throw new SyncConflictException(
+                    $"{request.EntityType} has a different or newer server version. Sync and review the local change before retrying.",
+                    SerializeTrackedSyncPayload(existing));
+        }
+        else if (string.IsNullOrWhiteSpace(request.BasePayloadJson)
+                 && versionProperty is null
+                 && !SyncPayloadMatches(_db, metadata, existing, request.PayloadJson))
+        {
+            throw new SyncConflictException(
+                $"{request.EntityType} has no safe base version for this offline edit. Sync and review the local change before retrying.",
+                SerializeTrackedSyncPayload(existing));
+        }
+
+        if (isDelete)
+        {
+            var deleted = metadata.FindProperty("IsDeleted");
+            if (deleted?.ClrType == typeof(bool))
+                _db.Entry(existing).Property("IsDeleted").CurrentValue = true;
+            else
+                _db.Remove(existing);
+            return;
+        }
+
+        var payloadProperties = JsonDocument.Parse(request.PayloadJson);
+        using (payloadProperties)
+        {
+            foreach (var property in metadata.GetProperties())
+            {
+                if (property.IsShadowProperty() || property.Name == "LeagueId" || property.Name == "ImagePath")
+                    continue;
+                var jsonName = JsonNamingPolicy.CamelCase.ConvertName(property.Name);
+                if (!TryGetJsonProperty(payloadProperties.RootElement, jsonName, out var value))
+                    continue;
+                _db.Entry(existing).Property(property.Name).CurrentValue = ConvertSyncJsonValue(value, property.ClrType);
+            }
+        }
+    }
+
+    private static async Task<object?> FindApiEntityAsync(
+        ApiDbContext db, Type clrType, object?[] keyValues, CancellationToken ct)
+    {
+        var method = FindApiEntityAsyncMethod.MakeGenericMethod(clrType);
+        var task = (Task<object?>)method.Invoke(null, new object[] { db, keyValues, ct })!;
+        return await task.ConfigureAwait(false);
+    }
+
+    private static async Task<object?> FindApiEntityAsync<TEntity>(
+        ApiDbContext db, object?[] keyValues, CancellationToken ct)
+        where TEntity : class
+        => await db.Set<TEntity>().FindAsync(keyValues, ct).ConfigureAwait(false);
+
+    private static bool SyncPayloadMatches(
+        ApiDbContext db, Microsoft.EntityFrameworkCore.Metadata.IEntityType metadata,
+        object entity, string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var entry = db.Entry(entity);
+        foreach (var property in metadata.GetProperties())
+        {
+            if (property.IsShadowProperty() || property.Name == "LeagueId" || property.Name == "ImagePath")
+                continue;
+            if (!TryGetJsonProperty(document.RootElement,
+                    JsonNamingPolicy.CamelCase.ConvertName(property.Name), out var value))
+                continue;
+            var incoming = ConvertSyncJsonValue(value, property.ClrType);
+            if (!Equals(entry.Property(property.Name).CurrentValue, incoming))
+                return false;
+        }
+        return true;
+    }
+
+    private static object? ConvertSyncJsonValue(JsonElement value, Type targetType)
+    {
+        var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (actualType.IsEnum)
+            return Enum.ToObject(actualType, value.GetInt32());
+        return JsonSerializer.Deserialize(value.GetRawText(), actualType, SyncJsonOptions);
+    }
+
+    private static bool TryGetJsonProperty(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private async Task ApplyPlayerAsync(SyncPushRequest request, CancellationToken ct)
+    {
         var dto = JsonSerializer.Deserialize<PlayerDto>(request.PayloadJson, JsonOptions)
                   ?? throw new InvalidOperationException("Invalid player payload.");
+        if (string.Equals(request.Operation, "Delete", StringComparison.OrdinalIgnoreCase))
+        {
+            var player = await _db.Players.FirstOrDefaultAsync(p => p.Id == request.EntityId, ct).ConfigureAwait(false);
+            if (player is null || player.IsDeleted)
+                return;
+            if (dto.Version <= player.Version)
+                throw new SyncConflictException(
+                    "This player changed on the server after the offline copy. Keep the local copy and resolve the changes before retrying.",
+                    SerializeTrackedSyncPayload(player));
+            player.IsDeleted = true;
+            player.UpdatedAtUtc = dto.UpdatedAtUtc;
+            player.Version = dto.Version;
+            return;
+        }
 
         var existing = await _db.Players.FirstOrDefaultAsync(p => p.Id == dto.Id, ct).ConfigureAwait(false);
         if (existing is null)
@@ -2504,7 +2976,25 @@ public sealed class SyncController : ControllerBase
         }
 
         if (dto.Version < existing.Version)
-            return; // older write ignored — no lock conflict
+            throw new SyncConflictException(
+                "This player has a newer server version. Sync first, then review and reapply the local changes.",
+                SerializeTrackedSyncPayload(existing));
+
+        var sameVersion = dto.Version == existing.Version;
+        var hasSameValues = existing.FullName == dto.FullName
+            && existing.IsActive == dto.IsActive
+            && existing.NickName == dto.NickName
+            && existing.PlayingRole == dto.PlayingRole
+            && existing.BattingStyle == dto.BattingStyle
+            && existing.BowlingStyle == dto.BowlingStyle
+            && existing.Bio == dto.Bio
+            && existing.IsDeleted == dto.IsDeleted;
+        if (sameVersion && !hasSameValues)
+            throw new SyncConflictException(
+                "This player has a different change with the same version on the server. Sync first, then resolve the conflict.",
+                SerializeTrackedSyncPayload(existing));
+        if (sameVersion)
+            return;
 
         existing.FullName = dto.FullName;
         existing.IsActive = dto.IsActive;
@@ -2520,28 +3010,36 @@ public sealed class SyncController : ControllerBase
 
     private async Task ApplyTeamAsync(SyncPushRequest request, CancellationToken ct)
     {
+        using var doc = JsonDocument.Parse(request.PayloadJson);
+        var root = doc.RootElement;
+        var id = root.TryGetProperty("id", out var idValue) && idValue.TryGetGuid(out var parsedId)
+            ? parsedId
+            : request.EntityId;
+        var version = root.TryGetProperty("version", out var versionValue) && versionValue.TryGetInt64(out var parsedVersion)
+            ? parsedVersion
+            : 1L;
+        var updated = root.TryGetProperty("updatedAtUtc", out var updatedValue) && updatedValue.TryGetDateTime(out var parsedUpdated)
+            ? parsedUpdated
+            : DateTime.UtcNow;
         if (string.Equals(request.Operation, "Delete", StringComparison.OrdinalIgnoreCase))
         {
             var team = await _db.Teams.Include(t => t.TeamPlayers)
-                .FirstOrDefaultAsync(t => t.Id == request.EntityId, ct)
+                .FirstOrDefaultAsync(t => t.Id == id, ct)
                 .ConfigureAwait(false);
-            if (team is not null)
-            {
-                team.IsDeleted = true;
-                team.CaptainPlayerId = null;
-                team.UpdatedAtUtc = DateTime.Now;
-                team.Version++;
-            }
+            if (team is null || team.IsDeleted) return;
+            if (version <= team.Version)
+                throw new SyncConflictException(
+                    "This team changed on the server after the offline copy. Keep the local copy and resolve the changes before retrying.",
+                    SerializeTeamConflictPayload(team));
+            team.IsDeleted = true;
+            team.CaptainPlayerId = null;
+            team.UpdatedAtUtc = updated;
+            team.Version = version;
             return;
         }
 
-        using var doc = JsonDocument.Parse(request.PayloadJson);
-        var root = doc.RootElement;
-        var id = root.GetProperty("id").GetGuid();
         var name = root.GetProperty("name").GetString() ?? string.Empty;
         Guid? captainId = root.TryGetProperty("captainPlayerId", out var c) && c.ValueKind != JsonValueKind.Null ? c.GetGuid() : null;
-        var version = root.TryGetProperty("version", out var v) ? v.GetInt64() : 1;
-        var updated = root.TryGetProperty("updatedAtUtc", out var u) ? u.GetDateTime() : DateTime.Now;
         var isDeleted = root.TryGetProperty("isDeleted", out var d) && d.GetBoolean();
         var isActive = !root.TryGetProperty("isActive", out var ia) || ia.ValueKind == JsonValueKind.Null || ia.GetBoolean();
         var playerIds = new List<Guid>();
@@ -2594,6 +3092,22 @@ public sealed class SyncController : ControllerBase
         }
 
         if (version < existing.Version)
+            throw new SyncConflictException(
+                "This team has a newer server version. Sync first, then review and reapply the local changes.",
+                SerializeTeamConflictPayload(existing));
+
+        var sameVersion = version == existing.Version;
+        var hasSameValues = existing.Name == name
+            && existing.CaptainPlayerId == captainId
+            && existing.IsActive == isActive
+            && existing.IsDeleted == isDeleted
+            && existing.TeamPlayers.Select(tp => tp.PlayerId).ToHashSet().SetEquals(playerIds)
+            && existing.TeamPlayers.Where(tp => tp.IsPlaying).Select(tp => tp.PlayerId).ToHashSet().SetEquals(playingSet);
+        if (sameVersion && !hasSameValues)
+            throw new SyncConflictException(
+                "This team has a different change with the same version on the server. Sync first, then resolve the conflict.",
+                SerializeTeamConflictPayload(existing));
+        if (sameVersion)
             return;
 
         existing.Name = name;
@@ -3034,6 +3548,187 @@ public sealed class StatsController : ControllerBase
     private readonly ApiDbContext _db;
 
     public StatsController(ApiDbContext db) => _db = db;
+
+    [HttpGet("players/{playerId:guid}/matches")]
+    public async Task<ActionResult<IReadOnlyList<MatchSummaryDto>>> PlayerMatches(Guid playerId, CancellationToken ct)
+    {
+        var deliveryMatchIds = await _db.Deliveries.AsNoTracking()
+            .Where(d => d.BatterId == playerId || d.NonStrikerId == playerId || d.BowlerId == playerId
+                        || d.DismissedPlayerId == playerId || d.FielderId == playerId)
+            .Select(d => d.MatchId).Distinct().ToListAsync(ct).ConfigureAwait(false);
+        // Include completed matches so squad-only appearances can be resolved (same as leaderboard).
+        var completed = await _db.Matches.AsNoTracking()
+            .Where(m => !m.IsDeleted && m.Status == MatchStatus.Completed)
+            .OrderByDescending(m => m.MatchDateUtc)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var matches = completed
+            .Where(m => deliveryMatchIds.Contains(m.Id)
+                        || MatchSquadSnapshot.TryParse(m.SquadRosterJson) is { } snap
+                           && (snap.PlayersOfTeamA().Contains(playerId) || snap.PlayersOfTeamB().Contains(playerId)))
+            .ToList();
+        if (matches.Count == 0) return Ok(Array.Empty<MatchSummaryDto>());
+        var teamIds = matches.SelectMany(m => new[] { m.TeamAId, m.TeamBId }).Distinct().ToList();
+        var names = await _db.Teams.AsNoTracking().Where(t => teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct).ConfigureAwait(false);
+        var matchKeys = matches.Select(m => m.Id).ToList();
+        var innings = await _db.Innings.AsNoTracking().Where(i => matchKeys.Contains(i.MatchId))
+            .Include(i => i.Deliveries).ToListAsync(ct).ConfigureAwait(false);
+        return Ok(matches.Select(m =>
+        {
+            var a = names.GetValueOrDefault(m.TeamAId, "Team A");
+            var b = names.GetValueOrDefault(m.TeamBId, "Team B");
+            var rows = innings.Where(i => i.MatchId == m.Id).ToList();
+            int runsA = rows.Where(i => i.BattingTeamId == m.TeamAId).SelectMany(i => i.Deliveries).Sum(d => d.RunsOffBat + d.ExtraRuns);
+            int runsB = rows.Where(i => i.BattingTeamId == m.TeamBId).SelectMany(i => i.Deliveries).Sum(d => d.RunsOffBat + d.ExtraRuns);
+            int wkA = rows.Where(i => i.BattingTeamId == m.TeamAId).SelectMany(i => i.Deliveries).Count(d => d.IsWicket);
+            int wkB = rows.Where(i => i.BattingTeamId == m.TeamBId).SelectMany(i => i.Deliveries).Count(d => d.IsWicket);
+            var playerTeamId = ResolvePlayerTeamIdForSummary(playerId, m, rows);
+            var result = runsA == runsB ? "Match tied" : runsA > runsB ? $"{a} won" : $"{b} won";
+            return new MatchSummaryDto(m.Id, m.Title, m.TeamAId, m.TeamBId, a, b, (byte)m.Status,
+                (byte)m.Format, m.MatchDateUtc, m.OversLimit, m.Venue, runsA, wkA, runsB, wkB, result,
+                runsA == runsB ? null : runsA > runsB ? m.TeamAId : m.TeamBId,
+                m.PlayerOfTheMatchPlayerId,
+                OversMode: (byte)m.OversMode,
+                TournamentId: m.TournamentId,
+                SeriesId: m.SeriesId,
+                LiveStreamUrl: m.LiveStreamUrl,
+                PlayerTeamId: playerTeamId);
+        }).ToList());
+    }
+
+    private static Guid? ResolvePlayerTeamIdForSummary(Guid playerId, Match match, List<Innings> rows)
+    {
+        // Prefer bat/bowl — squad JSON can list the wrong side.
+        foreach (var inn in rows)
+        {
+            if (inn.Deliveries.Any(d => d.BatterId == playerId))
+                return inn.BattingTeamId;
+        }
+        foreach (var inn in rows)
+        {
+            if (inn.Deliveries.Any(d => d.BowlerId == playerId))
+                return inn.BowlingTeamId;
+        }
+
+        var snap = MatchSquadSnapshot.TryParse(match.SquadRosterJson);
+        if (snap is not null)
+        {
+            var teamAId = match.TeamAId != Guid.Empty ? match.TeamAId : snap.TeamAId;
+            var teamBId = match.TeamBId != Guid.Empty ? match.TeamBId : snap.TeamBId;
+            if (teamAId != Guid.Empty && snap.PlayersOfTeamA().Contains(playerId))
+                return teamAId;
+            if (teamBId != Guid.Empty && snap.PlayersOfTeamB().Contains(playerId))
+                return teamBId;
+        }
+
+        var fromBalls = rows.SelectMany(i => i.Deliveries.Select(d => (Innings: i, Delivery: d)))
+            .Where(x => x.Delivery.NonStrikerId == playerId
+                        || x.Delivery.DismissedPlayerId == playerId
+                        || x.Delivery.FielderId == playerId)
+            .Select(x => x.Delivery.NonStrikerId == playerId || x.Delivery.DismissedPlayerId == playerId
+                ? x.Innings.BattingTeamId
+                : x.Innings.BowlingTeamId)
+            .FirstOrDefault();
+        return fromBalls == Guid.Empty ? null : fromBalls;
+    }
+
+    [HttpGet("nets/awards/page")]
+    public async Task<ActionResult<PagedResult<NetSessionAwardsRowDto>>> NetsAwardsPage(
+        int skip = 0, int take = 15, string? q = null, CancellationToken ct = default)
+    {
+        (skip, take) = Paging.Clamp(skip, take);
+        var sessionsQuery = _db.NetSessions.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.Status == NetSessionStatus.Completed);
+        var like = Paging.LikePattern(q);
+        if (like is not null)
+            sessionsQuery = sessionsQuery.Where(s => EF.Functions.Like(s.Name, like));
+
+        var total = await sessionsQuery.CountAsync(ct).ConfigureAwait(false);
+        var sessions = await sessionsQuery
+            .OrderByDescending(s => s.SessionDateUtc)
+            .ThenBy(s => s.Name)
+            .Skip(skip)
+            .Take(take)
+            .Select(s => new { s.Id, s.Name, s.SessionDateUtc })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (sessions.Count == 0)
+            return Ok(new PagedResult<NetSessionAwardsRowDto>([], total, skip, take));
+
+        var sessionIds = sessions.Select(s => s.Id).ToList();
+        var balls = await _db.NetDeliveries.AsNoTracking()
+            .Where(d => sessionIds.Contains(d.SessionId))
+            .OrderBy(d => d.Sequence)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var ballsBySession = balls.GroupBy(d => d.SessionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var awardsBySession = new Dictionary<Guid, EventAwardsCalculator.Awards>();
+        foreach (var session in sessions)
+        {
+            var sessionBalls = ballsBySession.GetValueOrDefault(session.Id) ?? new List<NetDelivery>();
+            var deliveries = sessionBalls.Select(d => new Delivery
+            {
+                Id = d.Id,
+                MatchId = session.Id,
+                InningsId = session.Id,
+                Sequence = d.Sequence,
+                OverNumber = d.OverNumber,
+                BallInOver = d.BallInOver,
+                BatterId = d.BatterId,
+                NonStrikerId = d.NonStrikerId,
+                BowlerId = d.BowlerId,
+                RunsOffBat = d.RunsOffBat,
+                ExtraRuns = d.ExtraRuns,
+                ExtraType = d.ExtraType,
+                IsWicket = d.IsWicket,
+                WicketType = d.WicketType,
+                DismissedPlayerId = d.DismissedPlayerId,
+                FielderId = d.FielderId,
+                IsDroppedCatch = d.IsDroppedCatch,
+                IsLegalDelivery = d.IsLegalDelivery
+            }).ToList();
+            awardsBySession[session.Id] = EventAwardsCalculator.ComputeNetsSession(deliveries);
+        }
+
+        var awardPlayerIds = awardsBySession.Values
+            .SelectMany(a => new[] { a.PlayerOfEventId, a.BestBatsmanId, a.BestBowlerId, a.BestFielderId })
+            .Where(id => id is Guid value && value != Guid.Empty)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var names = awardPlayerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Players.AsNoTracking()
+                .Where(p => awardPlayerIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, ct)
+                .ConfigureAwait(false);
+
+        string? NameOf(Guid? id)
+            => id is Guid playerId ? names.GetValueOrDefault(playerId) : null;
+
+        var rows = sessions.Select(session =>
+        {
+            var awards = awardsBySession[session.Id];
+            return new NetSessionAwardsRowDto
+            {
+                SessionId = session.Id,
+                SessionName = session.Name,
+                SessionDateUtc = session.SessionDateUtc,
+                PlayerOfTheSessionPlayerId = awards.PlayerOfEventId,
+                PlayerOfTheSessionName = NameOf(awards.PlayerOfEventId),
+                BestBatsmanPlayerId = awards.BestBatsmanId,
+                BestBatsmanName = NameOf(awards.BestBatsmanId),
+                BestBowlerPlayerId = awards.BestBowlerId,
+                BestBowlerName = NameOf(awards.BestBowlerId),
+                BestFielderPlayerId = awards.BestFielderId,
+                BestFielderName = NameOf(awards.BestFielderId)
+            };
+        }).ToList();
+
+        return Ok(new PagedResult<NetSessionAwardsRowDto>(rows, total, skip, take));
+    }
 
     /// <summary>Dropdown options for Statistics tournament / series / match filters.</summary>
     [HttpGet("filter-options")]
@@ -3879,20 +4574,49 @@ public sealed class AuctionsController : ControllerBase
         entity.UpdatedAtUtc = DateTime.Now;
         entity.Version++;
 
-        await _db.AuctionCaptains.Where(c => c.AuctionId == id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
-        await _db.AuctionLots.Where(l => l.AuctionId == id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        await _db.Entry(entity).Collection(a => a.Captains).LoadAsync(ct).ConfigureAwait(false);
+        await _db.Entry(entity).Collection(a => a.Lots).LoadAsync(ct).ConfigureAwait(false);
 
-        foreach (var c in DedupCaptains(request.Captains))
+        var captainRequests = DedupCaptains(request.Captains).ToDictionary(c => c.PlayerId);
+        foreach (var captain in entity.Captains.ToList())
         {
-            _db.AuctionCaptains.Add(new AuctionCaptain
+            if (!captainRequests.Remove(captain.PlayerId, out var desired))
+            {
+                entity.Captains.Remove(captain);
+                _db.AuctionCaptains.Remove(captain);
+                continue;
+            }
+
+            captain.WalletAmount = Math.Max(0, desired.WalletAmount);
+        }
+        foreach (var captain in captainRequests.Values)
+        {
+            entity.Captains.Add(new AuctionCaptain
             {
                 AuctionId = id,
-                PlayerId = c.PlayerId,
-                WalletAmount = Math.Max(0, c.WalletAmount)
+                PlayerId = captain.PlayerId,
+                WalletAmount = Math.Max(0, captain.WalletAmount)
             });
         }
-        foreach (var l in request.Lots)
-            _db.AuctionLots.Add(MapLot(id, l));
+
+        var lotRequests = request.Lots.GroupBy(l => l.PlayerId).Select(g => g.Last())
+            .ToDictionary(l => l.PlayerId);
+        foreach (var lot in entity.Lots.ToList())
+        {
+            if (!lotRequests.Remove(lot.PlayerId, out var desired))
+            {
+                entity.Lots.Remove(lot);
+                _db.AuctionLots.Remove(lot);
+                continue;
+            }
+
+            lot.BasePrice = Math.Max(0, desired.BasePrice);
+            lot.IsSold = desired.IsSold;
+            lot.SoldPrice = desired.IsSold ? Math.Max(0, desired.SoldPrice ?? 0) : null;
+            lot.SoldToCaptainPlayerId = desired.IsSold ? desired.SoldToCaptainPlayerId : null;
+        }
+        foreach (var lot in lotRequests.Values)
+            entity.Lots.Add(MapLot(id, lot));
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -4462,7 +5186,7 @@ public sealed class VenueBookingsController : ControllerBase
             .ConfigureAwait(false);
         if (entity is null) return NotFound();
 
-        if (entity.CreatedByUserId != userId && !IsSuperAdminRole(role))
+        if (entity.CreatedByUserId != userId)
             return StatusCode(StatusCodes.Status403Forbidden, "Only the admin who created this booking can edit it.");
 
         entity.VenueId = request.VenueId;
@@ -4472,19 +5196,28 @@ public sealed class VenueBookingsController : ControllerBase
         entity.UpdatedAtUtc = DateTime.Now;
         entity.Version++;
 
-        await _db.VenueBookingParticipants.Where(p => p.VenueBookingId == id)
-            .ExecuteDeleteAsync(ct).ConfigureAwait(false);
-
-        foreach (var p in DedupParticipants(request.Participants))
+        await _db.Entry(entity).Collection(b => b.Participants).LoadAsync(ct).ConfigureAwait(false);
+        var participantRequests = DedupParticipants(request.Participants).ToDictionary(p => p.PlayerId);
+        foreach (var participant in entity.Participants.ToList())
         {
-            _db.VenueBookingParticipants.Add(new VenueBookingParticipant
+            if (!participantRequests.Remove(participant.PlayerId, out var desired))
+            {
+                entity.Participants.Remove(participant);
+                _db.VenueBookingParticipants.Remove(participant);
+                continue;
+            }
+
+            participant.Status = VenueBookingPaymentStatus.Normalize(desired.Status);
+            participant.Amount = Math.Max(0, desired.Amount);
+        }
+        foreach (var participant in participantRequests.Values)
+            entity.Participants.Add(new VenueBookingParticipant
             {
                 VenueBookingId = id,
-                PlayerId = p.PlayerId,
-                Status = VenueBookingPaymentStatus.Normalize(p.Status),
-                Amount = Math.Max(0, p.Amount)
+                PlayerId = participant.PlayerId,
+                Status = VenueBookingPaymentStatus.Normalize(participant.Status),
+                Amount = Math.Max(0, participant.Amount)
             });
-        }
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         await _db.Entry(entity).Collection(b => b.Participants).LoadAsync(ct).ConfigureAwait(false);
@@ -4505,7 +5238,7 @@ public sealed class VenueBookingsController : ControllerBase
             .ConfigureAwait(false);
         if (entity is null) return NotFound();
 
-        if (entity.CreatedByUserId != userId && !IsSuperAdminRole(role))
+        if (entity.CreatedByUserId != userId)
             return StatusCode(StatusCodes.Status403Forbidden, "Only the admin who created this booking can delete it.");
 
         entity.IsDeleted = true;
@@ -4539,8 +5272,6 @@ public sealed class VenueBookingsController : ControllerBase
 
     private bool IsLeagueWriter(string role)
     {
-        if (IsSuperAdminRole(role))
-            return true;
         if (!string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase))
             return false;
 
@@ -4556,9 +5287,6 @@ public sealed class VenueBookingsController : ControllerBase
 
         return true;
     }
-
-    private static bool IsSuperAdminRole(string role)
-        => string.Equals(role, nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase);
 
     private async Task<(Dictionary<Guid, string> Players, Dictionary<Guid, string> Users, Dictionary<Guid, string> Venues)> LoadNamesAsync(
         IReadOnlyList<VenueBooking> bookings, CancellationToken ct)
@@ -4773,16 +5501,31 @@ public sealed class ExpensesController : ControllerBase
         if (error is not null) return BadRequest(error);
         var row = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct).ConfigureAwait(false);
         if (row is null) return NotFound();
-        if (row.CreatedByUserId != userId && !IsSuperAdminRole(role))
+        if (row.CreatedByUserId != userId)
             return StatusCode(403, "Only the admin who created this expense can edit it.");
         row.Name = request.Name.Trim(); row.PurchasedByPlayerId = request.PurchasedByPlayerId;
         row.Amount = request.Amount; row.UpdatedAtUtc = DateTime.Now; row.Version++;
-        await _db.ExpenseContributions.Where(x => x.ExpenseId == id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
-        foreach (var c in Dedup(request.Contributions))
-            _db.ExpenseContributions.Add(new ExpenseContribution
+        await _db.Entry(row).Collection(x => x.Contributions).LoadAsync(ct).ConfigureAwait(false);
+        var contributionRequests = Dedup(request.Contributions).ToDictionary(c => c.PlayerId);
+        foreach (var contribution in row.Contributions.ToList())
+        {
+            if (!contributionRequests.Remove(contribution.PlayerId, out var desired))
             {
-                ExpenseId = id, PlayerId = c.PlayerId, Amount = c.Amount,
-                Status = ExpenseContributionStatus.Normalize(c.Status)
+                row.Contributions.Remove(contribution);
+                _db.ExpenseContributions.Remove(contribution);
+                continue;
+            }
+
+            contribution.Amount = desired.Amount;
+            contribution.Status = ExpenseContributionStatus.Normalize(desired.Status);
+        }
+        foreach (var contribution in contributionRequests.Values)
+            row.Contributions.Add(new ExpenseContribution
+            {
+                ExpenseId = id,
+                PlayerId = contribution.PlayerId,
+                Amount = contribution.Amount,
+                Status = ExpenseContributionStatus.Normalize(contribution.Status)
             });
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         await _db.Entry(row).Collection(x => x.Contributions).LoadAsync(ct).ConfigureAwait(false);
@@ -4796,7 +5539,7 @@ public sealed class ExpensesController : ControllerBase
         if (!IsLeagueWriter(role)) return StatusCode(403, "Only admins can delete expenses.");
         var row = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct).ConfigureAwait(false);
         if (row is null) return NotFound();
-        if (row.CreatedByUserId != userId && !IsSuperAdminRole(role))
+        if (row.CreatedByUserId != userId)
             return StatusCode(403, "Only the admin who created this expense can delete it.");
         row.IsDeleted = true; row.UpdatedAtUtc = DateTime.Now; row.Version++;
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -4846,7 +5589,7 @@ public sealed class ExpensesController : ControllerBase
                 PurchasedByPlayerName = players.GetValueOrDefault(x.PurchasedByPlayerId, "?"), Amount = x.Amount,
                 ContributedAmount = paid, OutstandingAmount = Math.Max(0, x.Amount - paid), Version = x.Version,
                 CreatedAtUtc = x.CreatedAtUtc, UpdatedAtUtc = x.UpdatedAtUtc, IsDeleted = x.IsDeleted,
-                CanEdit = canWrite && (IsSuperAdminRole(callerRole) || callerId == x.CreatedByUserId),
+                CanEdit = canWrite && callerId == x.CreatedByUserId,
                 Contributions = x.Contributions.Select(c => new ExpenseContributionDto
                 {
                     PlayerId = c.PlayerId, PlayerName = players.GetValueOrDefault(c.PlayerId, "?"),
@@ -4879,14 +5622,12 @@ public sealed class ExpensesController : ControllerBase
     }
     private bool IsLeagueWriter(string role)
     {
-        if (IsSuperAdminRole(role)) return true;
         if (!string.Equals(role, nameof(AppRole.Admin), StringComparison.OrdinalIgnoreCase)) return false;
         if (!HttpContext.Items.TryGetValue("JplHomeLeagueId", out var homeObj) || homeObj is not Guid home || home == Guid.Empty) return false;
         if (HttpContext.Request.Headers.TryGetValue("X-League-Id", out var header) && Guid.TryParse(header.ToString(), out var selected) && selected != Guid.Empty)
             return selected == home;
         return true;
     }
-    private static bool IsSuperAdminRole(string role) => string.Equals(role, nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase);
     private static IEnumerable<ExpenseContributionRequest> Dedup(IEnumerable<ExpenseContributionRequest> rows) => rows.GroupBy(x => x.PlayerId).Select(g => g.Last());
 }
 

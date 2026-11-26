@@ -26,9 +26,10 @@ public sealed class NetSession : ILeagueScoped
 }
 
 /// <summary>One nets ball — same shape as a match delivery, without innings/teams.</summary>
-public sealed class NetDelivery
+public sealed class NetDelivery : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid SessionId { get; set; }
     public NetSession Session { get; set; } = null!;
 

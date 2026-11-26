@@ -55,7 +55,14 @@ public partial class AppShell : Shell
         _services = services;
 
         EnsureRoutesRegistered(services);
-        Navigated += (_, _) => Dispatcher.Dispatch(EnsureDesktopSidebar);
+        Navigated += (_, args) =>
+        {
+            AndroidScreenState.Save(
+                _auth.Current,
+                _league.CurrentLeagueId,
+                args.Current?.Location?.OriginalString);
+            Dispatcher.Dispatch(EnsureDesktopSidebar);
+        };
         HandlerChanged += OnShellHandlerChanged;
         Loaded += (_, _) =>
         {
@@ -76,8 +83,11 @@ public partial class AppShell : Shell
             currentWorkspace = AppWorkspace.Leagues;
         if (currentWorkspace == AppWorkspace.Settings && session?.CanManagePlatform != true)
             currentWorkspace = AppWorkspace.Leagues;
-        if (currentWorkspace == AppWorkspace.GroundOwner && session?.IsGroundOwner != true && session?.CanManagePlatform != true)
+        if (currentWorkspace == AppWorkspace.GroundOwner && session?.IsGroundOwner != true)
             currentWorkspace = AppWorkspace.Grounds;
+        if (session?.CanManagePlatform == true
+            && currentWorkspace is not AppWorkspace.Users)
+            currentWorkspace = AppWorkspace.Users;
         if (currentWorkspace == AppWorkspace.Grounds && session?.IsGroundOwner == true)
             currentWorkspace = AppWorkspace.GroundOwner;
         if (currentWorkspace == AppWorkspace.Scheduler && session?.IsGuest == true)
@@ -97,6 +107,9 @@ public partial class AppShell : Shell
         else if (currentWorkspace == AppWorkspace.Users)
         {
             Items.Add(CreateFlyout("Users", "users", "usershome", () => services.GetRequiredService<UsersPage>()));
+            // SuperAdmin League management: league records (create / edit / activate / delete).
+            if (session?.CanManageLeagues == true)
+                Items.Add(CreateFlyout("Leagues", "leaguemanagement", "leaguemanagementhome", () => services.GetRequiredService<LeagueManagementPage>()));
         }
         else if (currentWorkspace == AppWorkspace.Settings)
         {
@@ -158,7 +171,7 @@ public partial class AppShell : Shell
                 : currentWorkspace == AppWorkspace.Grounds
                     ? "Ground Bookings"
                     : currentWorkspace == AppWorkspace.Users
-                        ? "Users"
+                        ? "Users & Leagues"
                         : currentWorkspace == AppWorkspace.Settings
                             ? "Settings"
                             : currentWorkspace == AppWorkspace.Scheduler
@@ -298,6 +311,38 @@ public partial class AppShell : Shell
         if (!string.IsNullOrWhiteSpace(roleLabel.Text) &&
             !string.Equals(roleLabel.Text, nameLabel.Text, StringComparison.OrdinalIgnoreCase))
             footer.Children.Add(roleLabel);
+
+        // Sync logs (manual Sync lives on that page): League Admin + home league only.
+        if (currentWorkspace == AppWorkspace.Leagues
+            && session is not null
+            && LeagueSyncPolicy.AllowsLocalOfflineSync(session, _league.CurrentLeagueId))
+        {
+            var syncLogsBtn = new Button
+            {
+                Text = "Sync logs",
+                Margin = new Thickness(16, 8, 16, 0),
+                BackgroundColor = Color.FromArgb("#17324A"),
+                TextColor = Color.FromArgb("#B6FF3B"),
+                BorderColor = Color.FromArgb("#B6FF3B"),
+                BorderWidth = 1.2,
+                FontAttributes = FontAttributes.Bold,
+                CornerRadius = 12,
+                HeightRequest = 44
+            };
+            syncLogsBtn.Clicked += async (_, _) =>
+            {
+                try
+                {
+                    await Shell.Current.GoToAsync(nameof(SyncLogsPage)).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    await DisplayAlert("Sync logs", NetworkUi.UserMessage(ex), "OK").ConfigureAwait(true);
+                }
+            };
+            footer.Children.Add(syncLogsBtn);
+        }
+
         footer.Children.Add(logoutBtn);
         _flyoutFooterView = footer;
         FlyoutHeader = null;
@@ -308,6 +353,10 @@ public partial class AppShell : Shell
         {
             await RefreshLeagueNameAsync().ConfigureAwait(true);
             await RefreshPendingAsync().ConfigureAwait(true);
+            if (currentWorkspace == AppWorkspace.Leagues
+                && session is not null
+                && LeagueSyncPolicy.AllowsLocalOfflineSync(session, _league.CurrentLeagueId))
+                _ = RunDailySyncAsync();
         };
         // Defer pending-count so shell paints before first SQLite hit.
         _ = Task.Run(async () =>
@@ -317,6 +366,25 @@ public partial class AppShell : Shell
         });
 
         ApplyPlatformFlyout();
+    }
+
+    private async Task RunDailySyncAsync()
+    {
+        if (!LeagueSyncPolicy.AllowsLocalOfflineSync(
+                _services.GetRequiredService<IAuthService>().Current,
+                _league.CurrentLeagueId))
+            return;
+
+        try
+        {
+            _services.GetRequiredService<ILivePublisher>().RequestFlush();
+            await _services.GetRequiredService<ISyncService>().SyncDailyIfDueAsync().ConfigureAwait(false);
+            await MainThread.InvokeOnMainThreadAsync(RefreshPendingAsync).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Offline startup remains usable; the next manual or daily attempt retries.
+        }
     }
 
     private static void EnsureRoutesRegistered(IServiceProvider services)
@@ -341,6 +409,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(ExpenseEditPage), new DiRouteFactory<ExpenseEditPage>(services));
         Routing.RegisterRoute(nameof(VenueEditPage), new DiRouteFactory<VenueEditPage>(services));
         Routing.RegisterRoute(nameof(FormatEditPage), new DiRouteFactory<FormatEditPage>(services));
+        Routing.RegisterRoute(nameof(SyncLogsPage), new DiRouteFactory<SyncLogsPage>(services));
         Routing.RegisterRoute(nameof(TournamentEditPage), new DiRouteFactory<TournamentEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentDetailPage), new DiRouteFactory<TournamentDetailPage>(services));
         Routing.RegisterRoute(nameof(SeriesEditPage), new DiRouteFactory<SeriesEditPage>(services));
@@ -348,6 +417,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(TournamentSchedulerEditPage), new DiRouteFactory<TournamentSchedulerEditPage>(services));
         Routing.RegisterRoute(nameof(TournamentSchedulerDetailPage), new DiRouteFactory<TournamentSchedulerDetailPage>(services));
         Routing.RegisterRoute(nameof(LeagueEditPage), new DiRouteFactory<LeagueEditPage>(services));
+        Routing.RegisterRoute(nameof(LeagueManageEditPage), new DiRouteFactory<LeagueManageEditPage>(services));
         Routing.RegisterRoute(nameof(GroundDetailPage), new DiRouteFactory<GroundDetailPage>(services));
         Routing.RegisterRoute(nameof(GroundBookRequestPage), new DiRouteFactory<GroundBookRequestPage>(services));
         Routing.RegisterRoute(nameof(GroundReviewPage), new DiRouteFactory<GroundReviewPage>(services));
@@ -412,12 +482,12 @@ public partial class AppShell : Shell
         try
         {
             var live = _services.GetRequiredService<ILivePublisher>();
-            var n = await live.GetPendingCountAsync().ConfigureAwait(true);
-            _pendingLabel.Text = n == 0
-                ? "Live"
-                : n == 1
-                    ? "Offline: 1 update will go live when internet returns"
-                    : $"Offline: {n} updates will go live when internet returns";
+            var pendingLive = await live.GetPendingCountAsync().ConfigureAwait(true);
+            var pendingSync = await _services.GetRequiredService<ISyncService>()
+                .GetPendingCountAsync().ConfigureAwait(true);
+            _pendingLabel.Text = pendingLive == 0 && pendingSync == 0
+                ? "Synced"
+                : $"Pending · Live {pendingLive} · Sync {pendingSync}";
         }
         catch
         {
@@ -683,6 +753,7 @@ public partial class AppShell : Shell
         "grounddiscover" => "discover",
         "customerbookings" => "bookings",
         "users" => "users",
+        "leaguemanagement" => "fame",
         "groundamenities" => "formats",
         "groundservices" => "formats",
         "groundshop" => "shop",

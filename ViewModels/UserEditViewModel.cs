@@ -51,7 +51,6 @@ public partial class UserEditViewModel : ObservableObject
                 return true;
             return !role.Equals("Ground Owner", StringComparison.OrdinalIgnoreCase)
                 && !role.Equals(nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase)
-                && !role.Contains("Public", StringComparison.OrdinalIgnoreCase)
                 && !role.Contains("Guest", StringComparison.OrdinalIgnoreCase);
         }
     }
@@ -146,9 +145,7 @@ public partial class UserEditViewModel : ObservableObject
         foreach (var role in AssignableRoles)
             RoleOptions.Add(role);
 
-        if (includeExisting is AppRole.PublicUser)
-            RoleOptions.Add("Public User");
-        else if (includeExisting is AppRole.Guest)
+        if (includeExisting is AppRole.Guest)
             RoleOptions.Add("Guest");
     }
 
@@ -183,12 +180,10 @@ public partial class UserEditViewModel : ObservableObject
 
             if (!AppRoleLabels.TryParseManaged(SelectedRole, out var role))
                 throw new ArgumentException("Select League Admin, League User, or Ground Owner.");
-            if (role == AppRole.PublicUser && _existingId is null)
-                throw new ArgumentException("Public users sign up from the login screen.");
             if (role == AppRole.Guest && _existingId is null)
                 throw new ArgumentException("Guest is a built-in account.");
             Guid? leagueId = null;
-            if (role is not AppRole.GroundOwner and not AppRole.PublicUser and not AppRole.Guest)
+            if (role is not AppRole.GroundOwner and not AppRole.Guest)
             {
                 if (SelectedLeague is null || SelectedLeague.Id == Guid.Empty)
                     throw new ArgumentException("Select a league for this user.");

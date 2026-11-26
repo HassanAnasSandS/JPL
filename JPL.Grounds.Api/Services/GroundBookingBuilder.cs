@@ -71,8 +71,12 @@ internal static class GroundBookingBuilder
 
         var booking = new GroundBooking
         {
+            Id = request.ClientRequestId is Guid clientId && clientId != Guid.Empty
+                ? clientId
+                : Guid.NewGuid(),
             GroundId = ground.Id,
             CustomerUserId = customerUserId,
+            ClientRequestId = request.ClientRequestId,
             CustomerName = Trim(customerName, 120) ?? string.Empty,
             CustomerPhone = customerPhone,
             StartAt = start,

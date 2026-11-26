@@ -168,7 +168,11 @@ public sealed record LiveScoreSnapshot(
     double CurrentRunRate,
     double? RequiredRunRate,
     int ProjectedScore,
-    bool IsChase);
+    bool IsChase)
+{
+    /// <summary>Current-over chips without rebuilding the full batting/bowling card.</summary>
+    public IReadOnlyList<OverBallMark> ThisOver { get; init; } = Array.Empty<OverBallMark>();
+}
 
 public sealed record ScoringContext(
     Guid MatchId,
@@ -230,12 +234,18 @@ public sealed class BattingCardRow
     }
     public string StatusText => IsOut
         ? (string.IsNullOrWhiteSpace(Dismissal) ? "out" : Dismissal)
-        : "not out";
+        : Outs > 0
+            ? $"not out · {Outs} previous out{(Outs == 1 ? string.Empty : "s")}" +
+              (string.IsNullOrWhiteSpace(Dismissal) ? string.Empty : $" ({Dismissal})")
+            : "not out";
     public string StrikeRateText => StrikeRate.ToString("0.0");
     public string LineText =>
         $"{DisplayName}  {Runs} ({Balls})" +
         $"  {StatusText}" +
         $"  4s:{Fours} 6s:{Sixes}  SR {StrikeRateText}";
+    /// <summary>Compact bowling-style line for nets combined batting (one row per player).</summary>
+    public string CombinedLineText =>
+        $"{DisplayName}  {Runs} ({Balls})  Outs:{Outs}  4s:{Fours} 6s:{Sixes}  SR {StrikeRateText}";
 }
 
 public sealed class BowlingCardRow
@@ -466,6 +476,7 @@ public sealed class MatchService : IMatchService
     private readonly IApiClient _api;
     private readonly IMatchSquadCache _squadCache;
     private readonly IAuthService _auth;
+    private readonly ILeagueContext _league;
     private readonly ILivePublisher _live;
 
     public MatchService(
@@ -476,6 +487,7 @@ public sealed class MatchService : IMatchService
         IApiClient api,
         IMatchSquadCache squadCache,
         IAuthService auth,
+        ILeagueContext league,
         ILivePublisher live)
     {
         _dbFactory = dbFactory;
@@ -485,8 +497,12 @@ public sealed class MatchService : IMatchService
         _api = api;
         _squadCache = squadCache;
         _auth = auth;
+        _league = league;
         _live = live;
     }
+
+    private bool CanUseLocalLeagueData
+        => LeagueSyncPolicy.UsesLocalStorage(_auth.Current);
 
     private static int MaxInningsFor(MatchFormat format)
         => format == MatchFormat.DoubleInnings ? 4 : 2;
@@ -496,6 +512,15 @@ public sealed class MatchService : IMatchService
 
     public async Task<IReadOnlyList<MatchListItem>> GetAllAsync(CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+        {
+            var completed = await _api.GetCompletedMatchesAsync(ct).ConfigureAwait(false);
+            var live = await _api.GetLiveMatchesAsync(ct).ConfigureAwait(false);
+            return completed.Select(FromApi).Concat(live.Select(FromApi))
+                .GroupBy(match => match.Id).Select(group => group.First())
+                .OrderByDescending(match => match.IsActive).ThenByDescending(match => match.MatchDateUtc).ToList();
+        }
+
         // Do NOT flush outbox on every list open — that freezes Matches UI.
         // Standalone match-complete / lifecycle / per-match Sync push.
         await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
@@ -511,38 +536,45 @@ public sealed class MatchService : IMatchService
             m => m.Id,
             m => m with { NeedsSync = m.Status == MatchStatus.Completed && pendingSync.Contains(m.Id) });
 
-        try
+        await using (var gateDb = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
         {
-            var remote = await _api.GetCompletedMatchesAsync(ct).ConfigureAwait(false);
-            foreach (var m in remote.Select(FromApi))
+            if (!await LocalCacheGate.PreferLocalAsync(gateDb, _auth.Current, ct).ConfigureAwait(false))
             {
-                // Never let API overwrite a local in-progress/setup match.
-                if (byId.TryGetValue(m.Id, out var existing) && existing.IsActive)
-                    continue;
-                byId[m.Id] = m with
+                try
                 {
-                    NeedsSync = m.Status == MatchStatus.Completed && pendingSync.Contains(m.Id)
-                };
-            }
+                    using var timeout = LocalCacheGate.ShortNetworkCts(ct);
+                    var remote = await _api.GetCompletedMatchesAsync(timeout.Token).ConfigureAwait(false);
+                    foreach (var m in remote.Select(FromApi))
+                    {
+                        // Never let API overwrite a local in-progress/setup match.
+                        if (byId.TryGetValue(m.Id, out var existing) && existing.IsActive)
+                            continue;
+                        byId[m.Id] = m with
+                        {
+                            NeedsSync = m.Status == MatchStatus.Completed && pendingSync.Contains(m.Id)
+                        };
+                    }
 
-            try
-            {
-                var live = await _api.GetLiveMatchesAsync(ct).ConfigureAwait(false);
-                foreach (var m in live.Select(FromApi))
+                    try
+                    {
+                        var live = await _api.GetLiveMatchesAsync(timeout.Token).ConfigureAwait(false);
+                        foreach (var m in live.Select(FromApi))
+                        {
+                            if (byId.TryGetValue(m.Id, out var existing) && existing.IsLocal)
+                                continue;
+                            byId[m.Id] = m with { IsLocal = false, AllowMutate = false };
+                        }
+                    }
+                    catch
+                    {
+                        /* older API without live index */
+                    }
+                }
+                catch
                 {
-                    if (byId.TryGetValue(m.Id, out var existing) && existing.IsLocal)
-                        continue;
-                    byId[m.Id] = m with { IsLocal = false, AllowMutate = false };
+                    /* offline — local only */
                 }
             }
-            catch
-            {
-                /* older API without live index */
-            }
-        }
-        catch
-        {
-            /* offline — local only */
         }
 
         return byId.Values
@@ -553,6 +585,11 @@ public sealed class MatchService : IMatchService
 
     public async Task<IReadOnlyList<MatchListItem>> GetPinnedListAsync(CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+            return (await _api.GetLiveMatchesAsync(ct).ConfigureAwait(false)).Select(FromApi)
+                .Select(match => match with { IsLocal = false, AllowMutate = false })
+                .OrderByDescending(match => match.MatchDateUtc).ToList();
+
         await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
         var pendingSync = await _sync.GetPendingStandaloneMatchIdsAsync(ct).ConfigureAwait(false);
         var pendingIds = pendingSync.ToList();
@@ -566,19 +603,26 @@ public sealed class MatchService : IMatchService
             m => m.Id,
             m => m with { NeedsSync = m.Status == MatchStatus.Completed && pendingSync.Contains(m.Id) });
 
-        try
+        await using (var gateDb = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
         {
-            var live = await _api.GetLiveMatchesAsync(ct).ConfigureAwait(false);
-            foreach (var m in live.Select(FromApi))
+            if (!await LocalCacheGate.PreferLocalAsync(gateDb, _auth.Current, ct).ConfigureAwait(false))
             {
-                if (byId.TryGetValue(m.Id, out var existing) && existing.IsLocal)
-                    continue;
-                byId[m.Id] = m with { IsLocal = false, AllowMutate = false };
+                try
+                {
+                    using var timeout = LocalCacheGate.ShortNetworkCts(ct);
+                    var live = await _api.GetLiveMatchesAsync(timeout.Token).ConfigureAwait(false);
+                    foreach (var m in live.Select(FromApi))
+                    {
+                        if (byId.TryGetValue(m.Id, out var existing) && existing.IsLocal)
+                            continue;
+                        byId[m.Id] = m with { IsLocal = false, AllowMutate = false };
+                    }
+                }
+                catch
+                {
+                    /* older API without live index / offline */
+                }
             }
-        }
-        catch
-        {
-            /* older API without live index */
         }
 
         return byId.Values
@@ -590,12 +634,26 @@ public sealed class MatchService : IMatchService
     public async Task<ApiPagedResult<MatchListItem>> GetCompletedPageAsync(
         int skip, string? q, string? captain, string? date, CancellationToken ct = default)
     {
+        var canUseLocal = CanUseLocalLeagueData;
+        if (!canUseLocal)
+        {
+            var livePage = await _api.GetCompletedMatchesPageAsync(skip, q, captain, date, ct).ConfigureAwait(false);
+            return livePage.WithItems((livePage.Items ?? []).Select(FromApi).ToList());
+        }
+
         await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
         var pendingSync = await _sync.GetPendingStandaloneMatchIdsAsync(ct).ConfigureAwait(false);
         var canWrite = _auth.CanWrite;
+        await using (var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false))
+        {
+            if (await LocalCacheGate.PreferLocalAsync(db, _auth.Current, ct).ConfigureAwait(false))
+                return await GetLocalCompletedPageAsync(skip, q, captain, date, ct).ConfigureAwait(false);
+        }
+
         try
         {
-            var page = await _api.GetCompletedMatchesPageAsync(skip, q, captain, date, ct).ConfigureAwait(false);
+            using var timeout = LocalCacheGate.ShortNetworkCts(ct);
+            var page = await _api.GetCompletedMatchesPageAsync(skip, q, captain, date, timeout.Token).ConfigureAwait(false);
             var items = (page.Items ?? []).Select(m =>
             {
                 var mapped = FromApi(m);
@@ -609,12 +667,45 @@ public sealed class MatchService : IMatchService
         }
         catch
         {
-            return new ApiPagedResult<MatchListItem>([], 0, skip, ListPaging.PageSize);
+            if (canUseLocal)
+                return await GetLocalCompletedPageAsync(skip, q, captain, date, ct).ConfigureAwait(false);
+            throw;
         }
+    }
+
+    private async Task<ApiPagedResult<MatchListItem>> GetLocalCompletedPageAsync(
+        int skip, string? q, string? captain, string? date, CancellationToken ct)
+    {
+        var local = await LoadLocalListAsync(match => match.Status == MatchStatus.Completed, ct)
+            .ConfigureAwait(false);
+        IEnumerable<MatchListItem> filtered = local;
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            filtered = filtered.Where(match => match.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || match.TeamAName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || match.TeamBName.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(captain))
+        {
+            var term = captain.Trim();
+            filtered = filtered.Where(match => match.CaptainsText.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(date))
+        {
+            var term = date.Trim();
+            filtered = filtered.Where(match => match.DateKey.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+        var rows = filtered.OrderByDescending(match => match.MatchDateUtc).ToList();
+        var pageSize = ListPaging.PageSize;
+        return new ApiPagedResult<MatchListItem>(rows.Skip(Math.Max(0, skip)).Take(pageSize).ToList(),
+            rows.Count, Math.Max(0, skip), pageSize);
     }
 
     public async Task<MatchListItem?> GetActiveMatchAsync(CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+            return null;
         await EnsureLocalScoringOwnersAsync(ct).ConfigureAwait(false);
         await ReclaimOwnedActiveDevicesAsync(ct).ConfigureAwait(false);
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -669,6 +760,9 @@ public sealed class MatchService : IMatchService
             return true;
         }
 
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+            return false;
+
         ApiMatchExportDto? export;
         try
         {
@@ -721,8 +815,11 @@ public sealed class MatchService : IMatchService
         match.StartedOnDeviceId = deviceId;
         match.UpdatedAtUtc = DateTime.Now;
         match.Version++;
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await PublishLiveMatchAsync(match, inningsId: null, deliveryId: null, ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        _live.RequestFlush();
     }
 
     private static Match FromExport(ApiMatchRowDto r) => new()
@@ -809,9 +906,15 @@ public sealed class MatchService : IMatchService
             .ConfigureAwait(false);
         if (rows.Count == 0)
             return;
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         foreach (var match in rows)
+        {
             ScoringOwnership.Stamp(match, _auth);
+            await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
+        }
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        _live.RequestFlush();
     }
 
     /// <summary>
@@ -1115,32 +1218,36 @@ public sealed class MatchService : IMatchService
         if (titleTaken)
             throw new InvalidOperationException($"Match title \"{title}\" already exists.");
 
-        var teamA = await _api.GetTeamAsync(draft.TeamAId, ct).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Team A not found. Check the live Teams list.");
-        var teamB = await _api.GetTeamAsync(draft.TeamBId, ct).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Team B not found. Check the live Teams list.");
-        if (teamA.IsDeleted || !teamA.IsActive)
+        // Always local roster — never block match start on API.
+        MatchRosterPayload roster;
+        var localTeams = await db.Teams
+            .Include(team => team.TeamPlayers)
+            .Where(team => team.Id == draft.TeamAId || team.Id == draft.TeamBId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var teamA = localTeams.FirstOrDefault(team => team.Id == draft.TeamAId)
+            ?? throw new InvalidOperationException("Team A is not in the local league database. Sync this league while online first.");
+        var teamB = localTeams.FirstOrDefault(team => team.Id == draft.TeamBId)
+            ?? throw new InvalidOperationException("Team B is not in the local league database. Sync this league while online first.");
+        if (!teamA.IsActive)
             throw new InvalidOperationException("Team A is not active.");
-        if (teamB.IsDeleted || !teamB.IsActive)
+        if (!teamB.IsActive)
             throw new InvalidOperationException("Team B is not active.");
 
-        var playingA = TeamRoster.PlayingListOnly(teamA);
-        var playingB = TeamRoster.PlayingListOnly(teamB);
-        var allPlayers = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
-        var livePlayers = allPlayers.Where(p => !p.IsDeleted).ToList();
-        if (playingA.Count == 0)
+        var localPlayers = await db.Players.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
+        roster = MatchRosterPayload.FromLocal(teamA, teamB, localPlayers);
+        if (roster.TeamAPlayers.Count == 0)
             throw new InvalidOperationException($"{teamA.Name} has no playing players. Set the playing list on the team before starting the match.");
-        if (playingB.Count == 0)
+        if (roster.TeamBPlayers.Count == 0)
             throw new InvalidOperationException($"{teamB.Name} has no playing players. Set the playing list on the team before starting the match.");
 
-        var sharedIds = playingA.Intersect(playingB).ToList();
+        var sharedIds = roster.TeamAPlayers.Select(player => player.Id)
+            .Intersect(roster.TeamBPlayers.Select(player => player.Id))
+            .ToList();
         if (sharedIds.Count > 0)
         {
-            var names = livePlayers
-                .Where(p => sharedIds.Contains(p.Id))
-                .Select(p => p.FullName)
-                .OrderBy(n => n)
-                .ToList();
+            var names = localPlayers.Where(player => sharedIds.Contains(player.Id))
+                .Select(player => player.FullName).OrderBy(name => name).ToList();
             var list = names.Count == 0
                 ? string.Join(", ", sharedIds.Select(id => id.ToString("N")[..8]))
                 : string.Join(", ", names);
@@ -1148,15 +1255,13 @@ public sealed class MatchService : IMatchService
                 $"Both playing lists share player(s): {list}. Playing lists must be different before starting the match.");
         }
 
-        var roster = MatchRosterPayload.From(teamA, teamB, livePlayers);
-
         var match = new Match
         {
             Title = title,
             TeamAId = draft.TeamAId,
             TeamBId = draft.TeamBId,
-            TeamACaptainId = draft.TeamACaptainId ?? teamA.CaptainPlayerId,
-            TeamBCaptainId = draft.TeamBCaptainId ?? teamB.CaptainPlayerId,
+            TeamACaptainId = draft.TeamACaptainId ?? roster.TeamACaptainId,
+            TeamBCaptainId = draft.TeamBCaptainId ?? roster.TeamBCaptainId,
             OversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
             OversMode = draft.OversMode,
             Format = draft.Format,
@@ -1185,8 +1290,10 @@ public sealed class MatchService : IMatchService
 
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         db.Matches.Add(match);
+        await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
+        _live.RequestFlush();
 
         _squadCache.Put(new MatchSquadSnapshot
         {
@@ -1284,12 +1391,13 @@ public sealed class MatchService : IMatchService
 
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         db.Innings.Add(innings);
+        await QueueLiveMatchChangesAsync(db, match, innings, delivery: null, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
 
         await _squadCache.WarmAsync(matchId, ct).ConfigureAwait(false);
         _squadCache.SetInningsSides(matchId, battingTeamId, bowlingTeamId);
-        await PublishLiveMatchAsync(match, innings.Id, deliveryId: null, ct).ConfigureAwait(false);
+        _live.RequestFlush();
         return innings;
     }
 
@@ -1297,13 +1405,14 @@ public sealed class MatchService : IMatchService
     {
         _auth.EnsureCanWrite();
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        // Innings only first — avoid Include(Deliveries) cartesian blow-up on long matches.
         var match = await db.Matches
             .Include(m => m.Innings)
-            .ThenInclude(i => i.Deliveries)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("Match not found.");
         EnsureScoringOwner(match);
+        await AttachMatchDeliveriesAsync(db, match, ct).ConfigureAwait(false);
 
         var current = match.Innings
             .Where(i => !i.IsCompleted)
@@ -1332,6 +1441,7 @@ public sealed class MatchService : IMatchService
             EnqueueCompletedMatchSnapshot(db, match);
         }
 
+        await QueueLiveMatchChangesAsync(db, match, current, delivery: null, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
 
@@ -1343,7 +1453,7 @@ public sealed class MatchService : IMatchService
                 _syncTrigger.RequestSyncNow();
         }
 
-        await PublishLiveMatchAsync(match, current.Id, deliveryId: null, ct).ConfigureAwait(false);
+        _live.RequestFlush();
 
         var completeMsg = $"Innings {current.InningsNumber}/{max} ended — match complete.";
         if (!string.IsNullOrWhiteSpace(potmName))
@@ -1366,8 +1476,8 @@ public sealed class MatchService : IMatchService
         _auth.EnsureCanWrite();
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
 
+        // Aggregates only — never Include(Deliveries); that reload grows every ball and stalls UI.
         var innings = await db.Innings
-            .Include(i => i.Deliveries)
             .Where(i => i.MatchId == matchId && !i.IsCompleted)
             .OrderByDescending(i => i.InningsNumber)
             .FirstOrDefaultAsync(ct)
@@ -1377,9 +1487,11 @@ public sealed class MatchService : IMatchService
         var match = await db.Matches.FirstAsync(m => m.Id == matchId, ct).ConfigureAwait(false);
         ScoringOwnership.Stamp(match, _auth);
         EnsureScoringOwner(match);
-        await EnsureSoleLeagueMatchAsync(db, matchId, inProgressOnly: true, ct).ConfigureAwait(false);
+        // Sole-active is enforced at match/innings start — skip the extra query on every ball.
 
-        var legalSoFar = innings.Deliveries.Count(d => d.IsLegalDelivery);
+        var legalSoFar = await db.Deliveries
+            .CountAsync(d => d.InningsId == innings.Id && d.IsLegalDelivery, ct)
+            .ConfigureAwait(false);
         var matchLegal = legalSoFar;
         if (match.OversMode == OversMode.MatchTotal)
         {
@@ -1396,7 +1508,12 @@ public sealed class MatchService : IMatchService
                 : $"Overs complete ({match.OversLimit}) — end this innings.");
         }
 
-        var sequence = innings.Deliveries.Count == 0 ? 1 : innings.Deliveries.Max(d => d.Sequence) + 1;
+        var maxSequence = await db.Deliveries
+            .Where(d => d.InningsId == innings.Id)
+            .Select(d => (int?)d.Sequence)
+            .MaxAsync(ct)
+            .ConfigureAwait(false);
+        var sequence = (maxSequence ?? 0) + 1;
         var overNumber = legalSoFar / 6;
         var ballInOver = legalSoFar % 6;
 
@@ -1434,9 +1551,10 @@ public sealed class MatchService : IMatchService
 
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         db.Deliveries.Add(delivery);
+        await QueueLiveMatchChangesAsync(db, match, innings, delivery, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
-        await PublishLiveMatchAsync(match, delivery.InningsId, delivery.Id, ct).ConfigureAwait(false);
+        _live.RequestFlush();
         return delivery;
     }
 
@@ -1478,14 +1596,9 @@ public sealed class MatchService : IMatchService
         db.Deliveries.Remove(last);
         match.UpdatedAtUtc = DateTime.Now;
         match.Version++;
+        await _live.EnqueueDeliveryDeleteAsync(db, match, undoneId, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
-
-        try
-        {
-            await _live.EnqueueDeliveryDeleteAsync(matchId, undoneId, ct).ConfigureAwait(false);
-        }
-        catch { /* live queue must not block undo */ }
         _live.RequestFlush();
         return undone;
     }
@@ -1499,7 +1612,6 @@ public sealed class MatchService : IMatchService
             return null;
 
         var allInnings = await db.Innings.AsNoTracking()
-            .Include(i => i.Deliveries)
             .Where(i => i.MatchId == matchId)
             .OrderBy(i => i.InningsNumber)
             .ToListAsync(ct)
@@ -1509,19 +1621,47 @@ public sealed class MatchService : IMatchService
         if (innings is null)
             return null;
 
-        var deliveries = innings.Deliveries.OrderBy(d => d.Sequence).ToList();
-        var runs = deliveries.Sum(d => d.RunsOffBat + d.ExtraRuns);
-        var wickets = deliveries.Count(d => d.IsWicket);
-        var legal = deliveries.Count(d => d.IsLegalDelivery);
-        var matchLegal = allInnings.Sum(i => i.Deliveries.Count(d => d.IsLegalDelivery));
+        // Scoreboard numbers via SQL aggregates — do not load every delivery into memory.
+        var runs = await db.Deliveries.AsNoTracking()
+            .Where(d => d.InningsId == innings.Id)
+            .SumAsync(d => d.RunsOffBat + d.ExtraRuns, ct)
+            .ConfigureAwait(false);
+        var wickets = await db.Deliveries.AsNoTracking()
+            .CountAsync(d => d.InningsId == innings.Id && d.IsWicket, ct)
+            .ConfigureAwait(false);
+        var legal = await db.Deliveries.AsNoTracking()
+            .CountAsync(d => d.InningsId == innings.Id && d.IsLegalDelivery, ct)
+            .ConfigureAwait(false);
+        var matchLegal = await db.Deliveries.AsNoTracking()
+            .CountAsync(d => d.MatchId == matchId && d.IsLegalDelivery, ct)
+            .ConfigureAwait(false);
         var overs = legal / 6;
         var balls = legal % 6;
-        var last = deliveries.LastOrDefault();
+        var last = await db.Deliveries.AsNoTracking()
+            .Where(d => d.InningsId == innings.Id)
+            .OrderByDescending(d => d.Sequence)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        var thisOverNumber = last?.OverNumber ?? 0;
+        var thisOverBalls = await db.Deliveries.AsNoTracking()
+            .Where(d => d.InningsId == innings.Id && d.OverNumber == thisOverNumber)
+            .OrderBy(d => d.Sequence)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
         var remaining = OversRules.BallsRemaining(match.OversMode, match.OversLimit, legal, matchLegal);
         var oversDone = remaining == 0;
         var ballsRemaining = remaining ?? 0;
 
-        var situation = BuildSituation(match, innings, runs, remaining, allInnings);
+        var inningsRunRows = await db.Deliveries.AsNoTracking()
+            .Where(d => d.MatchId == matchId)
+            .GroupBy(d => d.InningsId)
+            .Select(g => new { InningsId = g.Key, Runs = g.Sum(d => d.RunsOffBat + d.ExtraRuns) })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var inningsRuns = inningsRunRows.ToDictionary(row => row.InningsId, row => row.Runs);
+        inningsRuns[innings.Id] = runs;
+
+        var situation = BuildSituation(match, innings, runs, remaining, allInnings, inningsRuns);
         var currentRunRate = legal == 0 ? 0 : Math.Round(runs * 6.0 / legal, 2);
         var projectedScore = remaining is null || legal == 0
             ? 0
@@ -1555,7 +1695,10 @@ public sealed class MatchService : IMatchService
             currentRunRate,
             requiredRunRate,
             projectedScore,
-            situation.IsChase);
+            situation.IsChase)
+        {
+            ThisOver = BuildThisOver(thisOverBalls)
+        };
     }
 
     public async Task<ScoringContext?> GetScoringContextAsync(Guid matchId, CancellationToken ct = default)
@@ -1699,44 +1842,26 @@ public sealed class MatchService : IMatchService
 
     public async Task<MatchFullScorecard?> GetMatchScorecardAsync(Guid matchId, CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+            return await _api.GetMatchScorecardAsync(matchId, ct).ConfigureAwait(false);
+
         // Always prefer a local card that already has innings (live, just-completed, or
         // tournament match waiting for tournament Sync). Waiting on the API first made
         // unsynced scorecards sit on a spinner until 404/timeout, then fill in slowly.
         var local = await TryBuildLocalScorecardAsync(matchId, ct).ConfigureAwait(false);
         if (local is not null && local.Innings.Count > 0)
             return local;
-
-        try
-        {
-            var remote = await _api.GetMatchScorecardAsync(matchId, ct).ConfigureAwait(false);
-            if (remote is not null && remote.Innings.Count > 0)
-                return remote;
-        }
-        catch
-        {
-            /* offline — local only */
-        }
-
         return local;
     }
 
     public async Task<PlayerMatchReport?> GetPlayerMatchReportAsync(Guid matchId, Guid playerId, CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+            return await _api.GetPlayerMatchReportAsync(matchId, playerId, ct).ConfigureAwait(false);
+
         var local = await TryBuildLocalPlayerReportAsync(matchId, playerId, ct).ConfigureAwait(false);
         if (local is not null)
             return local;
-
-        try
-        {
-            var remote = await _api.GetPlayerMatchReportAsync(matchId, playerId, ct).ConfigureAwait(false);
-            if (remote is not null)
-                return remote;
-        }
-        catch
-        {
-            /* offline */
-        }
-
         return local;
     }
 
@@ -1806,6 +1931,9 @@ public sealed class MatchService : IMatchService
 
     public async Task<IReadOnlyList<MatchPointsRow>> GetMatchPointsAsync(Guid matchId, CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+            return Array.Empty<MatchPointsRow>();
+
         var rows = await TryBuildLocalMatchPointsAsync(matchId, ct).ConfigureAwait(false);
         if (rows.Count > 0)
             return rows;
@@ -1902,21 +2030,12 @@ public sealed class MatchService : IMatchService
 
     public async Task<MatchAnalyticsReport?> GetMatchAnalyticsAsync(Guid matchId, CancellationToken ct = default)
     {
+        if (!CanUseLocalLeagueData)
+            return await _api.GetMatchAnalyticsAsync(matchId, ct).ConfigureAwait(false);
+
         var local = await TryBuildLocalAnalyticsAsync(matchId, ct).ConfigureAwait(false);
         if (local is not null && local.Innings.Count > 0)
             return local;
-
-        try
-        {
-            var remote = await _api.GetMatchAnalyticsAsync(matchId, ct).ConfigureAwait(false);
-            if (remote is not null && remote.Innings.Count > 0)
-                return remote;
-        }
-        catch
-        {
-            /* offline */
-        }
-
         return local;
     }
 
@@ -2534,11 +2653,11 @@ public sealed class MatchService : IMatchService
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var match = await db.Matches
             .Include(m => m.Innings)
-            .ThenInclude(i => i.Deliveries)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("Match not found.");
         EnsureScoringOwner(match);
+        await AttachMatchDeliveriesAsync(db, match, ct).ConfigureAwait(false);
 
         foreach (var inn in match.Innings)
             inn.IsCompleted = true;
@@ -2550,13 +2669,14 @@ public sealed class MatchService : IMatchService
 
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         EnqueueCompletedMatchSnapshot(db, match);
+        await QueueLiveMatchChangesAsync(db, match, match.Innings, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
 
         _squadCache.Clear(matchId);
         if (match.TournamentId is null && match.SeriesId is null)
             _syncTrigger.RequestSyncNow();
-        await PublishLiveMatchAsync(match, inningsId: null, deliveryId: null, ct).ConfigureAwait(false);
+        _live.RequestFlush();
     }
 
     /// <summary>
@@ -2624,10 +2744,10 @@ public sealed class MatchService : IMatchService
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var match = await db.Matches
             .Include(m => m.Innings)
-            .ThenInclude(i => i.Deliveries)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("Match not found.");
+        await AttachMatchDeliveriesAsync(db, match, ct).ConfigureAwait(false);
 
         if (match.Status != MatchStatus.Completed)
             throw new InvalidOperationException("Choose Player of the Match after the match is completed.");
@@ -2639,8 +2759,10 @@ public sealed class MatchService : IMatchService
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         // Re-upsert match (and children) so server receives POTM with the completed graph.
         EnqueueCompletedMatchSnapshot(db, match);
+        await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
+        _live.RequestFlush();
         if (match.TournamentId is null && match.SeriesId is null)
             _syncTrigger.RequestSyncNow();
     }
@@ -2663,8 +2785,11 @@ public sealed class MatchService : IMatchService
         match.LiveStreamUrl = normalized;
         match.UpdatedAtUtc = DateTime.Now;
         match.Version++;
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await PublishLiveMatchAsync(match, inningsId: null, deliveryId: null, ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        _live.RequestFlush();
     }
 
     public async Task DeleteOngoingAsync(Guid matchId, CancellationToken ct = default)
@@ -2685,14 +2810,12 @@ public sealed class MatchService : IMatchService
         match.IsDeleted = true;
         match.UpdatedAtUtc = DateTime.Now;
         match.Version++;
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await _live.EnqueueMatchDeleteAsync(db, matchId, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
 
         _squadCache.Clear(matchId);
-        try
-        {
-            await _live.EnqueueMatchDeleteAsync(matchId, ct).ConfigureAwait(false);
-        }
-        catch { }
         _live.RequestFlush();
     }
 
@@ -2709,6 +2832,18 @@ public sealed class MatchService : IMatchService
             foreach (var d in inn.Deliveries.OrderBy(x => x.Sequence))
                 _outbox.Enqueue(db, nameof(Delivery), d.Id, "Upsert", ToDeliveryPayload(d));
         }
+    }
+
+    /// <summary>
+    /// Load deliveries in a separate query so EF relationship fix-up fills innings
+    /// without an Include cartesian product on long matches.
+    /// </summary>
+    private static async Task AttachMatchDeliveriesAsync(JplDbContext db, Match match, CancellationToken ct)
+    {
+        _ = await db.Deliveries
+            .Where(d => d.MatchId == match.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
     }
 
     private static EndInningsResult PlanNextInnings(
@@ -2767,7 +2902,8 @@ public sealed class MatchService : IMatchService
         Innings current,
         int currentRuns,
         int? ballsRemaining,
-        IReadOnlyList<Innings> allInnings)
+        IReadOnlyList<Innings> allInnings,
+        IReadOnlyDictionary<Guid, int> inningsRuns)
     {
         var ballsLabel = ballsRemaining is int left ? BallsLabel(left) : "no over limit";
         var rrr = (int need) =>
@@ -2782,6 +2918,9 @@ public sealed class MatchService : IMatchService
             return $"Target {target} · Need {need} runs from {ballsRemaining} balls ({ballsLabel}) · RRR {rrr(need)}";
         }
 
+        int RunsOf(Innings? row)
+            => row is null ? 0 : inningsRuns.GetValueOrDefault(row.Id);
+
         if (current.InningsNumber == 1)
         {
             return new SituationInfo(
@@ -2795,17 +2934,17 @@ public sealed class MatchService : IMatchService
 
         int TeamRuns(Guid teamId) => allInnings
             .Where(i => i.BattingTeamId == teamId)
-            .Sum(i => i.Id == current.Id ? currentRuns : InningsRuns(i));
+            .Sum(i => i.Id == current.Id ? currentRuns : RunsOf(i));
 
         int CompletedTeamRuns(Guid teamId) => allInnings
             .Where(i => i.BattingTeamId == teamId && i.Id != current.Id)
-            .Sum(InningsRuns);
+            .Sum(RunsOf);
 
         // Single inning — 2nd turn is always a chase.
         if (match.Format == MatchFormat.SingleInning && current.InningsNumber == 2)
         {
             var first = allInnings.FirstOrDefault(i => i.InningsNumber == 1);
-            var firstScore = first is null ? 0 : InningsRuns(first);
+            var firstScore = RunsOf(first);
             var target = firstScore + 1;
             var need = Math.Max(0, target - currentRuns);
             return new SituationInfo(ChaseLine(target, need), target, need, true);
@@ -2815,7 +2954,7 @@ public sealed class MatchService : IMatchService
         if (match.Format == MatchFormat.DoubleInnings && current.InningsNumber == 2)
         {
             var first = allInnings.FirstOrDefault(i => i.InningsNumber == 1);
-            var firstScore = first is null ? 0 : InningsRuns(first);
+            var firstScore = RunsOf(first);
             var diff = currentRuns - firstScore;
             var leadTrail = diff < 0
                 ? $"Trail by {-diff}"
@@ -2951,20 +3090,28 @@ public sealed class MatchService : IMatchService
     /// decides whether the match is advertised/streamed — without this the server has no
     /// copy of a tournament match until the whole tournament syncs, so a reinstall loses it.
     /// </summary>
-    private async Task PublishLiveMatchAsync(Match match, Guid? inningsId, Guid? deliveryId, CancellationToken ct)
+    private async Task QueueLiveMatchChangesAsync(
+        JplDbContext db,
+        Match match,
+        Innings? innings,
+        Delivery? delivery,
+        CancellationToken ct)
     {
-        try
-        {
-            await _live.EnqueueMatchAsync(match.Id, ct).ConfigureAwait(false);
-            if (inningsId is Guid iid)
-                await _live.EnqueueInningsAsync(iid, ct).ConfigureAwait(false);
-            if (deliveryId is Guid did)
-                await _live.EnqueueDeliveryAsync(did, ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            /* scoring stays local if live queue fails */
-        }
-        _live.RequestFlush();
+        await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
+        if (innings is not null)
+            await _live.EnqueueInningsAsync(db, innings, ct).ConfigureAwait(false);
+        if (delivery is not null)
+            await _live.EnqueueDeliveryAsync(db, delivery, ct).ConfigureAwait(false);
+    }
+
+    private async Task QueueLiveMatchChangesAsync(
+        JplDbContext db,
+        Match match,
+        IEnumerable<Innings> innings,
+        CancellationToken ct)
+    {
+        await _live.EnqueueMatchAsync(db, match, ct).ConfigureAwait(false);
+        foreach (var item in innings.OrderBy(item => item.InningsNumber))
+            await _live.EnqueueInningsAsync(db, item, ct).ConfigureAwait(false);
     }
 }

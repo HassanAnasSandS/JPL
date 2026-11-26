@@ -74,8 +74,6 @@ public sealed class UserService : IUserService
         _auth.EnsureCanManageUsers();
         var username = RequireUsername(draft.Username);
         var password = RequirePassword(draft.Password);
-        if (draft.Role == AppRole.PublicUser)
-            throw new ArgumentException("Public users sign up from the login screen.");
         if (draft.Role == AppRole.Guest)
             throw new ArgumentException("Guest is a built-in account.");
         if (draft.Role is not AppRole.GroundOwner
@@ -101,7 +99,7 @@ public sealed class UserService : IUserService
             password,
             role = draft.Role.ToString(),
             isActive = draft.IsActive,
-            leagueId = draft.Role is AppRole.GroundOwner or AppRole.PublicUser or AppRole.Guest
+            leagueId = draft.Role is AppRole.GroundOwner or AppRole.Guest
                 ? (Guid?)null
                 : draft.LeagueId,
             whatsAppNumber = RequireWhatsApp(draft.WhatsAppNumber)
@@ -114,7 +112,7 @@ public sealed class UserService : IUserService
     {
         _auth.EnsureCanManageUsers();
         var username = RequireUsername(draft.Username);
-        if (draft.Role is not AppRole.GroundOwner and not AppRole.PublicUser and not AppRole.Guest
+        if (draft.Role is not AppRole.GroundOwner and not AppRole.Guest
             && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
             throw new ArgumentException("Select a league for this user.");
 
@@ -137,7 +135,7 @@ public sealed class UserService : IUserService
             password = string.IsNullOrWhiteSpace(draft.Password) ? null : draft.Password.Trim(),
             role = draft.Role.ToString(),
             isActive = draft.IsActive,
-            leagueId = draft.Role is AppRole.GroundOwner or AppRole.PublicUser or AppRole.Guest
+            leagueId = draft.Role is AppRole.GroundOwner or AppRole.Guest
                 ? (Guid?)null
                 : draft.LeagueId,
             whatsAppNumber = NormalizeWhatsAppOrNull(draft.WhatsAppNumber)

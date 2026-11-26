@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using JPL.Grounds.Api.Contracts;
 using JPL.Grounds.Api.Data;
 using JPL.Grounds.Api.Models;
@@ -291,10 +292,29 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
     [HttpPost("{id:guid}/bookings")]
     public async Task<ActionResult<BookingDto>> RequestBooking(Guid id, [FromBody] BookingCreateRequest request, CancellationToken ct)
     {
-        if (GroundsCaller.IsGroundOwner(HttpContext) && !GroundsCaller.IsSuperAdmin(HttpContext))
+        if (GroundsCaller.IsSuperAdmin(HttpContext))
+            return StatusCode(StatusCodes.Status403Forbidden, "SuperAdmin manages users only.");
+        if (GroundsCaller.IsGroundOwner(HttpContext))
             return BadRequest("Ground owners book from the owner dashboard.");
         if (GroundsCaller.IsGuest(HttpContext))
-            return StatusCode(StatusCodes.Status403Forbidden, "Sign up with your own account to book a ground.");
+            return StatusCode(StatusCodes.Status403Forbidden, "Login with your own account to book a ground.");
+        var customerId = GroundsCaller.UserId(HttpContext);
+        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct)
+            .ConfigureAwait(false);
+        if (request.ClientRequestId is Guid requestId && requestId != Guid.Empty)
+        {
+            var prior = await _db.Bookings.Include(booking => booking.Ground)
+                .Include(booking => booking.Services)
+                .Include(booking => booking.ShopItems)
+                .FirstOrDefaultAsync(booking => booking.ClientRequestId == requestId, ct)
+                .ConfigureAwait(false);
+            if (prior is not null)
+            {
+                if (prior.CustomerUserId != customerId || prior.GroundId != id)
+                    return Conflict("This request id was already used for a different booking.");
+                return Ok(GroundsMap.ToBooking(prior, prior.Ground));
+            }
+        }
         var accountPhone = GroundsCaller.WhatsAppNumber(HttpContext);
         var phoneSource = !string.IsNullOrWhiteSpace(accountPhone) ? accountPhone : request.CustomerPhone;
         if (!PakistanWhatsApp.TryNormalize(phoneSource, out var customerPhone))
@@ -309,7 +329,6 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
         if (ground is null)
             return NotFound("Ground not found.");
 
-        var customerId = GroundsCaller.UserId(HttpContext);
         var accountName = GroundsCaller.Username(HttpContext);
         var name = !string.IsNullOrWhiteSpace(accountName)
             ? accountName
@@ -323,6 +342,7 @@ public sealed class GroundsController : ControllerBase, IAsyncDisposable
 
         _db.Bookings.Add(booking!);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
         return Ok(GroundsMap.ToBooking(booking!, ground));
     }
 

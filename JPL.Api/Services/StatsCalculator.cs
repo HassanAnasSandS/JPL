@@ -15,6 +15,10 @@ public sealed class PlayerCareerDto
     public int Won { get; set; }
     public int Loss { get; set; }
     public int Tied { get; set; }
+    public int BestWinningStreak { get; set; }
+    public int CurrentWinningStreak { get; set; }
+    public int WorstLosingStreak { get; set; }
+    public int CurrentLosingStreak { get; set; }
     public int CaptainMatches { get; set; }
     public int CaptainWon { get; set; }
     public int CaptainLoss { get; set; }
@@ -40,6 +44,10 @@ public sealed class PlayerCareerDto
     public int TournamentWon { get; set; }
     public int TournamentLoss { get; set; }
     public int TournamentTied { get; set; }
+    public int BestTournamentWinningStreak { get; set; }
+    public int CurrentTournamentWinningStreak { get; set; }
+    public int WorstTournamentLosingStreak { get; set; }
+    public int CurrentTournamentLosingStreak { get; set; }
     public int CaptainTournaments { get; set; }
     public int CaptainTournamentWon { get; set; }
     public int CaptainTournamentLoss { get; set; }
@@ -50,6 +58,10 @@ public sealed class PlayerCareerDto
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
     public int SeriesTied { get; set; }
+    public int BestSeriesWinningStreak { get; set; }
+    public int CurrentSeriesWinningStreak { get; set; }
+    public int WorstSeriesLosingStreak { get; set; }
+    public int CurrentSeriesLosingStreak { get; set; }
     public int CaptainSeries { get; set; }
     public int CaptainSeriesWon { get; set; }
     public int CaptainSeriesLoss { get; set; }
@@ -1829,8 +1841,8 @@ public static class StatsCalculator
             var playerSeries = restrictToPlayerMatches
                 ? seriesList.Where(s => playerMatches.Any(m => m.SeriesId == s.Id)).ToList()
                 : seriesList;
-            ApplyTournamentResults(summary, player.Id, playerTournaments, teams);
-            ApplySeriesResults(summary, player.Id, playerSeries, teams);
+            ApplyTournamentResults(summary, player.Id, playerTournaments, teams, matches, playerInningsById, asBatter, asBowler);
+            ApplySeriesResults(summary, player.Id, playerSeries, teams, matches, playerInningsById, asBatter, asBowler);
 
             summary.ExpensePurchased = expensePurchasedByPlayer.GetValueOrDefault(player.Id);
             summary.ExpenseContributed = expenseContributedByPlayer.GetValueOrDefault(player.Id);
@@ -1937,6 +1949,16 @@ public static class StatsCalculator
             battingBalls.AddRange(CloneWithBattingSpells(ordered));
         }
 
+        // A nets session can contain several batting spells for the same player.
+        // Keep the spell for each ball so a later return cannot erase an earlier duck.
+        var battingSpellsByDeliveryId = new Dictionary<Guid, IReadOnlyList<Delivery>>();
+        foreach (var spell in battingBalls.GroupBy(d => d.InningsId))
+        {
+            var spellDeliveries = spell.OrderBy(d => d.Sequence).ToList();
+            foreach (var delivery in spellDeliveries)
+                battingSpellsByDeliveryId[delivery.Id] = spellDeliveries;
+        }
+
         var batByPlayer = battingBalls.GroupBy(d => d.BatterId).ToDictionary(g => g.Key, g => g.ToList());
         var bowlByPlayer = bowlingBalls.GroupBy(d => d.BowlerId).ToDictionary(g => g.Key, g => g.ToList());
         var outsByPlayer = battingBalls
@@ -1961,7 +1983,11 @@ public static class StatsCalculator
             ApplyPartnerRunOuts(summary, battingBalls, player.Id);
             ApplyBowling(summary, asBowler);
             ApplyBattingMilestones(summary, asBatter, outs);
-            ApplyBowlingMilestones(summary, asBowler, battingBalls);
+            ApplyBowlingMilestones(
+                summary,
+                asBowler,
+                bowlingBalls,
+                batterSpellsByDeliveryId: battingSpellsByDeliveryId);
             ApplyFielding(summary, bowlingBalls, player.Id);
 
             if (summary.Sessions == 0 && summary.Runs == 0 && summary.Wickets == 0
@@ -2438,21 +2464,38 @@ public static class StatsCalculator
         List<Delivery> asBowler,
         Dictionary<Guid, Team> teams)
     {
+        var streakRows = new List<(DateTime Date, DateTime Created, Guid Id, int Outcome)>(completedMatches.Count);
         foreach (var match in completedMatches)
         {
             if (!inningsByMatch.TryGetValue(match.Id, out var matchInns))
                 continue;
-            // Playing XI (or bat/bowl appearance) counts as a match — not only balls faced/bowled.
-            var playerTeamId = ResolvePlayerTeamFromSquad(match, playerId)
-                ?? ResolvePlayerTeam(playerId, asBatter, asBowler, inningsById, match.Id);
+            // Prefer bat/bowl side over squad — roster JSON can list the wrong team.
+            var playerTeamId = ResolvePlayerTeam(playerId, asBatter, asBowler, inningsById, match.Id)
+                ?? ResolvePlayerTeamFromSquad(match, playerId);
             if (playerTeamId is null)
                 continue;
 
             summary.Matches++;
             var (winnerId, tied) = ResolveResult(match, matchInns);
-            if (tied) summary.Tied++;
-            else if (winnerId == playerTeamId) summary.Won++;
-            else summary.Loss++;
+            int outcome;
+            if (tied)
+            {
+                summary.Tied++;
+                outcome = 0;
+            }
+            else if (winnerId == playerTeamId)
+            {
+                summary.Won++;
+                outcome = 1;
+            }
+            else
+            {
+                summary.Loss++;
+                outcome = -1;
+            }
+
+            // CreatedAtUtc breaks ties when several matches share the same MatchDateUtc.
+            streakRows.Add((match.MatchDateUtc, match.CreatedAtUtc, match.Id, outcome));
 
             var captainA = match.TeamACaptainId ?? (teams.TryGetValue(match.TeamAId, out var ta) ? ta.CaptainPlayerId : null);
             var captainB = match.TeamBCaptainId ?? (teams.TryGetValue(match.TeamBId, out var tb) ? tb.CaptainPlayerId : null);
@@ -2472,6 +2515,76 @@ public static class StatsCalculator
             summary.CaptainRunsAgainst += themRuns;
             summary.CaptainBallsAgainst += themBalls;
         }
+
+        var (bestWin, currentWin, worstLoss, currentLoss) = ComputeResultStreaks(streakRows);
+        summary.BestWinningStreak = bestWin;
+        summary.CurrentWinningStreak = currentWin;
+        summary.WorstLosingStreak = worstLoss;
+        summary.CurrentLosingStreak = currentLoss;
+    }
+
+    /// <summary>
+    /// Outcome is 1 win, -1 loss, 0 tie. Ties break both streaks.
+    /// Current streaks count only the events at the end of the chronological order.
+    /// </summary>
+    private static (int BestWin, int CurrentWin, int WorstLoss, int CurrentLoss) ComputeResultStreaks(
+        List<(DateTime Date, DateTime Created, Guid Id, int Outcome)> rows)
+    {
+        if (rows.Count == 0)
+            return (0, 0, 0, 0);
+
+        rows.Sort(static (a, b) =>
+        {
+            var byDate = a.Date.CompareTo(b.Date);
+            if (byDate != 0) return byDate;
+            var byCreated = a.Created.CompareTo(b.Created);
+            return byCreated != 0 ? byCreated : a.Id.CompareTo(b.Id);
+        });
+
+        var bestWin = 0;
+        var worstLoss = 0;
+        var runWin = 0;
+        var runLoss = 0;
+        foreach (var row in rows)
+        {
+            if (row.Outcome > 0)
+            {
+                runWin++;
+                runLoss = 0;
+                if (runWin > bestWin)
+                    bestWin = runWin;
+            }
+            else if (row.Outcome < 0)
+            {
+                runLoss++;
+                runWin = 0;
+                if (runLoss > worstLoss)
+                    worstLoss = runLoss;
+            }
+            else
+            {
+                runWin = 0;
+                runLoss = 0;
+            }
+        }
+
+        var currentWin = 0;
+        for (var i = rows.Count - 1; i >= 0; i--)
+        {
+            if (rows[i].Outcome <= 0)
+                break;
+            currentWin++;
+        }
+
+        var currentLoss = 0;
+        for (var i = rows.Count - 1; i >= 0; i--)
+        {
+            if (rows[i].Outcome >= 0)
+                break;
+            currentLoss++;
+        }
+
+        return (bestWin, currentWin, worstLoss, currentLoss);
     }
 
     /// <summary>Team id if this player was named in the match playing XI (squad roster).</summary>
@@ -2494,30 +2607,43 @@ public static class StatsCalculator
         PlayerCareerDto summary,
         Guid playerId,
         List<Tournament> tournaments,
-        Dictionary<Guid, Team> teams)
+        Dictionary<Guid, Team> teams,
+        List<Match> allMatches,
+        Dictionary<Guid, Innings> inningsById,
+        List<Delivery> asBatter,
+        List<Delivery> asBowler)
     {
+        var streakRows = new List<(DateTime Date, DateTime Created, Guid Id, int Outcome)>(tournaments.Count);
         foreach (var tour in tournaments)
         {
-            Guid? playerTeamId = null;
-            foreach (var tt in tour.Teams)
-            {
-                if (!teams.TryGetValue(tt.TeamId, out var team))
-                    continue;
-                if (team.TeamPlayers.Any(tp => tp.PlayerId == playerId))
-                {
-                    playerTeamId = tt.TeamId;
-                    break;
-                }
-            }
-
+            var tourMatches = allMatches.Where(m => m.TournamentId == tour.Id).ToList();
+            var playerTeamId = ResolvePlayerTeamForEvent(
+                playerId, tourMatches, teams, tour.Teams.Select(t => t.TeamId), inningsById, asBatter, asBowler);
             if (playerTeamId is null)
                 continue;
 
             summary.Tournaments++;
             var won = tour.WinnerTeamId == playerTeamId;
-            if (won) summary.TournamentWon++;
-            else if (tour.WinnerTeamId is null) summary.TournamentTied++;
-            else summary.TournamentLoss++;
+            int outcome;
+            if (won)
+            {
+                summary.TournamentWon++;
+                outcome = 1;
+            }
+            else if (tour.WinnerTeamId is null)
+            {
+                summary.TournamentTied++;
+                outcome = 0;
+            }
+            else
+            {
+                summary.TournamentLoss++;
+                outcome = -1;
+            }
+
+            // Chronological order by last match date — UpdatedAtUtc changes on edits and breaks streaks.
+            var sortDate = EventSortDate(tourMatches, tour.CreatedAtUtc);
+            streakRows.Add((sortDate, tour.CreatedAtUtc, tour.Id, outcome));
 
             if (!teams.TryGetValue(playerTeamId.Value, out var playerTeam)
                 || playerTeam.CaptainPlayerId != playerId)
@@ -2528,38 +2654,59 @@ public static class StatsCalculator
             else if (tour.WinnerTeamId is null) summary.CaptainTournamentTied++;
             else summary.CaptainTournamentLoss++;
         }
+
+        var (bestWin, currentWin, worstLoss, currentLoss) = ComputeResultStreaks(streakRows);
+        summary.BestTournamentWinningStreak = bestWin;
+        summary.CurrentTournamentWinningStreak = currentWin;
+        summary.WorstTournamentLosingStreak = worstLoss;
+        summary.CurrentTournamentLosingStreak = currentLoss;
     }
 
     private static void ApplySeriesResults(
         PlayerCareerDto summary,
         Guid playerId,
         List<Series> seriesList,
-        Dictionary<Guid, Team> teams)
+        Dictionary<Guid, Team> teams,
+        List<Match> allMatches,
+        Dictionary<Guid, Innings> inningsById,
+        List<Delivery> asBatter,
+        List<Delivery> asBowler)
     {
+        var streakRows = new List<(DateTime Date, DateTime Created, Guid Id, int Outcome)>(seriesList.Count);
         foreach (var series in seriesList)
         {
-            Guid? playerTeamId = null;
-            foreach (var teamId in new[] { series.TeamAId, series.TeamBId })
-            {
-                if (!teams.TryGetValue(teamId, out var team))
-                    continue;
-                if (team.TeamPlayers.Any(tp => tp.PlayerId == playerId))
-                {
-                    playerTeamId = teamId;
-                    break;
-                }
-            }
-
+            var seriesMatches = allMatches.Where(m => m.SeriesId == series.Id).ToList();
+            var playerTeamId = ResolvePlayerTeamForEvent(
+                playerId,
+                seriesMatches,
+                teams,
+                new[] { series.TeamAId, series.TeamBId },
+                inningsById,
+                asBatter,
+                asBowler);
             if (playerTeamId is null)
                 continue;
 
             summary.Series++;
+            int outcome;
             if (series.IsTied)
+            {
                 summary.SeriesTied++;
+                outcome = 0;
+            }
             else if (series.WinnerTeamId == playerTeamId)
+            {
                 summary.SeriesWon++;
+                outcome = 1;
+            }
             else
+            {
                 summary.SeriesLoss++;
+                outcome = -1;
+            }
+
+            var sortDate = EventSortDate(seriesMatches, series.CreatedAtUtc);
+            streakRows.Add((sortDate, series.CreatedAtUtc, series.Id, outcome));
 
             if (!teams.TryGetValue(playerTeamId.Value, out var playerTeam)
                 || playerTeam.CaptainPlayerId != playerId)
@@ -2573,7 +2720,47 @@ public static class StatsCalculator
             else
                 summary.CaptainSeriesLoss++;
         }
+
+        var (bestWin, currentWin, worstLoss, currentLoss) = ComputeResultStreaks(streakRows);
+        summary.BestSeriesWinningStreak = bestWin;
+        summary.CurrentSeriesWinningStreak = currentWin;
+        summary.WorstSeriesLosingStreak = worstLoss;
+        summary.CurrentSeriesLosingStreak = currentLoss;
     }
+
+    /// <summary>Prefer the team the player actually played for in event matches; fall back to current roster.</summary>
+    private static Guid? ResolvePlayerTeamForEvent(
+        Guid playerId,
+        List<Match> eventMatches,
+        Dictionary<Guid, Team> teams,
+        IEnumerable<Guid> eventTeamIds,
+        Dictionary<Guid, Innings> inningsById,
+        List<Delivery> asBatter,
+        List<Delivery> asBowler)
+    {
+        foreach (var match in eventMatches.OrderByDescending(m => m.MatchDateUtc).ThenByDescending(m => m.CreatedAtUtc).ThenByDescending(m => m.Id))
+        {
+            var teamId = ResolvePlayerTeam(playerId, asBatter, asBowler, inningsById, match.Id)
+                ?? ResolvePlayerTeamFromSquad(match, playerId);
+            if (teamId is Guid id)
+                return id;
+        }
+
+        foreach (var teamId in eventTeamIds)
+        {
+            if (!teams.TryGetValue(teamId, out var team))
+                continue;
+            if (team.TeamPlayers.Any(tp => tp.PlayerId == playerId))
+                return teamId;
+        }
+
+        return null;
+    }
+
+    private static DateTime EventSortDate(List<Match> eventMatches, DateTime fallback)
+        => eventMatches.Count == 0
+            ? fallback
+            : eventMatches.Max(m => m.MatchDateUtc);
 
     private static Guid? ResolvePlayerTeam(
         Guid playerId,
@@ -2768,7 +2955,8 @@ public static class StatsCalculator
         List<Delivery> asBowler,
         IReadOnlyList<Delivery> allDeliveries,
         IReadOnlyList<Match>? matches = null,
-        IReadOnlyDictionary<Guid, Innings>? inningsById = null)
+        IReadOnlyDictionary<Guid, Innings>? inningsById = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Delivery>>? batterSpellsByDeliveryId = null)
     {
         var bestWkts = -1;
         var bestRuns = int.MaxValue;
@@ -2807,12 +2995,15 @@ public static class StatsCalculator
                 bestRuns = runs;
             }
 
-            if (!byInnings.TryGetValue(innGroup.Key, out var innBalls))
-                continue;
             foreach (var wicket in list.Where(IsBowlerWicket))
             {
                 var dismissedId = wicket.DismissedPlayerId ?? wicket.BatterId;
-                var (batterRuns, batterBalls) = BatterScoreUpTo(innBalls, dismissedId, wicket.Sequence);
+                var ballsForWicket = batterSpellsByDeliveryId?.GetValueOrDefault(wicket.Id)
+                                     ?? byInnings.GetValueOrDefault(innGroup.Key);
+                if (ballsForWicket is null)
+                    continue;
+
+                var (batterRuns, batterBalls) = BatterScoreUpTo(ballsForWicket, dismissedId, wicket.Sequence);
                 if (batterRuns != 0)
                     continue;
                 s.DuckWkts++;

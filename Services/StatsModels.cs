@@ -1,4 +1,65 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace JPL.Services;
+
+/// <summary>One completed Nets session with its four automatically calculated awards.</summary>
+public sealed class NetSessionAwardsRow
+{
+    public Guid SessionId { get; set; }
+    public string SessionName { get; set; } = string.Empty;
+    public DateTime SessionDateUtc { get; set; }
+    public Guid? PlayerOfTheSessionPlayerId { get; set; }
+    public string? PlayerOfTheSessionName { get; set; }
+    public Guid? BestBatsmanPlayerId { get; set; }
+    public string? BestBatsmanName { get; set; }
+    public Guid? BestBowlerPlayerId { get; set; }
+    public string? BestBowlerName { get; set; }
+    public Guid? BestFielderPlayerId { get; set; }
+    public string? BestFielderName { get; set; }
+    public bool IsAltRow { get; set; }
+    public string SessionDisplay => string.IsNullOrWhiteSpace(SessionName)
+        ? SessionDateUtc.ToLocalTime().ToString("dd MMM yyyy")
+        : $"{SessionName} · {SessionDateUtc.ToLocalTime():dd MMM yyyy}";
+    public string PlayerOfTheSessionDisplay => PlayerOfTheSessionName ?? "—";
+    public string BestBatsmanDisplay => BestBatsmanName ?? "—";
+    public string BestBowlerDisplay => BestBowlerName ?? "—";
+    public string BestFielderDisplay => BestFielderName ?? "—";
+}
+
+public sealed partial class PlayerTournamentHistoryItem : ObservableObject
+{
+    public Guid TournamentId { get; init; }
+    public string TournamentName { get; init; } = string.Empty;
+    public string StatusText { get; init; } = string.Empty;
+    public ObservableCollection<ApiMatchSummaryDto> Matches { get; } = new();
+    public int MatchCount => Matches.Count;
+    private bool _isExpanded;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetProperty(ref _isExpanded, value);
+    }
+}
+
+public sealed class PlayerSeriesHistoryItem : ObservableObject
+{
+    public Guid SeriesId { get; init; }
+    public string SeriesName { get; init; } = string.Empty;
+    public string StatusText { get; init; } = string.Empty;
+    public string TeamAName { get; init; } = string.Empty;
+    public string TeamBName { get; init; } = string.Empty;
+    public int TeamAWins { get; init; }
+    public int TeamBWins { get; init; }
+    public string SummaryText => $"{TeamAName} {TeamAWins}–{TeamBWins} {TeamBName}";
+    public ObservableCollection<ApiMatchSummaryDto> Matches { get; } = new();
+    private bool _isExpanded;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetProperty(ref _isExpanded, value);
+    }
+}
 
 /// <summary>Batter vs a specific bowler (or bowler vs batter) career confrontation.</summary>
 public sealed class ConfrontationStat
@@ -167,7 +228,7 @@ public sealed class PartnershipMatchStat
 }
 
 /// <summary>Full leaderboard row: Match · Batting · Bowling · Fielding · Attendance.</summary>
-public sealed class PlayerCareerSummary
+public sealed partial class PlayerCareerSummary : ObservableObject
 {
     public Guid PlayerId { get; init; }
     public string PlayerName { get; init; } = string.Empty;
@@ -180,9 +241,35 @@ public sealed class PlayerCareerSummary
 
     // Match
     public int Matches { get; set; }
+    /// <summary>Count displayed in the first discipline column: sessions for Nets, matches otherwise.</summary>
+    public int MatchesOrSessions => Sessions > 0 ? Sessions : Matches;
     public int Won { get; set; }
     public int Loss { get; set; }
     public int Tied { get; set; }
+    private int _bestWinningStreak;
+    public int BestWinningStreak
+    {
+        get => _bestWinningStreak;
+        set => SetProperty(ref _bestWinningStreak, value);
+    }
+    private int _currentWinningStreak;
+    public int CurrentWinningStreak
+    {
+        get => _currentWinningStreak;
+        set => SetProperty(ref _currentWinningStreak, value);
+    }
+    private int _worstLosingStreak;
+    public int WorstLosingStreak
+    {
+        get => _worstLosingStreak;
+        set => SetProperty(ref _worstLosingStreak, value);
+    }
+    private int _currentLosingStreak;
+    public int CurrentLosingStreak
+    {
+        get => _currentLosingStreak;
+        set => SetProperty(ref _currentLosingStreak, value);
+    }
     public double MatchWinPct => Matches == 0
         ? 0
         : Math.Round(((Won + Tied * 0.5) / Matches) * 100, 1);
@@ -216,6 +303,30 @@ public sealed class PlayerCareerSummary
     public int TournamentWon { get; set; }
     public int TournamentLoss { get; set; }
     public int TournamentTied { get; set; }
+    private int _bestTournamentWinningStreak;
+    public int BestTournamentWinningStreak
+    {
+        get => _bestTournamentWinningStreak;
+        set => SetProperty(ref _bestTournamentWinningStreak, value);
+    }
+    private int _currentTournamentWinningStreak;
+    public int CurrentTournamentWinningStreak
+    {
+        get => _currentTournamentWinningStreak;
+        set => SetProperty(ref _currentTournamentWinningStreak, value);
+    }
+    private int _worstTournamentLosingStreak;
+    public int WorstTournamentLosingStreak
+    {
+        get => _worstTournamentLosingStreak;
+        set => SetProperty(ref _worstTournamentLosingStreak, value);
+    }
+    private int _currentTournamentLosingStreak;
+    public int CurrentTournamentLosingStreak
+    {
+        get => _currentTournamentLosingStreak;
+        set => SetProperty(ref _currentTournamentLosingStreak, value);
+    }
     public double TournamentWinPct => Tournaments == 0
         ? 0
         : Math.Round(((TournamentWon + TournamentTied * 0.5) / Tournaments) * 100, 1);
@@ -236,6 +347,30 @@ public sealed class PlayerCareerSummary
     public int SeriesWon { get; set; }
     public int SeriesLoss { get; set; }
     public int SeriesTied { get; set; }
+    private int _bestSeriesWinningStreak;
+    public int BestSeriesWinningStreak
+    {
+        get => _bestSeriesWinningStreak;
+        set => SetProperty(ref _bestSeriesWinningStreak, value);
+    }
+    private int _currentSeriesWinningStreak;
+    public int CurrentSeriesWinningStreak
+    {
+        get => _currentSeriesWinningStreak;
+        set => SetProperty(ref _currentSeriesWinningStreak, value);
+    }
+    private int _worstSeriesLosingStreak;
+    public int WorstSeriesLosingStreak
+    {
+        get => _worstSeriesLosingStreak;
+        set => SetProperty(ref _worstSeriesLosingStreak, value);
+    }
+    private int _currentSeriesLosingStreak;
+    public int CurrentSeriesLosingStreak
+    {
+        get => _currentSeriesLosingStreak;
+        set => SetProperty(ref _currentSeriesLosingStreak, value);
+    }
     public double SeriesWinPct => Series == 0
         ? 0
         : Math.Round(((SeriesWon + SeriesTied * 0.5) / Series) * 100, 1);
@@ -309,6 +444,9 @@ public sealed class PlayerCareerSummary
         ? 0
         : Math.Round(FieldingTotal / (double)Matches, 2);
     public string FieldingPerMatchText => Matches == 0 ? "-" : FieldingPerMatch.ToString("0.##");
+    public double FieldingPerSession => Sessions == 0 ? 0 : Math.Round(FieldingTotal / (double)Sessions, 2);
+    public string FieldingPerSessionText => Sessions == 0 ? "-" : FieldingPerSession.ToString("0.##");
+    public string FieldingRateText => Sessions > 0 ? FieldingPerSessionText : FieldingPerMatchText;
     /// <summary>Catches dropped while fielding (credited to the fielder).</summary>
     public int DroppedCatches { get; set; }
 

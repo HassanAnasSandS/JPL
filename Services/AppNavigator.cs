@@ -3,7 +3,7 @@ namespace JPL.Services;
 public interface IAppNavigator
 {
     void Attach(Window window);
-    Task ShowLoginAsync(bool openSignup = false);
+    Task ShowLoginAsync();
     Task ShowMainAsync();
     Task ShowLeaguePickerAsync();
     Task ShowLeagueEditorAsync(Guid? id);
@@ -16,6 +16,7 @@ public sealed class AppNavigator : IAppNavigator
     private readonly IServiceProvider _services;
     private readonly IAppStartupStatus _startup;
     private Window? _window;
+    private bool _restoreAndroidScreenOnNextMain;
 
     public AppNavigator(IServiceProvider services, IAppStartupStatus startup)
     {
@@ -25,17 +26,14 @@ public sealed class AppNavigator : IAppNavigator
 
     public void Attach(Window window) => _window = window;
 
-    public Task ShowLoginAsync(bool openSignup = false)
+    public Task ShowLoginAsync()
     {
         if (_window is null)
             return Task.CompletedTask;
 
         _startup.Clear();
         _services.GetRequiredService<IAppWorkspace>().Clear();
-        var page = _services.GetRequiredService<Pages.LoginPage>();
-        if (openSignup && page.BindingContext is ViewModels.LoginViewModel vm)
-            vm.PrepareSignup();
-        _window.Page = page;
+        _window.Page = _services.GetRequiredService<Pages.LoginPage>();
         return Task.CompletedTask;
     }
 
@@ -109,8 +107,19 @@ public sealed class AppNavigator : IAppNavigator
 
         try
         {
+            var restoreAndroidScreen = _restoreAndroidScreenOnNextMain;
+            _restoreAndroidScreenOnNextMain = false;
+            var auth = _services.GetRequiredService<IAuthService>();
+            var league = _services.GetRequiredService<ILeagueContext>();
+            var lastRoute = restoreAndroidScreen
+                ? AndroidScreenState.Load(auth.Current, league.CurrentLeagueId)
+                : null;
+
             _window.Page = _services.GetRequiredService<AppShell>();
-            _ = ResumeActiveMatchAsync();
+            if (!string.IsNullOrWhiteSpace(lastRoute))
+                _ = RestoreAndroidScreenAsync(lastRoute);
+            else
+                _ = ResumeActiveMatchAsync();
         }
         catch (Exception ex)
         {
@@ -122,6 +131,7 @@ public sealed class AppNavigator : IAppNavigator
 
     public async Task ContinueAfterAuthAsync(bool freshLogin)
     {
+        _restoreAndroidScreenOnNextMain = !freshLogin;
         var auth = _services.GetRequiredService<IAuthService>();
         var league = _services.GetRequiredService<ILeagueContext>();
         var workspace = _services.GetRequiredService<IAppWorkspace>();
@@ -135,6 +145,14 @@ public sealed class AppNavigator : IAppNavigator
         if (freshLogin)
         {
             workspace.Clear();
+            // SuperAdmin goes straight to Users — no league/grounds/scheduler modules.
+            if (session.CanManagePlatform)
+            {
+                workspace.Set(AppWorkspace.Users);
+                await ShowMainAsync().ConfigureAwait(true);
+                return;
+            }
+
             await ShowModeChooserAsync().ConfigureAwait(true);
             return;
         }
@@ -155,20 +173,22 @@ public sealed class AppNavigator : IAppNavigator
 
         if (workspace.Current == AppWorkspace.Settings)
         {
-            if (session.CanManagePlatform)
-            {
-                await ShowMainAsync().ConfigureAwait(true);
-                return;
-            }
-
             workspace.Clear();
             await ShowModeChooserAsync().ConfigureAwait(true);
             return;
         }
 
+        if (session.CanManagePlatform
+            && workspace.Current is not AppWorkspace.Users)
+        {
+            workspace.Set(AppWorkspace.Users);
+            await ShowMainAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (workspace.Current == AppWorkspace.GroundOwner)
         {
-            if (session.IsGroundOwner || session.CanManagePlatform)
+            if (session.IsGroundOwner)
             {
                 await ShowMainAsync().ConfigureAwait(true);
                 return;
@@ -238,6 +258,23 @@ public sealed class AppNavigator : IAppNavigator
         catch
         {
             /* shell may not be ready — Matches page Continue still works */
+        }
+    }
+
+    private async Task RestoreAndroidScreenAsync(string route)
+    {
+        try
+        {
+            await Task.Delay(180).ConfigureAwait(true);
+            if (Shell.Current is null)
+                return;
+
+            await Shell.Current.GoToAsync(route, animate: false).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Fall back to the live scoring session if a saved route is stale.
+            await ResumeActiveMatchAsync().ConfigureAwait(true);
         }
     }
 }

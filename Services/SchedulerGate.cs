@@ -17,8 +17,8 @@ public static class SchedulerGate
 
         var login = await page.DisplayAlert(
             "Login required",
-            $"Please login or sign up first to use {featureName}.",
-            "Login / Sign up",
+            $"Please login first to use {featureName}.",
+            "Login",
             "Cancel").ConfigureAwait(true);
         if (!login)
             return false;

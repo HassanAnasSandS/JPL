@@ -37,7 +37,6 @@ public partial class UsersViewModel : ObservableObject
         new() { Role = AppRole.User, Name = "League User" },
         new() { Role = AppRole.Admin, Name = "League Admin" },
         new() { Role = AppRole.GroundOwner, Name = "Ground Owner" },
-        new() { Role = AppRole.PublicUser, Name = "Public User" },
         new() { Role = AppRole.Guest, Name = "Guest" }
     ];
 
@@ -351,9 +350,8 @@ public partial class UsersViewModel : ObservableObject
         Username = u.Username,
         Role = u.Role,
         RoleLabel = AppRoleLabels.Of(u.Role),
-        LeagueName = u.Role is AppRole.PublicUser or AppRole.Guest or AppRole.GroundOwner || string.IsNullOrWhiteSpace(u.LeagueName)
-            ? (u.Role == AppRole.PublicUser ? "Public"
-                : u.Role == AppRole.Guest ? "Guest"
+        LeagueName = u.Role is AppRole.Guest or AppRole.GroundOwner || string.IsNullOrWhiteSpace(u.LeagueName)
+            ? (u.Role == AppRole.Guest ? "Guest"
                 : string.IsNullOrWhiteSpace(u.LeagueName) ? "No league" : u.LeagueName)
             : u.LeagueName,
         IsActive = u.IsActive

@@ -141,110 +141,303 @@ public sealed class TournamentService : ITournamentService
 {
     private readonly IApiClient _api;
     private readonly IAuthService _auth;
+    private readonly ILeagueContext _league;
     private readonly ISyncService _sync;
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
+    private readonly IOutboxWriter _outbox;
+    private readonly ISyncTrigger _syncTrigger;
 
     public TournamentService(
         IApiClient api,
         IAuthService auth,
+        ILeagueContext league,
         ISyncService sync,
-        IDbContextFactory<JplDbContext> dbFactory)
+        IDbContextFactory<JplDbContext> dbFactory,
+        IOutboxWriter outbox,
+        ISyncTrigger syncTrigger)
     {
         _api = api;
         _auth = auth;
+        _league = league;
         _sync = sync;
         _dbFactory = dbFactory;
+        _outbox = outbox;
+        _syncTrigger = syncTrigger;
     }
 
     public async Task<IReadOnlyList<TournamentListItem>> GetAllAsync(CancellationToken ct = default)
     {
-        var remote = await _api.GetTournamentsAsync(ct).ConfigureAwait(false);
-        var pendingTours = await _sync.GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
-        var list = new List<TournamentListItem>();
-        foreach (var t in remote)
-        {
-            var pending = pendingTours.Contains(t.Id);
-            var ready = pending && await IsReadyToSyncAsync(t.Id, ct).ConfigureAwait(false);
-            list.Add(new TournamentListItem
-            {
-                Id = t.Id,
-                Name = t.Name,
-                Status = t.Status,
-                StatusText = t.StatusText,
-                MetaLine = $"{t.GroupCount} group{(t.GroupCount == 1 ? "" : "s")} · Qualify {t.QualifyPerGroup} · {t.TeamCount} teams · {t.FixtureCount} fixtures",
-                WinnerLine = string.IsNullOrWhiteSpace(t.WinnerTeamName) ? "" : $"Champion: {t.WinnerTeamName}",
-                NeedsSync = ready
-            });
-        }
+        var canUseLocal = LeagueSyncPolicy.UsesLocalStorage(_auth.Current);
+        if (canUseLocal)
+            return await LoadLocalListAsync(ct).ConfigureAwait(false);
 
-        return list;
+        try
+        {
+            var remote = await _api.GetTournamentsAsync(ct).ConfigureAwait(false);
+            var pendingTours = await _sync.GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
+            var list = new List<TournamentListItem>();
+            foreach (var t in remote)
+            {
+                var pending = pendingTours.Contains(t.Id);
+                var ready = pending && await IsReadyToSyncAsync(t.Id, ct).ConfigureAwait(false);
+                list.Add(new TournamentListItem
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    Status = t.Status,
+                    StatusText = t.StatusText,
+                    MetaLine = $"{t.GroupCount} group{(t.GroupCount == 1 ? "" : "s")} · Qualify {t.QualifyPerGroup} · {t.TeamCount} teams · {t.FixtureCount} fixtures",
+                    WinnerLine = string.IsNullOrWhiteSpace(t.WinnerTeamName) ? "" : $"Champion: {t.WinnerTeamName}",
+                    NeedsSync = ready
+                });
+            }
+            return list;
+        }
+        catch (Exception ex) when (ex is OfflineException || NetworkUi.IsNetworkFailure(ex))
+        {
+            if (canUseLocal)
+                return await LoadLocalListAsync(ct).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<IReadOnlyList<TournamentListItem>> LoadLocalListAsync(CancellationToken ct)
+    {
+        await using var localDb = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var ids = await localDb.Tournaments.AsNoTracking().OrderByDescending(row => row.UpdatedAtUtc)
+            .Select(row => row.Id).ToListAsync(ct).ConfigureAwait(false);
+        var pending = await _sync.GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
+        var result = new List<TournamentListItem>(ids.Count);
+        foreach (var id in ids)
+        {
+            var detail = await GetLocalDetailAsync(id, ct).ConfigureAwait(false);
+            if (detail is null) continue;
+            result.Add(ToListItem(detail, pending.Contains(id) && IsTournamentFullyComplete(detail)));
+        }
+        return result;
     }
 
     public async Task<ApiPagedResult<TournamentListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
     {
-        var remote = await _api.GetTournamentsPageAsync(skip, q, ct).ConfigureAwait(false);
-        var pendingTours = await _sync.GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
-        var list = new List<TournamentListItem>();
-        foreach (var t in remote.Items ?? [])
-        {
-            var pending = pendingTours.Contains(t.Id);
-            var ready = pending && await IsReadyToSyncAsync(t.Id, ct).ConfigureAwait(false);
-            list.Add(new TournamentListItem
-            {
-                Id = t.Id,
-                Name = t.Name,
-                Status = t.Status,
-                StatusText = t.StatusText,
-                MetaLine = $"{t.GroupCount} group{(t.GroupCount == 1 ? "" : "s")} · Qualify {t.QualifyPerGroup} · {t.TeamCount} teams · {t.FixtureCount} fixtures",
-                WinnerLine = string.IsNullOrWhiteSpace(t.WinnerTeamName) ? "" : $"Champion: {t.WinnerTeamName}",
-                NeedsSync = ready
-            });
-        }
-
-        return remote.WithItems(list);
+        var local = await GetAllAsync(ct).ConfigureAwait(false);
+        var filteredLocal = string.IsNullOrWhiteSpace(q) ? local
+            : local.Where(row => row.Name.Contains(q.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        var localRows = filteredLocal.ToList();
+        return new ApiPagedResult<TournamentListItem>(localRows.Skip(Math.Max(0, skip))
+            .Take(ListPaging.PageSize).ToList(), localRows.Count, Math.Max(0, skip), ListPaging.PageSize);
     }
 
     public async Task<TournamentDetail?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        var dto = await _api.GetTournamentAsync(id, ct).ConfigureAwait(false);
-        if (dto is null) return null;
-        var detail = ToDetail(dto);
-        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
-        return detail;
+        var canUseLocal = LeagueSyncPolicy.UsesLocalStorage(_auth.Current);
+        if (canUseLocal)
+            return await GetLocalDetailAsync(id, ct).ConfigureAwait(false);
+
+        try
+        {
+            var dto = await _api.GetTournamentAsync(id, ct).ConfigureAwait(false);
+            if (dto is null) return canUseLocal ? await GetLocalDetailAsync(id, ct).ConfigureAwait(false) : null;
+            var detail = ToDetail(dto);
+            if (canUseLocal)
+                await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
+            return detail;
+        }
+        catch (Exception ex) when (ex is OfflineException || NetworkUi.IsNetworkFailure(ex))
+        {
+            if (canUseLocal)
+                return await GetLocalDetailAsync(id, ct).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<TournamentDetail> CreateAsync(TournamentDraft draft, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
         Validate(draft);
-        var remote = await _api.CreateTournamentAsync(ToBody(draft), ct).ConfigureAwait(false);
-        return ToDetail(remote);
+        var now = DateTime.UtcNow;
+        var entity = new Tournament
+        {
+            Id = Guid.NewGuid(), Name = draft.Name.Trim(),
+            GroupCount = draft.RoundRobinType == TournamentRoundRobinType.Custom ? 1 : draft.GroupCount,
+            QualifyPerGroup = draft.QualifyPerGroup, KnockoutFormat = draft.KnockoutFormat,
+            RoundRobinType = draft.RoundRobinType,
+            MatchesPerTeam = draft.RoundRobinType == TournamentRoundRobinType.Custom ? draft.MatchesPerTeam : 0,
+            CustomPairsJson = draft.RoundRobinType == TournamentRoundRobinType.Custom ? draft.CustomPairsJson : null,
+            VenueId = draft.VenueId, FormatId = draft.FormatId, Format = (MatchFormat)draft.Format,
+            OversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit),
+            OversMode = draft.OversMode, LastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket,
+            BowlerMaxOvers = draft.BowlerMaxOvers, Status = TournamentStatus.Draft,
+            Version = 1, CreatedAtUtc = now, UpdatedAtUtc = now
+        };
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await ValidateLocalReferencesAsync(db, draft, ct).ConfigureAwait(false);
+        db.Tournaments.Add(entity);
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        foreach (var row in draft.Teams)
+        {
+            var team = new TournamentTeam { TournamentId = entity.Id, TeamId = row.TeamId,
+                GroupNumber = entity.RoundRobinType == TournamentRoundRobinType.Custom ? 1 : row.GroupNumber };
+            db.TournamentTeams.Add(team);
+            _outbox.EnqueueEntity(db, team, "Upsert");
+        }
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        return await GetLocalDetailAsync(entity.Id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The tournament was saved locally but could not be loaded.");
     }
 
     public async Task<TournamentDetail> UpdateAsync(Guid id, TournamentDraft draft, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
         Validate(draft);
-        var remote = await _api.UpdateTournamentAsync(id, ToBody(draft), ct).ConfigureAwait(false);
-        return ToDetail(remote);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Tournaments.Include(row => row.Teams)
+            .FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Tournament not found.");
+        await ValidateLocalReferencesAsync(db, draft, ct).ConfigureAwait(false);
+        if (entity.Status != TournamentStatus.Draft)
+            throw new InvalidOperationException("Only draft tournaments can be edited. Saved tournaments are locked.");
+        entity.Name = draft.Name.Trim();
+        entity.GroupCount = draft.RoundRobinType == TournamentRoundRobinType.Custom ? 1 : draft.GroupCount;
+        entity.QualifyPerGroup = draft.QualifyPerGroup; entity.KnockoutFormat = draft.KnockoutFormat;
+        entity.RoundRobinType = draft.RoundRobinType;
+        entity.MatchesPerTeam = draft.RoundRobinType == TournamentRoundRobinType.Custom ? draft.MatchesPerTeam : 0;
+        entity.CustomPairsJson = draft.RoundRobinType == TournamentRoundRobinType.Custom ? draft.CustomPairsJson : null;
+        entity.VenueId = draft.VenueId; entity.FormatId = draft.FormatId; entity.Format = (MatchFormat)draft.Format;
+        entity.OversLimit = OversRules.StoredOversLimit(draft.OversMode, draft.OversLimit);
+        entity.OversMode = draft.OversMode; entity.LastBatsmanCanBatAsSingleWicket = draft.LastBatsmanCanBatAsSingleWicket;
+        entity.BowlerMaxOvers = draft.BowlerMaxOvers; entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        var wanted = draft.Teams.ToDictionary(row => row.TeamId, row =>
+            entity.RoundRobinType == TournamentRoundRobinType.Custom ? 1 : row.GroupNumber);
+        foreach (var old in entity.Teams.ToList())
+        {
+            if (!wanted.Remove(old.TeamId, out var groupNumber))
+            {
+                db.TournamentTeams.Remove(old);
+                _outbox.EnqueueEntity(db, old, "Delete");
+                continue;
+            }
+            if (old.GroupNumber == groupNumber) continue;
+            old.GroupNumber = groupNumber;
+            _outbox.EnqueueEntity(db, old, "Upsert");
+        }
+        foreach (var (teamId, groupNumber) in wanted)
+        {
+            var team = new TournamentTeam { TournamentId = entity.Id, TeamId = teamId, GroupNumber = groupNumber };
+            db.TournamentTeams.Add(team);
+            _outbox.EnqueueEntity(db, team, "Upsert");
+        }
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        return await GetLocalDetailAsync(id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The tournament was saved locally but could not be loaded.");
     }
 
     public async Task<TournamentDetail> GenerateAsync(Guid id, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
-        var remote = await _api.GenerateTournamentAsync(id, ct).ConfigureAwait(false);
-        var detail = ToDetail(remote);
-        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
-        return detail;
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Tournaments.Include(row => row.Teams).Include(row => row.Fixtures)
+            .FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Tournament not found.");
+        if (entity.Status != TournamentStatus.Draft)
+            throw new InvalidOperationException("Tournament already saved. Edit / delete is only allowed while Draft.");
+        if (entity.RoundRobinType == TournamentRoundRobinType.Custom)
+        {
+            var pairs = ReadCustomPairs(entity.CustomPairsJson);
+            SchedulerEngine.ValidateCustomPairings(entity.Teams.Select(row => row.TeamId).ToList(),
+                entity.MatchesPerTeam, pairs);
+        }
+        var teamIds = entity.Teams.Select(row => row.TeamId).Distinct().ToArray();
+        var teamNames = teamIds.Length == 0 ? new Dictionary<Guid, string>()
+            : await db.Teams.AsNoTracking().Where(row => teamIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, row => row.Name, ct).ConfigureAwait(false);
+        var schedulerTeams = entity.Teams.OrderBy(row => row.GroupNumber)
+            .ThenBy(row => teamNames.GetValueOrDefault(row.TeamId, string.Empty), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.TeamId)
+            .Select((row, index) => new SchedulerTeam { Id = row.TeamId, TournamentId = entity.Id,
+                Name = teamNames.GetValueOrDefault(row.TeamId, string.Empty), GroupNumber = row.GroupNumber,
+                SortOrder = index }).ToList();
+        var schedule = new SchedulerTournament
+        {
+            Id = entity.Id, GroupCount = entity.GroupCount, QualifyPerGroup = entity.QualifyPerGroup,
+            RoundRobinType = (SchedulerRoundRobinType)entity.RoundRobinType,
+            KnockoutFormat = (SchedulerKnockoutFormat)entity.KnockoutFormat,
+            Teams = schedulerTeams
+        };
+        foreach (var old in entity.Fixtures.ToList())
+        {
+            db.TournamentFixtures.Remove(old);
+            _outbox.EnqueueEntity(db, old, "Delete");
+        }
+        entity.Fixtures.Clear();
+        var built = SchedulerEngine.BuildMatches(schedule,
+            entity.RoundRobinType == TournamentRoundRobinType.Custom ? ReadCustomPairs(entity.CustomPairsJson) : null);
+        foreach (var row in built)
+        {
+            var fixture = new TournamentFixture
+            {
+                Id = row.Id, TournamentId = entity.Id, Stage = row.Stage switch
+                {
+                    SchedulerMatchStage.Group => TournamentFixtureStage.Group,
+                    SchedulerMatchStage.QuarterFinal => TournamentFixtureStage.QuarterFinal,
+                    SchedulerMatchStage.Playoff => TournamentFixtureStage.Playoff,
+                    SchedulerMatchStage.SemiFinal => TournamentFixtureStage.SemiFinal,
+                    SchedulerMatchStage.Final => TournamentFixtureStage.Final,
+                    _ => TournamentFixtureStage.Group
+                },
+                GroupNumber = row.Stage == SchedulerMatchStage.Group ? row.GroupNumber : null,
+                Sequence = row.Sequence, Label = row.Label, TeamAId = row.TeamAId, TeamBId = row.TeamBId,
+                TeamASlot = row.TeamASlot, TeamBSlot = row.TeamBSlot
+            };
+            db.TournamentFixtures.Add(fixture);
+            _outbox.EnqueueEntity(db, fixture, "Upsert");
+        }
+        entity.Status = TournamentStatus.Scheduled; entity.WinnerTeamId = null;
+        entity.PlayerOfTheTournamentPlayerId = null; entity.BestBatsmanPlayerId = null;
+        entity.BestBowlerPlayerId = null; entity.BestFielderPlayerId = null;
+        entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        return await GetLocalDetailAsync(id, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The tournament fixtures were saved locally but could not be loaded.");
     }
 
-    public Task LinkMatchAsync(Guid tournamentId, Guid fixtureId, Guid matchId, CancellationToken ct = default)
-        => _api.LinkTournamentMatchAsync(tournamentId, fixtureId, matchId, ct);
+    public async Task LinkMatchAsync(Guid tournamentId, Guid fixtureId, Guid matchId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Tournaments.Include(row => row.Fixtures)
+            .FirstOrDefaultAsync(row => row.Id == tournamentId, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Tournament not found.");
+        if (entity.Status == TournamentStatus.Draft)
+            throw new InvalidOperationException("Save the tournament first before starting matches.");
+        var fixture = entity.Fixtures.FirstOrDefault(row => row.Id == fixtureId)
+            ?? throw new InvalidOperationException("Tournament fixture not found.");
+        if (fixture.TeamAId is null || fixture.TeamBId is null)
+            throw new InvalidOperationException("Fixture teams are not decided yet.");
+        fixture.MatchId = matchId;
+        if (entity.Status == TournamentStatus.Scheduled) entity.Status = TournamentStatus.InProgress;
+        entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        _outbox.EnqueueEntity(db, fixture, "Upsert");
+        _outbox.EnqueueEntity(db, entity, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+    }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         _auth.EnsureCanWrite();
-        await _api.DeleteTournamentAsync(id, ct).ConfigureAwait(false);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Tournaments.FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false);
+        if (entity is null) return;
+        if (entity.Status != TournamentStatus.Draft)
+            throw new InvalidOperationException("Only draft tournaments can be deleted. Saved tournaments are locked.");
+        entity.IsDeleted = true; entity.Version++; entity.UpdatedAtUtc = DateTime.UtcNow;
+        _outbox.EnqueueEntity(db, entity, "Delete");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
     }
 
     public async Task<bool> IsReadyToSyncAsync(Guid tournamentId, CancellationToken ct = default)
@@ -335,6 +528,10 @@ public sealed class TournamentService : ITournamentService
         OversRules.Validate(draft.OversMode, draft.OversLimit, draft.BowlerMaxOvers);
         if (draft.Teams.Count == 0)
             throw new ArgumentException("Add at least one team.");
+        if (draft.Teams.Select(row => row.TeamId).Distinct().Count() != draft.Teams.Count)
+            throw new ArgumentException("Duplicate teams are not allowed.");
+        if (draft.Teams.Any(row => row.GroupNumber < 1 || row.GroupNumber > groupCount))
+            throw new ArgumentException("Every team must be assigned to a valid group.");
         for (var g = 1; g <= groupCount; g++)
         {
             var n = draft.Teams.Count(t => t.GroupNumber == g);
@@ -349,6 +546,20 @@ public sealed class TournamentService : ITournamentService
             if (draft.Teams.Count < need)
                 throw new ArgumentException($"{SchedulerEngine.KnockoutLabel(ko)} needs {need} teams.");
         }
+    }
+
+    private static async Task ValidateLocalReferencesAsync(
+        JplDbContext db, TournamentDraft draft, CancellationToken ct)
+    {
+        if (!await db.Venues.AnyAsync(row => row.Id == draft.VenueId, ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Venue not found in local league data. Sync before creating this tournament.");
+        if (draft.FormatId is Guid formatId
+            && !await db.Formats.AnyAsync(row => row.Id == formatId, ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Format not found in local league data. Sync before creating this tournament.");
+        var ids = draft.Teams.Select(row => row.TeamId).Distinct().ToArray();
+        var count = await db.Teams.CountAsync(row => ids.Contains(row.Id), ct).ConfigureAwait(false);
+        if (count != ids.Length)
+            throw new InvalidOperationException("A selected team is missing from local league data. Sync before creating this tournament.");
     }
 
     private static object ToBody(TournamentDraft draft)
@@ -455,6 +666,175 @@ public sealed class TournamentService : ITournamentService
         };
         ApplyQualificationMarks(detail);
         return detail;
+    }
+
+    private async Task<TournamentDetail?> GetLocalDetailAsync(Guid id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var entity = await db.Tournaments.AsNoTracking().Include(row => row.Teams)
+            .Include(row => row.Fixtures).FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false);
+        if (entity is null) return null;
+
+        var teamIds = entity.Teams.Select(row => row.TeamId).Distinct().ToArray();
+        var teams = teamIds.Length == 0 ? new Dictionary<Guid, string>()
+            : await db.Teams.AsNoTracking().Where(row => teamIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, row => row.Name, ct).ConfigureAwait(false);
+        var venueName = await db.Venues.AsNoTracking().Where(row => row.Id == entity.VenueId)
+            .Select(row => row.Name).FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? string.Empty;
+        var awardIds = new[] { entity.PlayerOfTheTournamentPlayerId, entity.BestBatsmanPlayerId,
+            entity.BestBowlerPlayerId, entity.BestFielderPlayerId }.OfType<Guid>().Distinct().ToArray();
+        var awards = awardIds.Length == 0 ? new Dictionary<Guid, string>()
+            : await db.Players.AsNoTracking().Where(row => awardIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, row => row.FullName, ct).ConfigureAwait(false);
+        var fixtureIds = entity.Fixtures.Select(fixture => fixture.Id).ToArray();
+        var matches = await db.Matches.AsNoTracking().Where(row => row.TournamentId == id
+                || (row.TournamentFixtureId != null && fixtureIds.Contains(row.TournamentFixtureId.Value)))
+            .ToListAsync(ct).ConfigureAwait(false);
+        var matchesById = matches.ToDictionary(row => row.Id);
+        var matchesByFixture = matches.Where(row => row.TournamentFixtureId is not null)
+            .GroupBy(row => row.TournamentFixtureId!.Value)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(row => row.UpdatedAtUtc).First());
+
+        var dto = new ApiTournamentDetailDto
+        {
+            Id = entity.Id, Name = entity.Name, GroupCount = entity.GroupCount,
+            QualifyPerGroup = entity.QualifyPerGroup, KnockoutFormat = (byte)entity.KnockoutFormat,
+            RoundRobinType = (byte)entity.RoundRobinType, MatchesPerTeam = entity.MatchesPerTeam,
+            CustomPairsJson = entity.CustomPairsJson,
+            CustomFixturesReady = entity.RoundRobinType != TournamentRoundRobinType.Custom
+                || CustomPairsAreComplete(entity),
+            VenueId = entity.VenueId, VenueName = venueName, FormatId = entity.FormatId,
+            Format = (byte)entity.Format,
+            FormatText = entity.FormatId is Guid formatId
+                ? await db.Formats.AsNoTracking().Where(row => row.Id == formatId).Select(row => row.Name)
+                    .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? FormatRules.DetailsLine(entity.Format, entity.OversMode, entity.OversLimit)
+                : FormatRules.DetailsLine(entity.Format, entity.OversMode, entity.OversLimit),
+            OversLimit = entity.OversLimit, OversMode = (byte)entity.OversMode,
+            LastBatsmanCanBatAsSingleWicket = entity.LastBatsmanCanBatAsSingleWicket,
+            BowlerMaxOvers = entity.BowlerMaxOvers, Status = (byte)entity.Status,
+            StatusText = entity.Status.ToString(), WinnerTeamId = entity.WinnerTeamId,
+            WinnerTeamName = entity.WinnerTeamId is Guid winnerId ? teams.GetValueOrDefault(winnerId) : null,
+            PlayerOfTheTournamentPlayerId = entity.PlayerOfTheTournamentPlayerId,
+            PlayerOfTheTournamentName = entity.PlayerOfTheTournamentPlayerId is Guid potId
+                ? awards.GetValueOrDefault(potId) : null,
+            BestBatsmanPlayerId = entity.BestBatsmanPlayerId,
+            BestBatsmanName = entity.BestBatsmanPlayerId is Guid batsmanId ? awards.GetValueOrDefault(batsmanId) : null,
+            BestBowlerPlayerId = entity.BestBowlerPlayerId,
+            BestBowlerName = entity.BestBowlerPlayerId is Guid bowlerId ? awards.GetValueOrDefault(bowlerId) : null,
+            BestFielderPlayerId = entity.BestFielderPlayerId,
+            BestFielderName = entity.BestFielderPlayerId is Guid fielderId ? awards.GetValueOrDefault(fielderId) : null,
+            Teams = entity.Teams.OrderBy(row => row.GroupNumber).ThenBy(row => teams.GetValueOrDefault(row.TeamId, string.Empty))
+                .Select(row => new ApiTournamentTeamDto
+                {
+                    TeamId = row.TeamId, TeamName = teams.GetValueOrDefault(row.TeamId, string.Empty),
+                    GroupNumber = row.GroupNumber
+                }).ToList(),
+            Fixtures = entity.Fixtures.OrderBy(row => row.Sequence).Select(row =>
+            {
+                var match = row.MatchId is Guid linkedId && matchesById.TryGetValue(linkedId, out var direct)
+                    ? direct : matchesByFixture.GetValueOrDefault(row.Id);
+                return new ApiTournamentFixtureDto
+                {
+                    Id = row.Id, Stage = (byte)row.Stage, StageText = StageText(row.Stage),
+                    GroupNumber = row.GroupNumber, Sequence = row.Sequence, Label = row.Label,
+                    TeamAId = row.TeamAId, TeamBId = row.TeamBId,
+                    TeamAName = row.TeamAId is Guid teamA ? teams.GetValueOrDefault(teamA, row.TeamASlot ?? string.Empty) : row.TeamASlot ?? string.Empty,
+                    TeamBName = row.TeamBId is Guid teamB ? teams.GetValueOrDefault(teamB, row.TeamBSlot ?? string.Empty) : row.TeamBSlot ?? string.Empty,
+                    TeamASlot = row.TeamASlot, TeamBSlot = row.TeamBSlot, MatchId = match?.Id,
+                    MatchStatus = match is null ? null : (byte)match.Status,
+                    MatchStatusText = match?.Status.ToString() ?? string.Empty,
+                    CanStart = match is null && entity.Status is not TournamentStatus.Draft and not TournamentStatus.Completed,
+                    CanOpenScorecard = match is not null
+                };
+            }).ToList(),
+            Standings = entity.Teams.GroupBy(row => row.GroupNumber).OrderBy(group => group.Key)
+                .SelectMany(group => group.OrderBy(row => teams.GetValueOrDefault(row.TeamId, string.Empty))
+                    .Select((row, index) => new ApiTournamentStandingDto
+                    {
+                        GroupNumber = row.GroupNumber, TeamId = row.TeamId,
+                        TeamName = teams.GetValueOrDefault(row.TeamId, string.Empty), Rank = index + 1
+                    })).ToList()
+        };
+
+        var detail = ToDetail(dto);
+        await OverlayLocalMatchStateAsync(detail, ct).ConfigureAwait(false);
+        return detail;
+    }
+
+    private static TournamentListItem ToListItem(TournamentDetail detail, bool needsSync = false)
+        => new()
+        {
+            Id = detail.Id, Name = detail.Name, Status = detail.Status, StatusText = detail.StatusText,
+            MetaLine = $"{detail.GroupCount} group{(detail.GroupCount == 1 ? "" : "s")} · Qualify {detail.QualifyPerGroup} · {detail.Teams.Count} teams · {detail.Fixtures.Count} fixtures",
+            WinnerLine = string.IsNullOrWhiteSpace(detail.WinnerTeamName) ? string.Empty : $"Champion: {detail.WinnerTeamName}",
+            NeedsSync = needsSync
+        };
+
+    private static bool CustomPairsAreComplete(Tournament tournament)
+    {
+        if (string.IsNullOrWhiteSpace(tournament.CustomPairsJson)) return false;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(tournament.CustomPairsJson);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array) return false;
+            var pairs = doc.RootElement.EnumerateArray().Select(pair =>
+            {
+                var a = pair.TryGetProperty("a", out var left) ? left.GetGuid() : Guid.Empty;
+                var b = pair.TryGetProperty("b", out var right) ? right.GetGuid() : Guid.Empty;
+                return (A: a, B: b);
+            }).ToList();
+            var teamIds = tournament.Teams.Select(row => row.TeamId).Distinct().ToList();
+            SchedulerEngine.ValidateCustomPairings(teamIds, tournament.MatchesPerTeam, pairs);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static List<(Guid A, Guid B)> ReadCustomPairs(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array) return [];
+            var result = new List<(Guid A, Guid B)>();
+            foreach (var pair in doc.RootElement.EnumerateArray())
+            {
+                if (pair.ValueKind != System.Text.Json.JsonValueKind.Object
+                    || !pair.TryGetProperty("a", out var left)
+                    || !pair.TryGetProperty("b", out var right)
+                    || left.ValueKind != System.Text.Json.JsonValueKind.String
+                    || right.ValueKind != System.Text.Json.JsonValueKind.String
+                    || !Guid.TryParse(left.GetString(), out var a)
+                    || !Guid.TryParse(right.GetString(), out var b))
+                    continue;
+                result.Add((a, b));
+            }
+            return result;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static string StageText(TournamentFixtureStage stage) => stage switch
+    {
+        TournamentFixtureStage.Group => "Group",
+        TournamentFixtureStage.QuarterFinal => "Quarter-final",
+        TournamentFixtureStage.Playoff => "Playoff",
+        TournamentFixtureStage.SemiFinal => "Semi-final",
+        TournamentFixtureStage.Final => "Final",
+        _ => stage.ToString()
+    };
+
+    private async Task<bool> IsBootstrappedAsync(CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await LocalCacheGate.PreferLocalAsync(db, _auth.Current, ct).ConfigureAwait(false);
     }
 
     /// <summary>

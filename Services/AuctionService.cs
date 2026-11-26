@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using JPL.Data;
 using JPL.Domain;
 
 namespace JPL.Services;
@@ -254,12 +256,24 @@ public sealed class AuctionService : IAuctionService
     private readonly IAuthService _auth;
     private readonly IApiClient _api;
     private readonly ILeagueContext _league;
+    private readonly IDbContextFactory<JplDbContext> _dbFactory;
+    private readonly IOutboxWriter _outbox;
+    private readonly ISyncTrigger _syncTrigger;
 
-    public AuctionService(IAuthService auth, IApiClient api, ILeagueContext league)
+    public AuctionService(
+        IAuthService auth,
+        IApiClient api,
+        ILeagueContext league,
+        IDbContextFactory<JplDbContext> dbFactory,
+        IOutboxWriter outbox,
+        ISyncTrigger syncTrigger)
     {
         _auth = auth;
         _api = api;
         _league = league;
+        _dbFactory = dbFactory;
+        _outbox = outbox;
+        _syncTrigger = syncTrigger;
     }
 
     public async Task<IReadOnlyList<AuctionListItem>> GetAllAsync(CancellationToken ct = default)
@@ -274,39 +288,15 @@ public sealed class AuctionService : IAuctionService
 
     public async Task<ApiPagedResult<AuctionListItem>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
     {
-        var locals = LoadLocalEntities()
-            .Where(a => !a.IsDeleted && VisibleToCurrent(a) && TitleMatches(a.Title, q))
+        var all = await LoadVisibleEntitiesAsync(ct).ConfigureAwait(false);
+        var rows = all.Where(a => TitleMatches(a.Title, q))
+            .OrderByDescending(a => a.AuctionDateUtc)
+            .ThenBy(a => a.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var localCount = locals.Count;
-        var apiSkip = skip <= 0 ? 0 : Math.Max(0, skip - localCount);
-
-        var page = await _api.GetAuctionsPageAsync(apiSkip, q, ct).ConfigureAwait(false);
-        var remote = (page.Items ?? [])
-            .Where(a => !a.IsDeleted)
-            .Select(ToEntity)
-            .Where(VisibleToCurrent)
-            .Select(ToListItem)
-            .ToList();
-
-        if (skip <= 0)
-        {
-            var localItems = locals
-                .OrderByDescending(a => a.AuctionDateUtc)
-                .ThenBy(a => a.Title, StringComparer.OrdinalIgnoreCase)
-                .Select(ToListItem)
-                .ToList();
-            var merged = localItems.Concat(remote)
-                .GroupBy(x => x.Id)
-                .Select(g => g.First())
-                .ToList();
-            return new ApiPagedResult<AuctionListItem>(
-                merged,
-                page.TotalCount + localCount,
-                skip,
-                page.Take);
-        }
-
-        return page.WithItems(remote) with { TotalCount = page.TotalCount + localCount };
+        var pageSize = ListPaging.PageSize;
+        return new ApiPagedResult<AuctionListItem>(
+            rows.Skip(Math.Max(0, skip)).Take(pageSize).Select(ToListItem).ToList(),
+            rows.Count, Math.Max(0, skip), pageSize);
     }
 
     public async Task<AuctionDetail?> GetAsync(Guid id, CancellationToken ct = default)
@@ -336,9 +326,8 @@ public sealed class AuctionService : IAuctionService
             return entity;
         }
 
-        var remote = await _api.CreateAuctionAsync(ToApiBody(entity), ct).ConfigureAwait(false);
-        DeleteLocal(entity.Id);
-        return ToEntity(remote);
+        await PersistEntityAsync(entity, ct).ConfigureAwait(false);
+        return entity;
     }
 
     public async Task<Auction> UpdateAsync(Guid id, AuctionDraft draft, CancellationToken ct = default)
@@ -414,9 +403,9 @@ public sealed class AuctionService : IAuctionService
                 return entity;
             }
 
-            var created = await _api.CreateAuctionAsync(ToApiBody(entity), ct).ConfigureAwait(false);
+            await PersistEntityAsync(entity, ct).ConfigureAwait(false);
             DeleteLocal(id);
-            return ToEntity(created);
+            return entity;
         }
 
         await PersistEntityAsync(entity, ct).ConfigureAwait(false);
@@ -433,17 +422,12 @@ public sealed class AuctionService : IAuctionService
 
         if (LocalHas(id))
         {
+            // Local is source of truth — never await API on the UI delete path.
             DeleteLocal(id);
-            // Basic may also have an old cloud copy from before local-only — drop it if present.
-            if (AuctionKindText.IsBasic(existing.Kind))
-            {
-                try { await _api.DeleteAuctionAsync(id, ct).ConfigureAwait(false); }
-                catch { /* local is source of truth */ }
-            }
             return;
         }
 
-        await _api.DeleteAuctionAsync(id, ct).ConfigureAwait(false);
+        await DeletePersistedEntityAsync(id, ct).ConfigureAwait(false);
     }
 
     public async Task<AuctionDetail> ClaimCaptainByCodeAsync(
@@ -928,12 +912,21 @@ public sealed class AuctionService : IAuctionService
 
     private async Task<Dictionary<Guid, string>> PlayerNamesAsync(CancellationToken ct)
     {
+        if (!LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            var livePlayers = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
+            return livePlayers.Where(player => !player.IsDeleted)
+                .ToDictionary(player => player.Id, player => player.FullName);
+        }
+
         var cached = _playerNameCache;
         if (cached is not null && DateTime.UtcNow - _playerNameCacheAtUtc < TimeSpan.FromMinutes(2))
             return cached;
 
-        var players = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
-        var map = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id, p => p.FullName);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var map = await db.Players.AsNoTracking()
+            .ToDictionaryAsync(player => player.Id, player => player.FullName, ct)
+            .ConfigureAwait(false);
         _playerNameCache = map;
         _playerNameCacheAtUtc = DateTime.UtcNow;
         return map;
@@ -941,31 +934,268 @@ public sealed class AuctionService : IAuctionService
 
     private async Task<List<Auction>> LoadVisibleEntitiesAsync(CancellationToken ct)
     {
-        var remote = await _api.GetAuctionsAsync(ct).ConfigureAwait(false);
-        var list = remote.Where(a => !a.IsDeleted).Select(ToEntity).Where(VisibleToCurrent).ToList();
+        if (!LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            var live = await _api.GetAuctionsAsync(ct).ConfigureAwait(false);
+            return live.Where(row => !row.IsDeleted).Select(ToEntity).Where(VisibleToCurrent).ToList();
+        }
+
+        var list = await LoadDatabaseEntitiesAsync(ct).ConfigureAwait(false);
         foreach (var local in LoadLocalEntities().Where(a => !a.IsDeleted && VisibleToCurrent(a)))
         {
             if (list.All(x => x.Id != local.Id))
                 list.Add(local);
         }
-        return list;
+        return list.Where(VisibleToCurrent).ToList();
     }
 
     private async Task<Auction?> LoadEntityAsync(Guid id, CancellationToken ct)
     {
-        var local = LoadLocalEntities().FirstOrDefault(a => a.Id == id && !a.IsDeleted);
+        if (!LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            var live = (await _api.GetAuctionsAsync(ct).ConfigureAwait(false))
+                .FirstOrDefault(row => row.Id == id && !row.IsDeleted);
+            return live is null ? null : ToEntity(live);
+        }
+
+        var localEntities = await LoadDatabaseEntitiesAsync(ct).ConfigureAwait(false);
+        var local = localEntities.FirstOrDefault(a => a.Id == id && !a.IsDeleted);
         if (local is not null)
             return local;
 
-        var remote = (await _api.GetAuctionsAsync(ct).ConfigureAwait(false))
-            .FirstOrDefault(a => a.Id == id && !a.IsDeleted);
-        return remote is null ? null : ToEntity(remote);
+        local = LoadLocalEntities().FirstOrDefault(a => a.Id == id && !a.IsDeleted);
+        if (local is not null)
+            return local;
+
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+            return null;
+
+        try
+        {
+            var remote = (await _api.GetAuctionsAsync(ct).ConfigureAwait(false))
+                .FirstOrDefault(a => a.Id == id && !a.IsDeleted);
+            if (remote is null)
+                return null;
+            var entity = ToEntity(remote);
+            await CacheRemoteEntitiesAsync([entity], ct).ConfigureAwait(false);
+            return (await LoadDatabaseEntitiesAsync(ct).ConfigureAwait(false))
+                       .FirstOrDefault(row => row.Id == id)
+                   ?? entity;
+        }
+        catch (Exception ex) when (NetworkUi.IsNetworkFailure(ex))
+        {
+            return null;
+        }
     }
 
     private async Task PersistEntityAsync(Auction entity, CancellationToken ct)
     {
-        var remote = await _api.UpdateAuctionAsync(entity.Id, ToApiBody(entity), ct).ConfigureAwait(false);
-        ApplyDtoScalars(entity, remote);
+        PackNotes(entity);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var local = await db.Auctions
+            .Include(auction => auction.Captains)
+            .Include(auction => auction.Lots)
+            .FirstOrDefaultAsync(auction => auction.Id == entity.Id, ct)
+            .ConfigureAwait(false);
+
+        if (local is null)
+        {
+            local = NewDatabaseAuction(entity);
+            db.Auctions.Add(local);
+        }
+        else
+        {
+            CopyAuctionScalars(local, entity);
+            ReconcileCaptains(db, local, entity);
+            ReconcileLots(db, local, entity);
+        }
+
+        _outbox.EnqueueEntity(db, local, "Upsert");
+        foreach (var captain in local.Captains)
+            _outbox.EnqueueEntity(db, captain, "Upsert");
+        foreach (var lot in local.Lots)
+            _outbox.EnqueueEntity(db, lot, "Upsert");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
+        ApplyDatabaseSnapshot(entity, local);
+    }
+
+    private async Task<List<Auction>> LoadDatabaseEntitiesAsync(CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var rows = await db.Auctions.AsNoTracking()
+            .Include(auction => auction.Captains)
+            .Include(auction => auction.Lots)
+            .OrderByDescending(auction => auction.AuctionDateUtc)
+            .ToListAsync(ct).ConfigureAwait(false);
+        foreach (var row in rows)
+        {
+            UnpackNotes(row);
+            ApplyTeamNamesFromNotes(row);
+        }
+        return rows;
+    }
+
+    private async Task CacheRemoteEntitiesAsync(IReadOnlyList<Auction> entities, CancellationToken ct)
+    {
+        if (entities.Count == 0)
+            return;
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        foreach (var source in entities)
+        {
+            if (await db.Auctions.IgnoreQueryFilters().AnyAsync(row => row.Id == source.Id, ct)
+                    .ConfigureAwait(false)
+                || await db.SyncOutbox.AsNoTracking().AnyAsync(row => row.EntityId == source.Id
+                    && row.EntityType == nameof(Auction) && row.Status != SyncOutboxStatus.Completed, ct)
+                    .ConfigureAwait(false))
+                continue;
+
+            var copy = NewDatabaseAuction(source);
+            db.Auctions.Add(copy);
+        }
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    private static Auction NewDatabaseAuction(Auction source)
+    {
+        var copy = new Auction();
+        CopyAuctionScalars(copy, source);
+        copy.Captains = source.Captains.Select(captain => new AuctionCaptain
+        {
+            AuctionId = source.Id,
+            PlayerId = captain.PlayerId,
+            WalletAmount = captain.WalletAmount
+        }).ToList();
+        copy.Lots = source.Lots.Select(lot => new AuctionLot
+        {
+            Id = lot.Id,
+            AuctionId = source.Id,
+            PlayerId = lot.PlayerId,
+            BasePrice = lot.BasePrice,
+            IsSold = lot.IsSold,
+            SoldPrice = lot.SoldPrice,
+            SoldToCaptainPlayerId = lot.SoldToCaptainPlayerId
+        }).ToList();
+        return copy;
+    }
+
+    private static void CopyAuctionScalars(Auction target, Auction source)
+    {
+        target.Id = source.Id;
+        target.Title = source.Title;
+        target.AuctionDateUtc = source.AuctionDateUtc;
+        target.Notes = source.Notes;
+        target.Version = source.Version;
+        target.CreatedAtUtc = source.CreatedAtUtc;
+        target.UpdatedAtUtc = source.UpdatedAtUtc;
+        target.IsDeleted = source.IsDeleted;
+    }
+
+    private void ReconcileCaptains(JplDbContext db, Auction target, Auction source)
+    {
+        var desired = source.Captains.GroupBy(captain => captain.PlayerId)
+            .ToDictionary(group => group.Key, group => group.Last());
+        foreach (var captain in target.Captains.ToList())
+        {
+            if (!desired.Remove(captain.PlayerId, out var value))
+            {
+                db.AuctionCaptains.Remove(captain);
+                _outbox.EnqueueEntity(db, captain, "Delete");
+                target.Captains.Remove(captain);
+                continue;
+            }
+            captain.WalletAmount = value.WalletAmount;
+        }
+        foreach (var value in desired.Values)
+        {
+            var captain = new AuctionCaptain
+            {
+                AuctionId = target.Id,
+                PlayerId = value.PlayerId,
+                WalletAmount = value.WalletAmount
+            };
+            target.Captains.Add(captain);
+        }
+    }
+
+    private void ReconcileLots(JplDbContext db, Auction target, Auction source)
+    {
+        var desired = source.Lots.GroupBy(lot => lot.PlayerId)
+            .ToDictionary(group => group.Key, group => group.Last());
+        foreach (var lot in target.Lots.ToList())
+        {
+            if (!desired.Remove(lot.PlayerId, out var value))
+            {
+                db.AuctionLots.Remove(lot);
+                _outbox.EnqueueEntity(db, lot, "Delete");
+                target.Lots.Remove(lot);
+                continue;
+            }
+            // Preserve the persisted lot ID so a setup edit becomes an update, not a delete/reinsert.
+            lot.BasePrice = value.BasePrice;
+            lot.IsSold = value.IsSold;
+            lot.SoldPrice = value.SoldPrice;
+            lot.SoldToCaptainPlayerId = value.SoldToCaptainPlayerId;
+        }
+        foreach (var value in desired.Values)
+        {
+            target.Lots.Add(new AuctionLot
+            {
+                Id = value.Id == Guid.Empty ? Guid.NewGuid() : value.Id,
+                AuctionId = target.Id,
+                PlayerId = value.PlayerId,
+                BasePrice = value.BasePrice,
+                IsSold = value.IsSold,
+                SoldPrice = value.SoldPrice,
+                SoldToCaptainPlayerId = value.SoldToCaptainPlayerId
+            });
+        }
+    }
+
+    private static void ApplyDatabaseSnapshot(Auction target, Auction source)
+    {
+        CopyAuctionScalars(target, source);
+        target.Captains = source.Captains.Select(captain => new AuctionCaptain
+        {
+            AuctionId = source.Id,
+            PlayerId = captain.PlayerId,
+            WalletAmount = captain.WalletAmount
+        }).ToList();
+        target.Lots = source.Lots.Select(lot => new AuctionLot
+        {
+            Id = lot.Id,
+            AuctionId = source.Id,
+            PlayerId = lot.PlayerId,
+            BasePrice = lot.BasePrice,
+            IsSold = lot.IsSold,
+            SoldPrice = lot.SoldPrice,
+            SoldToCaptainPlayerId = lot.SoldToCaptainPlayerId
+        }).ToList();
+        UnpackNotes(target);
+        ApplyTeamNamesFromNotes(target);
+    }
+
+    private async Task DeletePersistedEntityAsync(Guid id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var auction = await db.Auctions.FirstOrDefaultAsync(row => row.Id == id, ct).ConfigureAwait(false);
+        if (auction is null)
+            return;
+        auction.IsDeleted = true;
+        auction.UpdatedAtUtc = DateTime.UtcNow;
+        auction.Version++;
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        _outbox.EnqueueEntity(db, auction, "Delete");
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        _syncTrigger.RequestSyncNow();
     }
 
     private AuctionListItem ToListItem(Auction a)

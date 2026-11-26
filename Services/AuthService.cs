@@ -99,16 +99,6 @@ public static class AuthMessages
         return null;
     }
 
-    public static string ForSignup(Exception ex)
-    {
-        if (ex is AuthFailedException or ArgumentException or InvalidOperationException)
-            return ex.Message;
-        if (NetworkUi.IsNetworkFailure(ex))
-            return NetworkUi.OfflineMessage;
-        var text = NetworkUi.UserMessage(ex);
-        return LooksTechnical(text) ? "Could not create account. Please try again." : text;
-    }
-
     private static bool LooksTechnical(Exception ex)
     {
         for (var e = ex; e is not null; e = e.InnerException)
@@ -134,17 +124,22 @@ public static class AuthMessages
 
 public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Guid? LeagueId, string? WhatsAppNumber = null)
 {
-    public bool CanWrite => Role is AppRole.Admin or AppRole.SuperAdmin;
+    /// <summary>League sports writes — League Admin only. SuperAdmin is users/platform, not league ops.</summary>
+    public bool CanWrite => Role == AppRole.Admin;
     public bool IsGroundOwner => Role == AppRole.GroundOwner;
     public bool IsGuest => Role == AppRole.Guest;
-    public bool IsPublicUser => Role == AppRole.PublicUser;
+    public bool IsSuperAdmin => Role == AppRole.SuperAdmin;
     public bool NeedsLeaguePicker =>
-        !IsGroundOwner && !IsPublicUser && !IsGuest && LeagueId is null;
+        !IsGroundOwner && !IsGuest && !IsSuperAdmin && LeagueId is null;
     public bool NeedsModeChooser => true;
     public bool CanManagePlatform => Role == AppRole.SuperAdmin && PlatformAdmin.Is(Username);
+    /// <summary>
+    /// Platform SuperAdmin (HassanAnas) manages league *records* (create / edit / activate / delete)
+    /// in addition to users. Never league sports data — see CanWrite.
+    /// </summary>
     public bool CanManageLeagues => CanManagePlatform;
     public bool CanManageUsers => CanManagePlatform;
-    public bool CanSwitchLeague => true;
+    public bool CanSwitchLeague => !IsSuperAdmin;
 
     public string RoleLabel => AppRoleLabels.Of(Role);
 
@@ -154,24 +149,18 @@ public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Gui
         LeagueId is Guid home && home != Guid.Empty && selectedLeagueId == home;
 
     public bool CanWriteLeague(Guid? selectedLeagueId)
-    {
-        if (Role == AppRole.SuperAdmin)
-            return true;
-        return Role == AppRole.Admin && IsHomeLeague(selectedLeagueId);
-    }
+        => Role == AppRole.Admin && IsHomeLeague(selectedLeagueId);
 
     public bool CanViewCatalogFor(Guid? selectedLeagueId)
     {
-        if (IsPublicUser || IsGuest || IsGroundOwner)
+        if (IsGuest || IsGroundOwner || IsSuperAdmin)
             return false;
-        if (Role == AppRole.SuperAdmin)
-            return true;
         return Role is AppRole.Admin or AppRole.User && IsHomeLeague(selectedLeagueId);
     }
 
-    public bool CanViewLeagueCatalog => !IsPublicUser && !IsGuest && !IsGroundOwner;
+    public bool CanViewLeagueCatalog => !IsGuest && !IsGroundOwner && !IsSuperAdmin;
 
-    public bool CanBookGrounds => !IsGuest && !IsGroundOwner;
+    public bool CanBookGrounds => !IsGuest && !IsGroundOwner && !IsSuperAdmin;
 
     public string SignedInName => Username;
     public string SignedInLabel => $"{Username}  ·  {RoleLabel}";
@@ -195,7 +184,6 @@ public interface IAuthService
     Task ValidateRemoteSessionAsync(CancellationToken ct = default);
 
     Task<bool> LoginAsync(string username, string password, CancellationToken ct = default);
-    Task SignupAsync(string username, string password, string whatsApp, CancellationToken ct = default);
     Task LogoutAsync();
     void EnsureCanWrite();
     void EnsureCanManageUsers();
@@ -211,32 +199,44 @@ public sealed class AuthService : IAuthService
     private const string SessionWhatsAppKey = "jpl.session.whatsApp";
     public const string SessionLastUsernameKey = "jpl.session.lastUsername";
 
-    private readonly IDbContextFactory<JplDbContext> _dbFactory;
+    private readonly IMasterJplDbContextFactory _dbFactory;
+    private readonly IDbContextFactory<JplDbContext> _accountDbFactory;
+    private readonly IAccountDatabaseScope _databaseScope;
+    private readonly IMatchSquadCache _matchSquadCache;
     private readonly IApiClient _api;
     private readonly IUsersModuleGate _usersGate;
     private readonly IAuctionsModuleGate _auctionsGate;
     private readonly AuthTokenStore _tokens;
     private readonly MasterDataCache _masterCache;
     private readonly ILeagueContext _league;
+    private readonly ISessionLifetime _lifetime;
     private readonly PasswordHasher<AppUser> _hasher = new();
     private AuthSession? _current;
 
     public AuthService(
-        IDbContextFactory<JplDbContext> dbFactory,
+        IMasterJplDbContextFactory dbFactory,
+        IDbContextFactory<JplDbContext> accountDbFactory,
+        IAccountDatabaseScope databaseScope,
+        IMatchSquadCache matchSquadCache,
         IApiClient api,
         IUsersModuleGate usersGate,
         IAuctionsModuleGate auctionsGate,
         AuthTokenStore tokens,
         MasterDataCache masterCache,
-        ILeagueContext league)
+        ILeagueContext league,
+        ISessionLifetime lifetime)
     {
         _dbFactory = dbFactory;
+        _accountDbFactory = accountDbFactory;
+        _databaseScope = databaseScope;
+        _matchSquadCache = matchSquadCache;
         _api = api;
         _usersGate = usersGate;
         _auctionsGate = auctionsGate;
         _tokens = tokens;
         _masterCache = masterCache;
         _league = league;
+        _lifetime = lifetime;
     }
 
     public AuthSession? Current => _current;
@@ -322,12 +322,30 @@ public sealed class AuthService : IAuthService
         if (_current is null)
             RestoreLocalSession();
 
+        if (_current is not null)
+        {
+            try
+            {
+                await using var accountDb = await _accountDbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+                await DbBootstrap.InitializeAsync(accountDb, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                /* a local-cache bootstrap issue must not block an authenticated session */
+            }
+        }
+
         await HydrateWhatsAppFromLocalAsync(ct).ConfigureAwait(false);
     }
 
     public async Task ValidateRemoteSessionAsync(CancellationToken ct = default)
     {
         if (_current is null)
+            return;
+
+        // League Admin should not make a standalone /me request on app resume.
+        // The token is validated by the next explicit/automatic Sync request instead.
+        if (LeagueSyncPolicy.UsesLocalStorage(_current))
             return;
 
         var token = Preferences.Default.Get(SessionTokenKey, string.Empty);
@@ -381,6 +399,10 @@ public sealed class AuthService : IAuthService
         if (username.Length == 0 || string.IsNullOrEmpty(password))
             throw new AuthFailedException(AuthMessages.MissingCredentials);
 
+        // A new sign-in (same or different League Admin) must never inherit a sync that is
+        // still running for the previous account: cancel it and let it unwind first.
+        await _lifetime.EndSessionAsync().ConfigureAwait(false);
+
         var apiServerError = false;
         try
         {
@@ -395,6 +417,7 @@ public sealed class AuthService : IAuthService
                 PersistSession(_current, remote.Token);
                 ApplyLeagueAfterLogin(_current);
                 ApplyModuleGates();
+                await InitializeAccountDatabaseAsync(ct).ConfigureAwait(false);
                 await CacheLocalLoginAsync(
                         remote.UserId, remote.Username, role, password, remote.LeagueId, remote.WhatsAppNumber, ct)
                     .ConfigureAwait(false);
@@ -424,36 +447,16 @@ public sealed class AuthService : IAuthService
         }
     }
 
-    public async Task SignupAsync(string username, string password, string whatsApp, CancellationToken ct = default)
+    public async Task LogoutAsync()
     {
-        username = username?.Trim() ?? string.Empty;
-        if (username.Length == 0)
-            throw new ArgumentException("Name is required.");
-        if (string.IsNullOrWhiteSpace(password) || password.Trim().Length < 4)
-            throw new ArgumentException("Password must be at least 4 characters.");
-        if (string.IsNullOrWhiteSpace(whatsApp))
-            throw new ArgumentException("WhatsApp number is required.");
-        if (!PakistanWhatsApp.TryNormalize(whatsApp, out var normalizedWhatsApp))
-            throw new ArgumentException(PakistanWhatsApp.RequiredError);
+        // Stop background sync for this admin BEFORE token/league are cleared; otherwise the
+        // in-flight run keeps going with an empty (or the next admin's) league filter and token.
+        await _lifetime.EndSessionAsync().ConfigureAwait(true);
 
-        var remote = await _api.SignupAsync(username, password.Trim(), normalizedWhatsApp, ct).ConfigureAwait(false)
-                     ?? throw new InvalidOperationException("Could not create account.");
-
-        if (!Enum.TryParse<AppRole>(remote.Role, ignoreCase: true, out var role))
-            role = AppRole.PublicUser;
-
-        _current = new AuthSession(remote.UserId, remote.Username, role, remote.LeagueId, normalizedWhatsApp);
-        PersistSession(_current, remote.Token);
-        ApplyLeagueAfterLogin(_current);
-        ApplyModuleGates();
-        await CacheLocalLoginAsync(
-                remote.UserId, remote.Username, role, password.Trim(), remote.LeagueId, normalizedWhatsApp, ct)
-            .ConfigureAwait(false);
-    }
-
-    public Task LogoutAsync()
-    {
         _current = null;
+        _matchSquadCache.ClearAll();
+        LiveMasterNames.ClearCache();
+        _databaseScope.Clear();
         _tokens.Clear();
         _league.Clear();
         _masterCache.Invalidate();
@@ -466,7 +469,6 @@ public sealed class AuthService : IAuthService
         Preferences.Default.Remove(SessionLeagueIdKey);
         Preferences.Default.Remove(SessionWhatsAppKey);
         SessionDisk.Clear();
-        return Task.CompletedTask;
     }
 
     public void EnsureCanWrite()
@@ -510,6 +512,7 @@ public sealed class AuthService : IAuthService
         PersistSession(_current, token: null);
         ApplyLeagueAfterLogin(_current);
         ApplyModuleGates();
+        await InitializeAccountDatabaseAsync(ct).ConfigureAwait(false);
         return true;
     }
 
@@ -595,6 +598,13 @@ public sealed class AuthService : IAuthService
 
     private void PersistSession(AuthSession session, string? token)
     {
+        if (_databaseScope.UserId is Guid priorUserId && priorUserId != session.UserId)
+        {
+            _masterCache.Invalidate();
+            _matchSquadCache.ClearAll();
+            LiveMasterNames.ClearCache();
+        }
+        _databaseScope.Set(session.UserId, session.Role);
         Preferences.Default.Set(SessionUserIdKey, session.UserId.ToString());
         Preferences.Default.Set(SessionUsernameKey, session.Username);
         Preferences.Default.Set(SessionRoleKey, session.Role.ToString());
@@ -635,6 +645,19 @@ public sealed class AuthService : IAuthService
             session.LeagueId is Guid lid ? lid.ToString("D") : null,
             session.WhatsAppNumber,
             ReadPersistedWorkspace()));
+    }
+
+    private async Task InitializeAccountDatabaseAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using var db = await _accountDbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await DbBootstrap.InitializeAsync(db, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            /* account cache initialization must not reject a valid live API login */
+        }
     }
 
     private static int? ReadPersistedWorkspace()

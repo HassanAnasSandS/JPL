@@ -30,8 +30,9 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        MauiProgram.StartInitialize(_services);
+        InstallDataGuard.PrepareForLaunch();
         _auth.RestoreLocalSession();
+        MauiProgram.StartInitialize(_services);
 
         var startingMessage = _auth.IsAuthenticated ? "Opening your account…" : "Starting Cric360…";
         _startup.SetBusy(startingMessage);

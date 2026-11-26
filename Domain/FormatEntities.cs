@@ -1,9 +1,10 @@
 namespace JPL.Domain;
 
 /// <summary>League-owned match format preset. Matches store FormatId (FK) plus a snapshot of the settings.</summary>
-public sealed class Format
+public sealed class Format : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public string Name { get; set; } = string.Empty;
     public MatchFormat Kind { get; set; } = MatchFormat.SingleInning;
     public int OversLimit { get; set; } = 8;

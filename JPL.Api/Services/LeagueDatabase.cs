@@ -31,6 +31,7 @@ public sealed class LeagueDatabaseManager
 
     private readonly IWebHostEnvironment _env;
     private readonly ConcurrentDictionary<Guid, string> _databaseNames = new();
+    private readonly ConcurrentDictionary<Guid, byte> _syncTablesReady = new();
     private readonly bool _sqlServer;
     private readonly string _defaultConnection;
 
@@ -93,10 +94,38 @@ public sealed class LeagueDatabaseManager
     }
 
     public ApiDbContext CreateForLeague(Guid leagueId)
-        => CreateContext(ResolveConnection(leagueId), leagueId);
+    {
+        EnsureSyncTablesForConnection(ResolveConnection(leagueId), leagueId);
+        return CreateContext(ResolveConnection(leagueId), leagueId);
+    }
 
     public ApiDbContext CreateForRequest(IApiLeagueScope scope)
-        => CreateContext(ResolveConnection(scope.CurrentLeagueId), scope);
+    {
+        EnsureSyncTablesForConnection(ResolveConnection(scope.CurrentLeagueId), scope.CurrentLeagueId);
+        return CreateContext(ResolveConnection(scope.CurrentLeagueId), scope);
+    }
+
+    /// <summary>
+    /// Older league catalogs predate SyncChanges / SyncReceipts. EnsureCreated does not
+    /// add tables to existing DBs — repair on first open so /api/sync/changes never 500s.
+    /// </summary>
+    private void EnsureSyncTablesForConnection(string connection, Guid leagueId)
+    {
+        var key = leagueId == Guid.Empty ? Guid.Empty : leagueId;
+        if (!_syncTablesReady.TryAdd(key, 0))
+            return;
+
+        try
+        {
+            using var db = CreateContext(connection, leagueId);
+            EnsureSyncChangeTableAsync(db, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            _syncTablesReady.TryRemove(key, out _);
+            throw;
+        }
+    }
 
     public string ResolveConnection(Guid leagueId)
     {
@@ -117,10 +146,12 @@ public sealed class LeagueDatabaseManager
     /// <summary>Every league gets its own database; existing ball data is moved out of master.</summary>
     public async Task EnsureAllLeagueDatabasesAsync(MasterDbContext master, CancellationToken ct = default)
     {
-        var leagues = await master.Leagues.ToListAsync(ct).ConfigureAwait(false);
+        // IgnoreQueryFilters: soft-deleted leagues still need their id -> database mapping
+        // (so nothing ever falls back to the Cric360 master catalog for them), but are not upgraded.
+        var leagues = await master.Leagues.IgnoreQueryFilters().ToListAsync(ct).ConfigureAwait(false);
         foreach (var league in leagues)
         {
-            if (!league.IsActive)
+            if (!league.IsActive || league.IsDeleted)
                 continue;
 
             league.DatabaseName = await EnsureLeagueCatalogAsync(league, ct).ConfigureAwait(false);
@@ -134,15 +165,93 @@ public sealed class LeagueDatabaseManager
     public Task<string> ProvisionAsync(Guid leagueId, CancellationToken ct = default)
         => ProvisionAsync(leagueId, leagueName: null, ct);
 
+    /// <summary>
+    /// Re-activated league: make sure its catalog exists and its schema is current
+    /// (inactive leagues are skipped by the startup upgrade). Returns the database name.
+    /// </summary>
+    public Task<string> EnsureLeagueReadyAsync(League league, CancellationToken ct = default)
+        => EnsureLeagueCatalogAsync(league, ct);
+
+    /// <summary>
+    /// New league from SuperAdmin League management: always a brand-new, unused catalog/file.
+    /// If Cric360_{Name} already exists (e.g. a soft-deleted league kept its data) a numeric
+    /// suffix is added so a new league never adopts another league's data.
+    /// </summary>
+    public async Task<string> ProvisionNewAsync(
+        Guid leagueId,
+        string leagueName,
+        IEnumerable<string?> reservedNames,
+        CancellationToken ct = default)
+    {
+        if (leagueId == Guid.Empty)
+            throw new ArgumentException("League id is required.", nameof(leagueId));
+
+        var reserved = new HashSet<string>(
+            reservedNames.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!.Trim()),
+            StringComparer.OrdinalIgnoreCase)
+        {
+            MasterCatalogName
+        };
+
+        var baseName = NameFor(leagueId, leagueName);
+        string? dbName = null;
+        for (var i = 1; i <= 50 && dbName is null; i++)
+        {
+            var suffix = i == 1 ? string.Empty : "_" + i;
+            var candidate = baseName.Length + suffix.Length <= NameMaxLength
+                ? baseName + suffix
+                : baseName[..(NameMaxLength - suffix.Length)] + suffix;
+            if (!SafeName.IsMatch(candidate) || reserved.Contains(candidate))
+                continue;
+            if (await DatabaseExistsAsync(candidate, ct).ConfigureAwait(false))
+                continue;
+            dbName = candidate;
+        }
+
+        if (dbName is null)
+            throw new InvalidOperationException("Could not find a free database name for this league.");
+
+        if (_sqlServer)
+            await CreateSqlServerDatabaseAsync(dbName, ct).ConfigureAwait(false);
+        else
+            Directory.CreateDirectory(Path.GetDirectoryName(SqlitePath(dbName))!);
+
+        Remember(leagueId, dbName);
+        await EnsureLeagueSchemaAsync(leagueId, dbName, ct).ConfigureAwait(false);
+        return dbName;
+    }
+
+    private async Task<bool> DatabaseExistsAsync(string dbName, CancellationToken ct)
+    {
+        if (_sqlServer)
+            return await CatalogExistsAsync(dbName, ct).ConfigureAwait(false);
+        return File.Exists(SqlitePath(dbName));
+    }
+
     private async Task<string> EnsureLeagueCatalogAsync(League league, CancellationToken ct)
     {
+        var current = league.DatabaseName?.Trim();
+        var hasOwnCatalog = !string.IsNullOrWhiteSpace(current)
+                            && !current.Equals(MasterCatalogName, StringComparison.OrdinalIgnoreCase)
+                            && current.StartsWith(MasterCatalogName + "_", StringComparison.OrdinalIgnoreCase)
+                            && SafeName.IsMatch(current);
+
+        // A league that already has its own Cric360_* database keeps it, even after the
+        // SuperAdmin renames the league. Renaming the display name must never rename / swap
+        // databases (target could already belong to a different or soft-deleted league).
+        if (hasOwnCatalog && await DatabaseExistsAsync(current!, ct).ConfigureAwait(false))
+        {
+            Remember(league.Id, current);
+            await EnsureLeagueSchemaAsync(league.Id, current!, ct).ConfigureAwait(false);
+            return current!;
+        }
+
         var target = NameFor(league.Id, league.Name);
         if (!SafeName.IsMatch(target))
             throw new InvalidOperationException("Generated database name is not valid.");
 
         if (_sqlServer)
         {
-            var current = league.DatabaseName?.Trim();
             var legacy = LegacyLeagueCatalogName(league.Id, league.Name);
             if (await CatalogExistsAsync(target, ct).ConfigureAwait(false))
             {
@@ -200,6 +309,7 @@ public sealed class LeagueDatabaseManager
         var connection = ToConnection(dbName);
         await using var db = CreateContext(connection, leagueId);
         await db.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+        await EnsureSyncChangeTableAsync(db, ct).ConfigureAwait(false);
         await EnsureLiveMatchIndexAsync(db, ct).ConfigureAwait(false);
         await EnsureMatchSquadColumnAsync(dbName, ct).ConfigureAwait(false);
         await EnsureTeamPlayerPlayingColumnAsync(dbName, ct).ConfigureAwait(false);
@@ -222,6 +332,68 @@ public sealed class LeagueDatabaseManager
         await EnsureExpenseTablesAsync(dbName, ct).ConfigureAwait(false);
         await DropSportsLeagueIdColumnsAsync(dbName, ct).ConfigureAwait(false);
         await DropLeagueDirectoryTablesAsync(dbName, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureSyncChangeTableAsync(ApiDbContext db, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID(N'dbo.SyncChanges', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SyncChanges (
+                        Sequence bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_SyncChanges PRIMARY KEY,
+                        EntityType nvarchar(128) NOT NULL,
+                        EntityKey nvarchar(600) NOT NULL,
+                        Operation nvarchar(32) NOT NULL,
+                        EntityVersion bigint NULL,
+                        ChangedAtUtc datetime2 NOT NULL,
+                        PayloadJson nvarchar(max) NOT NULL
+                    );
+                END;
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SyncChanges_Entity' AND object_id = OBJECT_ID(N'dbo.SyncChanges'))
+                    CREATE INDEX IX_SyncChanges_Entity ON dbo.SyncChanges (EntityType, EntityKey, Sequence);
+
+                IF OBJECT_ID(N'dbo.SyncReceipts', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SyncReceipts (
+                        IdempotencyKey uniqueidentifier NOT NULL CONSTRAINT PK_SyncReceipts PRIMARY KEY,
+                        EntityType nvarchar(64) NOT NULL,
+                        EntityId uniqueidentifier NOT NULL,
+                        ReceivedAtUtc datetimeoffset NOT NULL /* matches EF (SqlServerLocalDateTimes) and existing catalogs */
+                    );
+                END;
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SyncReceipts_Entity' AND object_id = OBJECT_ID(N'dbo.SyncReceipts'))
+                    CREATE INDEX IX_SyncReceipts_Entity ON dbo.SyncReceipts (EntityType, EntityId);
+                """, ct).ConfigureAwait(false);
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SyncChanges" (
+                "Sequence" INTEGER NOT NULL CONSTRAINT "PK_SyncChanges" PRIMARY KEY AUTOINCREMENT,
+                "EntityType" TEXT NOT NULL,
+                "EntityKey" TEXT NOT NULL,
+                "Operation" TEXT NOT NULL,
+                "EntityVersion" INTEGER NULL,
+                "ChangedAtUtc" TEXT NOT NULL,
+                "PayloadJson" TEXT NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_SyncChanges_Entity\" ON \"SyncChanges\" (\"EntityType\", \"EntityKey\", \"Sequence\");",
+            ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "SyncReceipts" (
+                "IdempotencyKey" TEXT NOT NULL CONSTRAINT "PK_SyncReceipts" PRIMARY KEY,
+                "EntityType" TEXT NOT NULL,
+                "EntityId" TEXT NOT NULL,
+                "ReceivedAtUtc" TEXT NOT NULL
+            );
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_SyncReceipts_Entity\" ON \"SyncReceipts\" (\"EntityType\", \"EntityId\");",
+            ct).ConfigureAwait(false);
     }
 
     private async Task EnsureShotZoneColumnAsync(string dbName, CancellationToken ct)

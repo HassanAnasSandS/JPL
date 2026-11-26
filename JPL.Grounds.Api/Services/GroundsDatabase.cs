@@ -77,6 +77,35 @@ public sealed class GroundsDatabase : IGroundsDbFactory
         await EnsureGroundVideosAsync(db, ct).ConfigureAwait(false);
         await EnsureReviewsAsync(db, ct).ConfigureAwait(false);
         await EnsureBookingMoneyAsync(db, ct).ConfigureAwait(false);
+        await EnsureBookingRequestIdAsync(db, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureBookingRequestIdAsync(GroundsDbContext db, CancellationToken ct)
+    {
+        if (_sqlServer)
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF COL_LENGTH(N'dbo.Bookings', N'ClientRequestId') IS NULL
+                    ALTER TABLE dbo.Bookings ADD ClientRequestId uniqueidentifier NULL;
+                """, ct).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync("""
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Bookings_ClientRequestId' AND object_id = OBJECT_ID(N'dbo.Bookings'))
+                    CREATE UNIQUE INDEX IX_Bookings_ClientRequestId ON dbo.Bookings (ClientRequestId) WHERE ClientRequestId IS NOT NULL;
+                """, ct).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """ALTER TABLE "Bookings" ADD COLUMN "ClientRequestId" TEXT NULL;""", ct)
+                .ConfigureAwait(false);
+        }
+        catch { /* already added */ }
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_Bookings_ClientRequestId"
+                ON "Bookings" ("ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+            """, ct).ConfigureAwait(false);
     }
 
     private async Task EnsureBookingMoneyAsync(GroundsDbContext db, CancellationToken ct)

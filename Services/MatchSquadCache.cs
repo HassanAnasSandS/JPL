@@ -197,70 +197,66 @@ public sealed class MatchRosterPayload
         }).ToList();
 }
 
-/// <summary>Current Players/Teams names by ID — API first, local SQLite if offline.</summary>
+/// <summary>
+/// Player/team display names. Scoring must never wait on HTTP — local SQLite (+ short memory cache) first.
+/// </summary>
 public static class LiveMasterNames
 {
-    public static async Task<(Dictionary<Guid, string> Players, Dictionary<Guid, string> Teams)> LoadAsync(
+    private static readonly object CacheGate = new();
+    private static Dictionary<Guid, string>? _cachedPlayers;
+    private static Dictionary<Guid, string>? _cachedTeams;
+    private static DateTime _cachedAtUtc = DateTime.MinValue;
+    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60);
+
+    /// <summary>Local-first names for ball-by-ball / scorecard UI. Never blocks on the API.</summary>
+    public static Task<(Dictionary<Guid, string> Players, Dictionary<Guid, string> Teams)> LoadAsync(
         IApiClient api,
         IDbContextFactory<JplDbContext> dbFactory,
         CancellationToken ct)
+        => LoadLocalFirstAsync(dbFactory, ct);
+
+    public static async Task<(Dictionary<Guid, string> Players, Dictionary<Guid, string> Teams)> LoadLocalFirstAsync(
+        IDbContextFactory<JplDbContext> dbFactory,
+        CancellationToken ct)
     {
+        lock (CacheGate)
+        {
+            if (_cachedPlayers is { Count: > 0 }
+                && DateTime.UtcNow - _cachedAtUtc < CacheFor)
+            {
+                return (
+                    new Dictionary<Guid, string>(_cachedPlayers),
+                    _cachedTeams is null
+                        ? new Dictionary<Guid, string>()
+                        : new Dictionary<Guid, string>(_cachedTeams));
+            }
+        }
+
         var players = new Dictionary<Guid, string>();
         var teams = new Dictionary<Guid, string>();
-
-        try
-        {
-            var pTask = api.GetPlayersAsync(ct);
-            var tTask = api.GetTeamsAsync(ct);
-            await Task.WhenAll(pTask, tTask).ConfigureAwait(false);
-            foreach (var p in await pTask.ConfigureAwait(false))
-            {
-                if (!p.IsDeleted && !string.IsNullOrWhiteSpace(p.FullName))
-                    players[p.Id] = p.FullName;
-            }
-            foreach (var t in await tTask.ConfigureAwait(false))
-            {
-                if (!t.IsDeleted && !string.IsNullOrWhiteSpace(t.Name))
-                    teams[t.Id] = t.Name;
-            }
-        }
-        catch
-        {
-            /* offline — try SQLite copies */
-        }
-
-        if (players.Count > 0 && teams.Count > 0)
-            return (players, teams);
-
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-            if (players.Count == 0)
+            var playerRows = await db.Players.AsNoTracking()
+                .Where(p => !p.IsDeleted)
+                .Select(p => new { p.Id, p.FullName })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            foreach (var p in playerRows)
             {
-                var rows = await db.Players.AsNoTracking()
-                    .Where(p => !p.IsDeleted)
-                    .Select(p => new { p.Id, p.FullName })
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false);
-                foreach (var p in rows)
-                {
-                    if (!string.IsNullOrWhiteSpace(p.FullName))
-                        players[p.Id] = p.FullName;
-                }
+                if (!string.IsNullOrWhiteSpace(p.FullName))
+                    players[p.Id] = p.FullName;
             }
 
-            if (teams.Count == 0)
+            var teamRows = await db.Teams.AsNoTracking()
+                .Where(t => !t.IsDeleted)
+                .Select(t => new { t.Id, t.Name })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            foreach (var t in teamRows)
             {
-                var rows = await db.Teams.AsNoTracking()
-                    .Where(t => !t.IsDeleted)
-                    .Select(t => new { t.Id, t.Name })
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false);
-                foreach (var t in rows)
-                {
-                    if (!string.IsNullOrWhiteSpace(t.Name))
-                        teams[t.Id] = t.Name;
-                }
+                if (!string.IsNullOrWhiteSpace(t.Name))
+                    teams[t.Id] = t.Name;
             }
         }
         catch
@@ -268,7 +264,24 @@ public static class LiveMasterNames
             /* no local master rows */
         }
 
+        lock (CacheGate)
+        {
+            _cachedPlayers = new Dictionary<Guid, string>(players);
+            _cachedTeams = new Dictionary<Guid, string>(teams);
+            _cachedAtUtc = DateTime.UtcNow;
+        }
+
         return (players, teams);
+    }
+
+    public static void ClearCache()
+    {
+        lock (CacheGate)
+        {
+            _cachedPlayers = null;
+            _cachedTeams = null;
+            _cachedAtUtc = DateTime.MinValue;
+        }
     }
 
     public static string Lookup(IReadOnlyDictionary<Guid, string> map, Guid id, string fallback)
@@ -472,16 +485,18 @@ public sealed class MatchSquadCache : IMatchSquadCache
 
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
     private readonly IApiClient _api;
+    private readonly IAuthService _auth;
     private readonly Dictionary<Guid, MatchSquadSnapshot> _cache = new();
     private readonly object _gate = new();
     private Dictionary<Guid, string> _playerNames = new();
     private Dictionary<Guid, string> _teamNames = new();
     private DateTime _namesAtUtc = DateTime.MinValue;
 
-    public MatchSquadCache(IDbContextFactory<JplDbContext> dbFactory, IApiClient api)
+    public MatchSquadCache(IDbContextFactory<JplDbContext> dbFactory, IApiClient api, IAuthService auth)
     {
         _dbFactory = dbFactory;
         _api = api;
+        _auth = auth;
     }
 
     public MatchSquadSnapshot? TryGet(Guid matchId)
@@ -600,51 +615,59 @@ public sealed class MatchSquadCache : IMatchSquadCache
         Guid tournamentId,
         CancellationToken ct)
     {
-        _ = db;
-        var teamIds = new List<Guid>();
-        try
+        // Local-first tournament pool — never block scoring on API.
+        var teamIds = await db.TournamentTeams.AsNoTracking()
+            .Where(row => row.TournamentId == tournamentId)
+            .Select(row => row.TeamId)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        if (teamIds.Count == 0)
         {
-            var detail = await _api.GetTournamentAsync(tournamentId, ct).ConfigureAwait(false);
-            if (detail?.Teams is { Count: > 0 })
-                teamIds = detail.Teams.Select(t => t.TeamId).Distinct().ToList();
-        }
-        catch
-        {
-            /* offline — fielders fall back to bowling side */
+            try
+            {
+                var detail = await _api.GetTournamentAsync(tournamentId, ct).ConfigureAwait(false);
+                if (detail?.Teams is { Count: > 0 })
+                    teamIds = detail.Teams.Select(t => t.TeamId).Distinct().ToList();
+            }
+            catch
+            {
+                /* offline — fielders fall back to bowling side */
+            }
         }
 
         if (teamIds.Count == 0)
             return Array.Empty<SquadPlayer>();
 
-        IReadOnlyList<ApiTeamDto> teams;
-        IReadOnlyList<ApiPlayerDto> players;
-        try
-        {
-            teams = await _api.GetTeamsAsync(ct).ConfigureAwait(false);
-            players = await _api.GetPlayersAsync(ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            return Array.Empty<SquadPlayer>();
-        }
+        var localTeams = await db.Teams.AsNoTracking()
+            .Include(team => team.TeamPlayers)
+            .Where(team => teamIds.Contains(team.Id))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var localPlayers = await db.Players.AsNoTracking()
+            .Where(player => !player.IsDeleted)
+            .ToDictionaryAsync(player => player.Id, ct)
+            .ConfigureAwait(false);
 
-        var teamMap = teams.Where(t => !t.IsDeleted && teamIds.Contains(t.Id)).ToList();
-        var playerMap = players.Where(p => !p.IsDeleted).ToDictionary(p => p.Id);
+        if (localTeams.Count == 0)
+            return Array.Empty<SquadPlayer>();
+
         var teamNameByPlayer = new Dictionary<Guid, string>();
-        foreach (var team in teamMap)
+        foreach (var team in localTeams)
         {
-            foreach (var pid in TeamRoster.PlayingPlayerIds(team))
+            foreach (var link in team.TeamPlayers.Where(link => link.IsPlaying))
             {
-                if (!teamNameByPlayer.ContainsKey(pid))
-                    teamNameByPlayer[pid] = team.Name;
+                if (!teamNameByPlayer.ContainsKey(link.PlayerId))
+                    teamNameByPlayer[link.PlayerId] = team.Name;
             }
         }
 
         return teamNameByPlayer.Keys
-            .Where(id => playerMap.ContainsKey(id))
+            .Where(id => localPlayers.ContainsKey(id))
             .Select(id =>
             {
-                var name = playerMap[id].FullName;
+                var name = localPlayers[id].FullName;
                 var teamName = teamNameByPlayer.GetValueOrDefault(id);
                 return new SquadPlayer
                 {
@@ -776,6 +799,13 @@ public sealed class MatchSquadCache : IMatchSquadCache
     {
         if (snap.SubstitutesResolved)
             return;
+
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            // The persisted match roster is the complete local snapshot for Admin scoring.
+            snap.SubstitutesResolved = true;
+            return;
+        }
 
         try
         {

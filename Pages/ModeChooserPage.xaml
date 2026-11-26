@@ -39,12 +39,16 @@
                    FontSize="13"
                    HorizontalTextAlignment="Center" />
 
-            <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
+            <Border StrokeThickness="0"
+                    BackgroundColor="#152033"
+                    Padding="18"
+                    StrokeShape="RoundRectangle 16"
+                    IsVisible="{Binding ShowLeaguesOption}">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Leagues" TextColor="White" FontAttributes="Bold" FontSize="20" />
+                    <Label Text="{Binding LeaguesTitle}" TextColor="White" FontAttributes="Bold" FontSize="20" />
                     <Label Text="{Binding LeaguesSubtitle}"
                            TextColor="#B8C4D4" FontSize="13" />
-                    <Button Text="Open Leagues"
+                    <Button Text="{Binding LeaguesButton}"
                             BackgroundColor="#B6FF3B"
                             TextColor="#0D1B2A"
                             FontAttributes="Bold"
@@ -54,7 +58,11 @@
                 </VerticalStackLayout>
             </Border>
 
-            <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
+            <Border StrokeThickness="0"
+                    BackgroundColor="#152033"
+                    Padding="18"
+                    StrokeShape="RoundRectangle 16"
+                    IsVisible="{Binding ShowGroundsOption}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Grounds" TextColor="White" FontAttributes="Bold" FontSize="20" />
                     <Label Text="{Binding GroundsSubtitle}"
@@ -69,7 +77,11 @@
                 </VerticalStackLayout>
             </Border>
 
-            <Border StrokeThickness="0" BackgroundColor="#152033" Padding="18" StrokeShape="RoundRectangle 16">
+            <Border StrokeThickness="0"
+                    BackgroundColor="#152033"
+                    Padding="18"
+                    StrokeShape="RoundRectangle 16"
+                    IsVisible="{Binding ShowSchedulerOption}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Tournament Scheduler" TextColor="White" FontAttributes="Bold" FontSize="20" />
                     

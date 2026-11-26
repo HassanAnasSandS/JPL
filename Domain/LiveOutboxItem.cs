@@ -5,9 +5,10 @@ namespace JPL.Domain;
 /// incomplete balls are never purged, and scoring never waits on the network.
 /// Flush is FIFO (CreatedAtUtc, SortId) so undo cannot race a following ball.
 /// </summary>
-public sealed class LiveOutboxItem
+public sealed class LiveOutboxItem : ILeagueScoped
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid LeagueId { get; set; }
     public Guid IdempotencyKey { get; set; } = Guid.NewGuid();
     public string EntityType { get; set; } = string.Empty;
     public Guid EntityId { get; set; }

@@ -35,14 +35,15 @@ public sealed class LeagueService : ILeagueService
 
     public async Task<IReadOnlyList<League>> GetAllAsync(CancellationToken ct = default)
     {
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+            return CollapseSameNames(await LoadLocalAsync(ct).ConfigureAwait(false));
+
         if (!string.IsNullOrWhiteSpace(_tokens.Token))
         {
             try
             {
                 var remote = await _api.GetLeaguesAsync(ct).ConfigureAwait(false);
-                var list = CollapseSameNames(remote.Select(ToEntity).ToList());
-                await CacheLocalAsync(list, ct).ConfigureAwait(false);
-                return list;
+                return CollapseSameNames(remote.Select(ToEntity).ToList());
             }
             catch
             {
@@ -55,6 +56,20 @@ public sealed class LeagueService : ILeagueService
 
     public async Task<ApiPagedResult<League>> GetPageAsync(int skip, string? q, CancellationToken ct = default)
     {
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            var local = await LoadLocalAsync(ct).ConfigureAwait(false);
+            var query = local.AsQueryable();
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var term = q.Trim();
+                query = query.Where(league => league.Name.Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+            var items = query.OrderBy(league => league.Name)
+                .Skip(Math.Max(0, skip)).Take(50).ToList();
+            return new ApiPagedResult<League>(items, query.Count(), Math.Max(0, skip), ListPaging.PageSize);
+        }
+
         var page = await _api.GetLeaguesPageAsync(skip, q, ct).ConfigureAwait(false);
         var items = (page.Items ?? []).Select(ToEntity).ToList();
         return page.WithItems(items);
@@ -97,6 +112,12 @@ public sealed class LeagueService : ILeagueService
 
     public async Task<League?> GetAsync(Guid id, CancellationToken ct = default)
     {
+        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            return await db.Leagues.AsNoTracking().FirstOrDefaultAsync(l => l.Id == id, ct).ConfigureAwait(false);
+        }
+
         try
         {
             var dto = await _api.GetLeagueAsync(id, ct).ConfigureAwait(false);
@@ -119,7 +140,6 @@ public sealed class LeagueService : ILeagueService
             imageBase64 = imageBytes is { Length: > 0 } ? Convert.ToBase64String(imageBytes) : null
         }, ct).ConfigureAwait(false);
         var entity = ToEntity(remote);
-        await UpsertLocalAsync(entity, ct).ConfigureAwait(false);
         return entity;
     }
 
@@ -133,7 +153,6 @@ public sealed class LeagueService : ILeagueService
             imageBase64 = imageBytes is { Length: > 0 } ? Convert.ToBase64String(imageBytes) : null
         }, ct).ConfigureAwait(false);
         var entity = ToEntity(remote);
-        await UpsertLocalAsync(entity, ct).ConfigureAwait(false);
         return entity;
     }
 
@@ -141,13 +160,6 @@ public sealed class LeagueService : ILeagueService
     {
         EnsureSuperAdmin();
         await _api.DeleteLeagueAsync(id, ct).ConfigureAwait(false);
-        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var local = await db.Leagues.FirstOrDefaultAsync(l => l.Id == id, ct).ConfigureAwait(false);
-        if (local is not null)
-        {
-            local.IsActive = false;
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        }
     }
 
     private void EnsureSuperAdmin()
