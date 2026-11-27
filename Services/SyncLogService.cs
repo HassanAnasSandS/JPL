@@ -134,25 +134,16 @@ public sealed class SyncLogService : ISyncLogService
         pending += await db.LiveOutbox.AsNoTracking()
             .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.Pending, ct)
             .ConfigureAwait(false);
-        pending += await db.SchedulerSyncOutbox.AsNoTracking()
-            .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.Pending, ct)
-            .ConfigureAwait(false);
         var sending = await db.SyncOutbox.AsNoTracking()
             .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.InFlight, ct)
             .ConfigureAwait(false);
         sending += await db.LiveOutbox.AsNoTracking()
             .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.InFlight, ct)
             .ConfigureAwait(false);
-        sending += await db.SchedulerSyncOutbox.AsNoTracking()
-            .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.InFlight, ct)
-            .ConfigureAwait(false);
         var failed = await db.SyncOutbox.AsNoTracking()
             .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.Failed, ct)
             .ConfigureAwait(false);
         failed += await db.LiveOutbox.AsNoTracking()
-            .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.Failed, ct)
-            .ConfigureAwait(false);
-        failed += await db.SchedulerSyncOutbox.AsNoTracking()
             .CountAsync(row => row.LeagueId == leagueId && row.Status == SyncOutboxStatus.Failed, ct)
             .ConfigureAwait(false);
         var since = DateTime.UtcNow.AddHours(-24);

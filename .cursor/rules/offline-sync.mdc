@@ -8,7 +8,7 @@ alwaysApply: true
 ## Topology
 - One server; thousands of MAUI clients.
 - League Admin feature data uses local SQLite. After login, do not call feature APIs outside explicit Sync operations.
-- League User, SuperAdmin, GroundOwner, and Guest feature data uses live APIs and must not be persisted as local feature cache data.
+- League User, SuperAdmin, and Guest feature data uses live APIs and must not be persisted as local feature cache data.
 
 ## League Admin
 - Use local SQLite for reads and writes in every feature, including cold start; never fall back to feature APIs.

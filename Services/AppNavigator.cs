@@ -145,7 +145,7 @@ public sealed class AppNavigator : IAppNavigator
         if (freshLogin)
         {
             workspace.Clear();
-            // SuperAdmin goes straight to Users — no league/grounds/scheduler modules.
+            // SuperAdmin goes straight to Users without entering a workspace.
             if (session.CanManagePlatform)
             {
                 workspace.Set(AppWorkspace.Users);
@@ -171,54 +171,10 @@ public sealed class AppNavigator : IAppNavigator
             return;
         }
 
-        if (workspace.Current == AppWorkspace.Settings)
-        {
-            workspace.Clear();
-            await ShowModeChooserAsync().ConfigureAwait(true);
-            return;
-        }
-
         if (session.CanManagePlatform
             && workspace.Current is not AppWorkspace.Users)
         {
             workspace.Set(AppWorkspace.Users);
-            await ShowMainAsync().ConfigureAwait(true);
-            return;
-        }
-
-        if (workspace.Current == AppWorkspace.GroundOwner)
-        {
-            if (session.IsGroundOwner)
-            {
-                await ShowMainAsync().ConfigureAwait(true);
-                return;
-            }
-
-            workspace.Set(AppWorkspace.Grounds);
-        }
-
-        if (workspace.Current == AppWorkspace.Grounds && session.IsGroundOwner)
-        {
-            workspace.Set(AppWorkspace.GroundOwner);
-            await ShowMainAsync().ConfigureAwait(true);
-            return;
-        }
-
-        if (workspace.Current == AppWorkspace.Grounds)
-        {
-            await ShowMainAsync().ConfigureAwait(true);
-            return;
-        }
-
-        if (workspace.Current == AppWorkspace.Scheduler)
-        {
-            if (session.IsGuest)
-            {
-                workspace.Clear();
-                await ShowModeChooserAsync().ConfigureAwait(true);
-                return;
-            }
-
             await ShowMainAsync().ConfigureAwait(true);
             return;
         }
@@ -240,7 +196,7 @@ public sealed class AppNavigator : IAppNavigator
         try
         {
             var workspace = _services.GetRequiredService<IAppWorkspace>();
-            if (workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings or AppWorkspace.Scheduler)
+            if (workspace.Current == AppWorkspace.Users)
                 return;
 
             await Task.Delay(150).ConfigureAwait(true);

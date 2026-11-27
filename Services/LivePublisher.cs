@@ -55,22 +55,12 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
     private readonly IHttpClientFactory _http;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private int _flushRequested;
     private int _disposed;
-    private int _flushDebounceScheduled;
-    private static readonly TimeSpan FlushDebounce = TimeSpan.FromMilliseconds(350);
 
     public LivePublisher(IDbContextFactory<JplDbContext> dbFactory, IHttpClientFactory http)
     {
         _dbFactory = dbFactory;
         _http = http;
-        Connectivity.Current.ConnectivityChanged += OnConnectivityChanged;
-    }
-
-    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
-    {
-        if (e.NetworkAccess == NetworkAccess.Internet)
-            RequestFlush();
     }
 
     public async Task<int> GetPendingCountAsync(CancellationToken ct = default)
@@ -86,28 +76,7 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
 
     public void RequestFlush()
     {
-        Interlocked.Exchange(ref _flushRequested, 1);
-        // Debounce rapid balls so flush batches coalesce and SQLite isn't contended mid-over.
-        if (Interlocked.CompareExchange(ref _flushDebounceScheduled, 1, 0) != 0)
-            return;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(FlushDebounce).ConfigureAwait(false);
-                Interlocked.Exchange(ref _flushDebounceScheduled, 0);
-                try { await FlushAsync().ConfigureAwait(false); }
-                catch { /* never crash scoring */ }
-                // Another ball may have arrived during flush — drain once more if flagged.
-                if (Interlocked.CompareExchange(ref _flushRequested, 0, 0) != 0)
-                    RequestFlush();
-            }
-            catch
-            {
-                Interlocked.Exchange(ref _flushDebounceScheduled, 0);
-            }
-        });
+        // Scoring changes stay in SQLite/outbox until explicit login bootstrap or manual Sync.
     }
 
     /// <summary>Drain the ball-by-ball FIFO before lower-priority catalog sync work starts.</summary>
@@ -121,9 +90,8 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
             await RecoverStuckInFlightAsync(ct).ConfigureAwait(false);
             while (true)
             {
-                Interlocked.Exchange(ref _flushRequested, 0);
                 var any = await FlushBatchAsync(ct).ConfigureAwait(false);
-                if (!any && Interlocked.CompareExchange(ref _flushRequested, 0, 0) == 0)
+                if (!any)
                     break;
             }
         }
@@ -370,33 +338,9 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
         return new Guid(bytes);
     }
 
-    private async Task FlushAsync(CancellationToken ct = default)
-    {
-        if (Volatile.Read(ref _disposed) == 1)
-            return;
-        if (!await _gate.WaitAsync(0, ct).ConfigureAwait(false))
-            return;
-
-        try
-        {
-            await RecoverStuckInFlightAsync(ct).ConfigureAwait(false);
-            while (true)
-            {
-                Interlocked.Exchange(ref _flushRequested, 0);
-                var any = await FlushBatchAsync(ct).ConfigureAwait(false);
-                if (!any && Interlocked.CompareExchange(ref _flushRequested, 0, 0) == 0)
-                    break;
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
     /// <summary>
     /// Crash / timeout can leave a row InFlight forever (flush only picks Pending/Failed).
-    /// Safe here because FlushAsync holds the gate — no other send is running.
+    /// Safe here because FlushPendingAsync holds the gate — no other send is running.
     /// </summary>
     private async Task RecoverStuckInFlightAsync(CancellationToken ct)
     {
@@ -479,7 +423,17 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
                 item.LastError = null;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is OfflineException || NetworkUi.IsNetworkFailure(ex) || ex is HttpRequestException)
+            catch (Exception ex) when (ex is OfflineException || NetworkUi.IsNetworkFailure(ex))
+            {
+                item.Status = SyncOutboxStatus.Pending;
+                item.AttemptCount = Math.Max(0, item.AttemptCount - 1);
+                item.LastError = null;
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                // Stop the FIFO and the containing sync run. Repeated row requests
+                // cannot help while the connection is down.
+                throw new OfflineException(NetworkUi.OfflineMessage, ex);
+            }
+            catch (HttpRequestException ex)
             {
                 item.Status = SyncOutboxStatus.Failed;
                 item.LastError = ex.Message;
@@ -507,7 +461,6 @@ public sealed class LivePublisher : ILivePublisher, IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
             return;
-        Connectivity.Current.ConnectivityChanged -= OnConnectivityChanged;
         _gate.Dispose();
         await Task.CompletedTask.ConfigureAwait(false);
     }

@@ -2,7 +2,6 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:JPL.ViewModels"
-             xmlns:svc="clr-namespace:JPL.Services"
              x:Class="JPL.Pages.ModeChooserPage"
              x:DataType="vm:ModeChooserViewModel"
              Title="Cric360"
@@ -62,47 +61,10 @@
                     BackgroundColor="#152033"
                     Padding="18"
                     StrokeShape="RoundRectangle 16"
-                    IsVisible="{Binding ShowGroundsOption}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Grounds" TextColor="White" FontAttributes="Bold" FontSize="20" />
-                    <Label Text="{Binding GroundsSubtitle}"
-                           TextColor="#B8C4D4" FontSize="13" />
-                    <Button Text="{Binding GroundsButton}"
-                            BackgroundColor="#B6FF3B"
-                            TextColor="#0D1B2A"
-                            FontAttributes="Bold"
-                            CornerRadius="12"
-                            HeightRequest="48"
-                            Command="{Binding ChooseGroundsCommand}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border StrokeThickness="0"
-                    BackgroundColor="#152033"
-                    Padding="18"
-                    StrokeShape="RoundRectangle 16"
-                    IsVisible="{Binding ShowSchedulerOption}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Tournament Scheduler" TextColor="White" FontAttributes="Bold" FontSize="20" />
-                    
-                    <Button Text="Open Scheduler"
-                            BackgroundColor="#B6FF3B"
-                            TextColor="#0D1B2A"
-                            FontAttributes="Bold"
-                            CornerRadius="12"
-                            HeightRequest="48"
-                            Command="{Binding ChooseSchedulerCommand}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border StrokeThickness="0"
-                    BackgroundColor="#152033"
-                    Padding="18"
-                    StrokeShape="RoundRectangle 16"
                     IsVisible="{Binding ShowUsersOption}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Users" TextColor="White" FontAttributes="Bold" FontSize="20" />
-                    <Label Text="Create and manage League Admin, League User, and Ground Owner accounts."
+                    <Label Text="Create and manage League Admin and League User accounts."
                            TextColor="#B8C4D4" FontSize="13" />
                     <Button Text="Open Users"
                             BackgroundColor="#B6FF3B"
@@ -114,24 +76,6 @@
                 </VerticalStackLayout>
             </Border>
 
-            <Border StrokeThickness="0"
-                    BackgroundColor="#152033"
-                    Padding="18"
-                    StrokeShape="RoundRectangle 16"
-                    IsVisible="{Binding ShowSettingsOption}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Settings" TextColor="White" FontAttributes="Bold" FontSize="20" />
-                    <Label Text="Ground amenities, services, and shop items that owners pick when listing a ground."
-                           TextColor="#B8C4D4" FontSize="13" />
-                    <Button Text="Open Settings"
-                            BackgroundColor="#B6FF3B"
-                            TextColor="#0D1B2A"
-                            FontAttributes="Bold"
-                            CornerRadius="12"
-                            HeightRequest="48"
-                            Command="{Binding ChooseSettingsCommand}" />
-                </VerticalStackLayout>
-            </Border>
 
             <Button Text="Logout"
                     BackgroundColor="Transparent"

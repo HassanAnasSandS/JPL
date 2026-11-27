@@ -56,6 +56,13 @@ public interface IStatsService
         IReadOnlyList<Guid>? matchIds = null,
         CancellationToken ct = default);
     Task<StatsFilterOptionsDto> GetFilterOptionsAsync(CancellationToken ct = default);
+    Task<ApiPagedResult<TrophyRow>> GetHallOfFamePageAsync(
+        int skip, string category, string? query = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default);
     Task<IReadOnlyList<PlayerCareerSummary>> GetLeaderboardAsync(
         DateTime? fromUtc = null,
         DateTime? toExclusiveUtc = null,
@@ -181,6 +188,186 @@ public sealed class StatsService : IStatsService
         return await GetCachedOrFetchAsync(nameof(GetFilterOptionsAsync), new { },
             () => _api.GetStatsFilterOptionsAsync(ct), ct).ConfigureAwait(false);
     }
+
+    public async Task<ApiPagedResult<TrophyRow>> GetHallOfFamePageAsync(
+        int skip, string category, string? query = null,
+        IReadOnlyList<Guid>? formatIds = null,
+        IReadOnlyList<Guid>? tournamentIds = null,
+        IReadOnlyList<Guid>? seriesIds = null,
+        IReadOnlyList<Guid>? matchIds = null,
+        CancellationToken ct = default)
+    {
+        if (!CanUseLocalLeagueData)
+            return await _api.GetHallOfFamePageAsync(skip, category, query, formatIds,
+                tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var selectedFormats = NormalizeLocalIds(formatIds);
+        var selectedTournaments = NormalizeLocalIds(tournamentIds);
+        var selectedSeries = NormalizeLocalIds(seriesIds);
+        var selectedMatches = NormalizeLocalIds(matchIds);
+        var eventScoped = selectedTournaments is not null || selectedSeries is not null || selectedMatches is not null;
+
+        var matchesQuery = db.Matches.AsNoTracking()
+            .Where(match => !match.IsDeleted && match.Status == MatchStatus.Completed);
+        if (selectedFormats is not null)
+            matchesQuery = matchesQuery.Where(match => match.FormatId != null && selectedFormats.Contains(match.FormatId.Value));
+        if (eventScoped)
+            matchesQuery = matchesQuery.Where(match =>
+                (selectedTournaments != null && match.TournamentId != null && selectedTournaments.Contains(match.TournamentId.Value))
+                || (selectedSeries != null && match.SeriesId != null && selectedSeries.Contains(match.SeriesId.Value))
+                || (selectedMatches != null && selectedMatches.Contains(match.Id)));
+        var matches = await matchesQuery.ToListAsync(ct).ConfigureAwait(false);
+        var matchIdsInScope = matches.Select(match => match.Id).ToHashSet();
+        var innings = matchIdsInScope.Count == 0
+            ? []
+            : await db.Innings.AsNoTracking().Where(row => matchIdsInScope.Contains(row.MatchId))
+                .Include(row => row.Deliveries).ToListAsync(ct).ConfigureAwait(false);
+        var inningsByMatch = innings.GroupBy(row => row.MatchId).ToDictionary(group => group.Key, group => group.ToList());
+
+        var potmCounts = new Dictionary<Guid, int>();
+        var captainCounts = new Dictionary<Guid, int>();
+        var tournamentChampionCounts = new Dictionary<Guid, int>();
+        var seriesChampionCounts = new Dictionary<Guid, int>();
+        var potTournamentCounts = new Dictionary<Guid, int>();
+        var potSeriesCounts = new Dictionary<Guid, int>();
+        var bestBatsmanCounts = new Dictionary<Guid, int>();
+        var bestBowlerCounts = new Dictionary<Guid, int>();
+        var bestFielderCounts = new Dictionary<Guid, int>();
+        var playerIds = new HashSet<Guid>();
+
+        static void Bump(Dictionary<Guid, int> counts, Guid? id)
+        {
+            if (id is Guid playerId)
+                counts[playerId] = counts.GetValueOrDefault(playerId) + 1;
+        }
+
+        foreach (var match in matches)
+        {
+            Bump(potmCounts, match.PlayerOfTheMatchPlayerId);
+            var matchInnings = inningsByMatch.GetValueOrDefault(match.Id) ?? [];
+            var teamARuns = matchInnings.Where(row => row.BattingTeamId == match.TeamAId)
+                .SelectMany(row => row.Deliveries).Sum(delivery => delivery.RunsOffBat + delivery.ExtraRuns);
+            var teamBRuns = matchInnings.Where(row => row.BattingTeamId == match.TeamBId)
+                .SelectMany(row => row.Deliveries).Sum(delivery => delivery.RunsOffBat + delivery.ExtraRuns);
+            if (teamARuns != teamBRuns)
+                Bump(captainCounts, teamARuns > teamBRuns ? match.TeamACaptainId : match.TeamBCaptainId);
+        }
+
+        var tournamentsQuery = db.Tournaments.AsNoTracking()
+            .Where(row => !row.IsDeleted && row.Status == TournamentStatus.Completed);
+        if (selectedFormats is not null)
+            tournamentsQuery = tournamentsQuery.Where(row => row.FormatId != null && selectedFormats.Contains(row.FormatId.Value));
+        if (selectedTournaments is not null)
+            tournamentsQuery = tournamentsQuery.Where(row => selectedTournaments.Contains(row.Id));
+        else if (eventScoped)
+        {
+            var tournamentIdsInScope = matches.Where(match => match.TournamentId != null)
+                .Select(match => match.TournamentId!.Value).Distinct().ToHashSet();
+            tournamentsQuery = tournamentsQuery.Where(row => tournamentIdsInScope.Contains(row.Id));
+        }
+        var tournaments = await tournamentsQuery.ToListAsync(ct).ConfigureAwait(false);
+
+        var tournamentWinnerIds = tournaments.Where(row => row.WinnerTeamId != null)
+            .Select(row => row.WinnerTeamId!.Value).Distinct().ToArray();
+        var tournamentWinnerTeams = tournamentWinnerIds.Length == 0
+            ? new Dictionary<Guid, Team>()
+            : await db.Teams.AsNoTracking().Where(row => tournamentWinnerIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, ct).ConfigureAwait(false);
+        foreach (var tournament in tournaments)
+        {
+            if (tournament.WinnerTeamId is Guid winnerId
+                && tournamentWinnerTeams.TryGetValue(winnerId, out var team)
+                && team.CaptainPlayerId is Guid captainId)
+            {
+                playerIds.Add(captainId);
+                Bump(tournamentChampionCounts, captainId);
+            }
+            Bump(potTournamentCounts, tournament.PlayerOfTheTournamentPlayerId);
+            Bump(bestBatsmanCounts, tournament.BestBatsmanPlayerId);
+            Bump(bestBowlerCounts, tournament.BestBowlerPlayerId);
+            Bump(bestFielderCounts, tournament.BestFielderPlayerId);
+        }
+
+        var seriesQuery = db.Series.AsNoTracking()
+            .Where(row => !row.IsDeleted && row.Status == SeriesStatus.Completed);
+        if (selectedFormats is not null)
+            seriesQuery = seriesQuery.Where(row => row.FormatId != null && selectedFormats.Contains(row.FormatId.Value));
+        if (selectedSeries is not null)
+            seriesQuery = seriesQuery.Where(row => selectedSeries.Contains(row.Id));
+        else if (eventScoped)
+        {
+            var seriesIdsInScope = matches.Where(match => match.SeriesId != null)
+                .Select(match => match.SeriesId!.Value).Distinct().ToHashSet();
+            seriesQuery = seriesQuery.Where(row => seriesIdsInScope.Contains(row.Id));
+        }
+        var series = await seriesQuery.ToListAsync(ct).ConfigureAwait(false);
+
+        var seriesWinnerIds = series.Where(row => row.WinnerTeamId != null && !row.IsTied)
+            .Select(row => row.WinnerTeamId!.Value).Distinct().ToArray();
+        var seriesWinnerTeams = seriesWinnerIds.Length == 0
+            ? new Dictionary<Guid, Team>()
+            : await db.Teams.AsNoTracking().Where(row => seriesWinnerIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, ct).ConfigureAwait(false);
+        foreach (var item in series)
+        {
+            if (!item.IsTied && item.WinnerTeamId is Guid winnerId
+                && seriesWinnerTeams.TryGetValue(winnerId, out var team)
+                && team.CaptainPlayerId is Guid captainId)
+            {
+                playerIds.Add(captainId);
+                Bump(seriesChampionCounts, captainId);
+            }
+            Bump(potSeriesCounts, item.PlayerOfTheSeriesPlayerId);
+            Bump(bestBatsmanCounts, item.BestBatsmanPlayerId);
+            Bump(bestBowlerCounts, item.BestBowlerPlayerId);
+            Bump(bestFielderCounts, item.BestFielderPlayerId);
+        }
+
+        foreach (var id in potmCounts.Keys.Concat(captainCounts.Keys).Concat(potTournamentCounts.Keys)
+                     .Concat(potSeriesCounts.Keys).Concat(bestBatsmanCounts.Keys).Concat(bestBowlerCounts.Keys)
+                     .Concat(bestFielderCounts.Keys))
+            playerIds.Add(id);
+        var playerNames = playerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Players.AsNoTracking().Where(row => playerIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, row => row.FullName, ct).ConfigureAwait(false);
+
+        var categoryRows = category.Trim().ToLowerInvariant() switch
+        {
+            "captain" => BuildTrophyRows(captainCounts, playerNames, "Captain win trophy"),
+            "tourchamp" => BuildTrophyRows(tournamentChampionCounts, playerNames, "Tournament champion (captain)"),
+            "serieschamp" => BuildTrophyRows(seriesChampionCounts, playerNames, "Series champion (captain)"),
+            "potour" => BuildTrophyRows(potTournamentCounts, playerNames, "Player of the Tournament"),
+            "poseries" => BuildTrophyRows(potSeriesCounts, playerNames, "Player of the Series"),
+            "bestbat" => BuildTrophyRows(bestBatsmanCounts, playerNames, "Best Batsman"),
+            "bestbowl" => BuildTrophyRows(bestBowlerCounts, playerNames, "Best Bowler"),
+            "bestfield" => BuildTrophyRows(bestFielderCounts, playerNames, "Best Fielder"),
+            _ => BuildTrophyRows(potmCounts, playerNames, "Player of the Match")
+        };
+        return BuildLocalPage(categoryRows, skip, query, null, false, row => row.PlayerName);
+    }
+
+    private static HashSet<Guid>? NormalizeLocalIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+            return null;
+        var normalized = ids.Where(id => id != Guid.Empty).ToHashSet();
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static List<TrophyRow> BuildTrophyRows(
+        IReadOnlyDictionary<Guid, int> counts, IReadOnlyDictionary<Guid, string> names, string label)
+        => counts.OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => names.GetValueOrDefault(pair.Key, "?"), StringComparer.OrdinalIgnoreCase)
+            .Select((pair, index) => new TrophyRow
+            {
+                Rank = index + 1,
+                PlayerId = pair.Key,
+                PlayerName = names.GetValueOrDefault(pair.Key, "?"),
+                Trophies = pair.Value,
+                Detail = $"{pair.Value}× {label}"
+            }).ToList();
 
     public async Task<IReadOnlyList<PlayerCareerSummary>> GetLeaderboardAsync(
         DateTime? fromUtc = null,
@@ -348,26 +535,40 @@ public sealed class StatsService : IStatsService
     public async Task<IReadOnlyList<ApiMatchSummaryDto>> GetPlayerMatchesAsync(Guid playerId, CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        if (CanUseLocalLeagueData)
+            return await GetLocalPlayerMatchesAsync(playerId, ct).ConfigureAwait(false);
         return await _api.GetPlayerMatchesAsync(playerId, ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<PlayerTournamentHistoryItem>> GetPlayerTournamentHistoryAsync(Guid playerId, CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
-        var matches = await _api.GetPlayerMatchesAsync(playerId, ct).ConfigureAwait(false);
+        var matches = await GetPlayerMatchesAsync(playerId, ct).ConfigureAwait(false);
         var tournamentMatches = matches.Where(m => m.TournamentId is not null)
             .GroupBy(m => m.TournamentId!.Value).ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.MatchDateUtc).ToList());
         if (tournamentMatches.Count == 0) return Array.Empty<PlayerTournamentHistoryItem>();
-        var tournaments = await _api.GetTournamentsAsync(ct).ConfigureAwait(false);
-        var tournamentById = tournaments.ToDictionary(t => t.Id);
+        Dictionary<Guid, (string Name, string Status)> tournamentById;
+        if (CanUseLocalLeagueData)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            tournamentById = await db.Tournaments.AsNoTracking()
+                .Where(tournament => tournamentMatches.Keys.Contains(tournament.Id))
+                .ToDictionaryAsync(tournament => tournament.Id,
+                    tournament => (tournament.Name, tournament.Status.ToString()), ct).ConfigureAwait(false);
+        }
+        else
+        {
+            var tournaments = await _api.GetTournamentsAsync(ct).ConfigureAwait(false);
+            tournamentById = tournaments.ToDictionary(t => t.Id, t => (t.Name, t.StatusText));
+        }
         return tournamentMatches.Select(group =>
         {
             tournamentById.TryGetValue(group.Key, out var tournament);
             var item = new PlayerTournamentHistoryItem
             {
                 TournamentId = group.Key,
-                TournamentName = tournament?.Name ?? "Tournament",
-                StatusText = tournament?.StatusText ?? string.Empty
+                TournamentName = tournament.Name ?? "Tournament",
+                StatusText = tournament.Status ?? string.Empty
             };
             foreach (var match in group.Value) item.Matches.Add(match);
             return item;
@@ -377,28 +578,114 @@ public sealed class StatsService : IStatsService
     public async Task<IReadOnlyList<PlayerSeriesHistoryItem>> GetPlayerSeriesHistoryAsync(Guid playerId, CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
-        var matches = await _api.GetPlayerMatchesAsync(playerId, ct).ConfigureAwait(false);
+        var matches = await GetPlayerMatchesAsync(playerId, ct).ConfigureAwait(false);
         var seriesMatches = matches.Where(m => m.SeriesId is not null)
             .GroupBy(m => m.SeriesId!.Value).ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.MatchDateUtc).ToList());
         if (seriesMatches.Count == 0) return Array.Empty<PlayerSeriesHistoryItem>();
-        var series = await _api.GetSeriesListAsync(ct).ConfigureAwait(false);
-        var seriesById = series.ToDictionary(s => s.Id);
+        Dictionary<Guid, PlayerSeriesHistoryItem> seriesById;
+        if (CanUseLocalLeagueData)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            var seriesRows = await db.Series.AsNoTracking()
+                .Where(row => seriesMatches.Keys.Contains(row.Id)).ToListAsync(ct).ConfigureAwait(false);
+            var teamIds = seriesRows.SelectMany(row => new[] { row.TeamAId, row.TeamBId }).Distinct().ToArray();
+            var teamNames = await db.Teams.AsNoTracking().Where(row => teamIds.Contains(row.Id))
+                .ToDictionaryAsync(row => row.Id, row => row.Name, ct).ConfigureAwait(false);
+            seriesById = seriesRows.ToDictionary(row => row.Id, row => new PlayerSeriesHistoryItem
+            {
+                SeriesId = row.Id,
+                SeriesName = row.Name,
+                StatusText = row.Status.ToString(),
+                TeamAName = teamNames.GetValueOrDefault(row.TeamAId, "Team A"),
+                TeamBName = teamNames.GetValueOrDefault(row.TeamBId, "Team B"),
+                TeamAWins = seriesMatches.GetValueOrDefault(row.Id, []).Count(match => match.WinnerTeamId == row.TeamAId),
+                TeamBWins = seriesMatches.GetValueOrDefault(row.Id, []).Count(match => match.WinnerTeamId == row.TeamBId)
+            });
+        }
+        else
+        {
+            var series = await _api.GetSeriesListAsync(ct).ConfigureAwait(false);
+            seriesById = series.ToDictionary(s => s.Id, s => new PlayerSeriesHistoryItem
+            {
+                SeriesId = s.Id, SeriesName = s.Name, StatusText = s.StatusText,
+                TeamAName = s.TeamAName, TeamBName = s.TeamBName,
+                TeamAWins = s.TeamAWins, TeamBWins = s.TeamBWins
+            });
+        }
         return seriesMatches.Select(group =>
         {
-            seriesById.TryGetValue(group.Key, out var itemDto);
-            var item = new PlayerSeriesHistoryItem
-            {
-                SeriesId = group.Key,
-                SeriesName = itemDto?.Name ?? "Series",
-                StatusText = itemDto?.StatusText ?? string.Empty,
-                TeamAName = itemDto?.TeamAName ?? string.Empty,
-                TeamBName = itemDto?.TeamBName ?? string.Empty,
-                TeamAWins = itemDto?.TeamAWins ?? 0,
-                TeamBWins = itemDto?.TeamBWins ?? 0
-            };
+            if (!seriesById.TryGetValue(group.Key, out var item))
+                item = new PlayerSeriesHistoryItem { SeriesId = group.Key, SeriesName = "Series" };
             foreach (var match in group.Value) item.Matches.Add(match);
             return item;
         }).OrderByDescending(s => s.Matches.Max(m => m.MatchDateUtc)).ToList();
+    }
+
+    private async Task<IReadOnlyList<ApiMatchSummaryDto>> GetLocalPlayerMatchesAsync(Guid playerId, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var matchIdsFromDeliveries = await db.Deliveries.AsNoTracking()
+            .Where(row => row.BatterId == playerId || row.NonStrikerId == playerId
+                || row.BowlerId == playerId || row.FielderId == playerId || row.DismissedPlayerId == playerId)
+            .Select(row => row.MatchId).Distinct().ToListAsync(ct).ConfigureAwait(false);
+        var completedMatches = await db.Matches.AsNoTracking()
+            .Where(row => !row.IsDeleted && row.Status == MatchStatus.Completed)
+            .OrderByDescending(row => row.MatchDateUtc).ToListAsync(ct).ConfigureAwait(false);
+        var matches = completedMatches.Where(match => matchIdsFromDeliveries.Contains(match.Id)
+                || MatchRosterPayload.TryParse(match.SquadRosterJson)?.AllNamedPlayers()
+                    .Any(player => player.Id == playerId) == true)
+            .ToList();
+        if (matches.Count == 0)
+            return Array.Empty<ApiMatchSummaryDto>();
+
+        var ids = matches.Select(row => row.Id).ToHashSet();
+        var matchTeamIds = matches.SelectMany(match => new[] { match.TeamAId, match.TeamBId }).Distinct().ToArray();
+        var innings = await db.Innings.AsNoTracking().Where(row => ids.Contains(row.MatchId))
+            .Include(row => row.Deliveries).ToListAsync(ct).ConfigureAwait(false);
+        var inningsByMatch = innings.GroupBy(row => row.MatchId).ToDictionary(group => group.Key, group => group.ToList());
+        var teams = await db.Teams.AsNoTracking()
+            .Where(row => matchTeamIds.Contains(row.Id))
+            .ToDictionaryAsync(row => row.Id, row => row.Name, ct).ConfigureAwait(false);
+        var names = await db.Players.AsNoTracking().Where(row => row.Id == playerId)
+            .Select(row => row.FullName).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+
+        return matches.Select(match =>
+        {
+            var matchInnings = inningsByMatch.GetValueOrDefault(match.Id) ?? [];
+            var teamARuns = matchInnings.Where(row => row.BattingTeamId == match.TeamAId)
+                .SelectMany(row => row.Deliveries).Sum(delivery => delivery.RunsOffBat + delivery.ExtraRuns);
+            var teamAWickets = matchInnings.Where(row => row.BattingTeamId == match.TeamAId)
+                .SelectMany(row => row.Deliveries).Count(delivery => delivery.IsWicket);
+            var teamBRuns = matchInnings.Where(row => row.BattingTeamId == match.TeamBId)
+                .SelectMany(row => row.Deliveries).Sum(delivery => delivery.RunsOffBat + delivery.ExtraRuns);
+            var teamBWickets = matchInnings.Where(row => row.BattingTeamId == match.TeamBId)
+                .SelectMany(row => row.Deliveries).Count(delivery => delivery.IsWicket);
+            var teamAName = teams.GetValueOrDefault(match.TeamAId, "Team A");
+            var teamBName = teams.GetValueOrDefault(match.TeamBId, "Team B");
+            Guid? winner = teamARuns == teamBRuns ? null : teamARuns > teamBRuns ? match.TeamAId : match.TeamBId;
+            var resultText = winner is null ? "Match tied"
+                : winner == match.TeamAId ? $"{teamAName} won" : $"{teamBName} won";
+            var roster = MatchRosterPayload.TryParse(match.SquadRosterJson);
+            var appearances = matchInnings.SelectMany(inningsRow => inningsRow.Deliveries
+                .Select(delivery => (delivery, inningsRow)));
+            var involved = appearances.FirstOrDefault(pair => pair.delivery.BatterId == playerId
+                || pair.delivery.NonStrikerId == playerId || pair.delivery.BowlerId == playerId
+                || pair.delivery.FielderId == playerId || pair.delivery.DismissedPlayerId == playerId);
+            Guid? playerTeamId = involved.inningsRow is not null
+                ? involved.delivery.BowlerId == playerId || involved.delivery.FielderId == playerId
+                    ? involved.inningsRow.BowlingTeamId : involved.inningsRow.BattingTeamId
+                : roster?.TeamAPlayers.Concat(roster.TeamASubstitutes).Any(row => row.Id == playerId) == true
+                    ? match.TeamAId
+                    : roster?.TeamBPlayers.Concat(roster.TeamBSubstitutes).Any(row => row.Id == playerId) == true
+                        ? match.TeamBId : (Guid?)null;
+            return new ApiMatchSummaryDto(match.Id, match.Title, match.TeamAId, match.TeamBId,
+                roster?.TeamAName ?? teamAName, roster?.TeamBName ?? teamBName, (byte)match.Status,
+                (byte)match.Format, match.MatchDateUtc, match.OversLimit, match.Venue,
+                teamARuns, teamAWickets, teamBRuns, teamBWickets, resultText, winner,
+                match.PlayerOfTheMatchPlayerId,
+                match.PlayerOfTheMatchPlayerId == playerId ? names : null,
+                (byte)match.OversMode, match.TournamentId, match.SeriesId, match.LiveStreamUrl, playerTeamId);
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<ConfrontationStat>> GetBattingVsBowlersAsync(Guid batterId, string source = "matches", CancellationToken ct = default)
@@ -573,6 +860,21 @@ public sealed class StatsService : IStatsService
         CancellationToken ct = default)
     {
         await FlushCompletedMatchesAsync(ct).ConfigureAwait(false);
+        if (CanUseLocalLeagueData)
+        {
+            var bundle = await GetRankingsAsync(fromUtc, toExclusiveUtc, formatIds,
+                tournamentIds, seriesIds, matchIds, ct).ConfigureAwait(false);
+            var localRows = category.Trim().ToLowerInvariant() switch
+            {
+                "bowling" => bundle.Bowling,
+                "allrounder" => bundle.AllRounder,
+                "fielder" => bundle.Fielder,
+                "captain" => bundle.Captain,
+                "team" => bundle.Team,
+                _ => bundle.Batting
+            };
+            return BuildLocalPage(localRows, skip, q, null, false, row => row.PlayerName);
+        }
         return await GetCachedOrFetchAsync(nameof(GetRankingsPageAsync), new
         {
             skip, category, q, fromUtc, toExclusiveUtc, formatIds, tournamentIds, seriesIds, matchIds

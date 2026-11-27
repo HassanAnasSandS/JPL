@@ -84,13 +84,29 @@ public class Program
 
         await db.Database.EnsureCreatedAsync().ConfigureAwait(false);
         await EnsureMasterSchemaAsync(db).ConfigureAwait(false);
-        await EnsureSchedulerSchemaAsync(db).ConfigureAwait(false);
+        await DropLegacyTournamentSchedulerTablesAsync(db).ConfigureAwait(false);
         await EnsureDefaultUsersAsync(db).ConfigureAwait(false);
         await LeagueNameDeduper.CollapsePersistedAsync(db).ConfigureAwait(false);
         await dbManager.DropMasterSportsTablesAsync().ConfigureAwait(false);
         await dbManager.EnsureAllLeagueDatabasesAsync(db).ConfigureAwait(false);
         await RemapSuperAdminOwnershipAsync(db, dbManager).ConfigureAwait(false);
         await DeleteLegacyPublicUsersAsync(db).ConfigureAwait(false);
+    }
+
+    private static async Task DropLegacyTournamentSchedulerTablesAsync(MasterDbContext db)
+    {
+        var sqlServer = (db.Database.ProviderName ?? "")
+            .Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
+        foreach (var table in new[]
+        {
+            "SchedulerMatches", "SchedulerTeams", "SchedulerSyncReceipts", "SchedulerTournaments"
+        })
+        {
+            var sql = sqlServer
+                ? $"IF OBJECT_ID(N'dbo.[{table}]', 'U') IS NOT NULL DROP TABLE dbo.[{table}];"
+                : $"DROP TABLE IF EXISTS \"{table}\";";
+            await db.Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
+        }
     }
 
     private static async Task EnsureMasterSchemaAsync(MasterDbContext db)
@@ -191,168 +207,6 @@ public class Program
         }
     }
 
-    private static async Task EnsureSchedulerSchemaAsync(MasterDbContext db)
-    {
-        var provider = db.Database.ProviderName ?? "";
-        var sqlServer = provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
-        if (sqlServer)
-        {
-            await db.Database.ExecuteSqlRawAsync("""
-                IF OBJECT_ID(N'dbo.SchedulerTournaments', 'U') IS NULL
-                BEGIN
-                    CREATE TABLE dbo.SchedulerTournaments (
-                        Id uniqueidentifier NOT NULL CONSTRAINT PK_SchedulerTournaments PRIMARY KEY,
-                        Name nvarchar(160) NOT NULL,
-                        GroupCount int NOT NULL,
-                        RoundRobinType tinyint NOT NULL,
-                        QualifyPerGroup int NOT NULL,
-                        KnockoutFormat tinyint NOT NULL,
-                        Status tinyint NOT NULL,
-                        WinnerTeamId uniqueidentifier NULL,
-                        CreatedByUserId uniqueidentifier NOT NULL,
-                        QualificationPicksJson nvarchar(max) NULL,
-                        CreatedAtUtc datetime2 NOT NULL,
-                        UpdatedAtUtc datetime2 NOT NULL,
-                        IsDeleted bit NOT NULL,
-                        Version bigint NOT NULL CONSTRAINT DF_SchedulerTournaments_Version DEFAULT 1
-                    );
-                    CREATE INDEX IX_SchedulerTournaments_CreatedByUserId
-                        ON dbo.SchedulerTournaments (CreatedByUserId);
-                END
-                """).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                IF COL_LENGTH('dbo.SchedulerTournaments', 'Version') IS NULL
-                    ALTER TABLE dbo.SchedulerTournaments ADD Version bigint NOT NULL CONSTRAINT DF_SchedulerTournaments_Version DEFAULT 1;
-                IF OBJECT_ID(N'dbo.SchedulerSyncReceipts', 'U') IS NULL
-                BEGIN
-                    CREATE TABLE dbo.SchedulerSyncReceipts (
-                        OperationId uniqueidentifier NOT NULL CONSTRAINT PK_SchedulerSyncReceipts PRIMARY KEY,
-                        TournamentId uniqueidentifier NOT NULL,
-                        AppliedVersion bigint NOT NULL,
-                        PayloadHash nvarchar(64) NOT NULL,
-                        CreatedAtUtc datetime2 NOT NULL
-                    );
-                    CREATE INDEX IX_SchedulerSyncReceipts_TournamentId ON dbo.SchedulerSyncReceipts (TournamentId);
-                END
-                """).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                IF OBJECT_ID(N'dbo.SchedulerTeams', 'U') IS NULL
-                BEGIN
-                    CREATE TABLE dbo.SchedulerTeams (
-                        Id uniqueidentifier NOT NULL CONSTRAINT PK_SchedulerTeams PRIMARY KEY,
-                        TournamentId uniqueidentifier NOT NULL,
-                        Name nvarchar(120) NOT NULL,
-                        GroupNumber int NOT NULL,
-                        SortOrder int NOT NULL,
-                        CONSTRAINT FK_SchedulerTeams_SchedulerTournaments_TournamentId
-                            FOREIGN KEY (TournamentId) REFERENCES dbo.SchedulerTournaments (Id) ON DELETE CASCADE
-                    );
-                    CREATE INDEX IX_SchedulerTeams_TournamentId ON dbo.SchedulerTeams (TournamentId);
-                END
-                """).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                IF OBJECT_ID(N'dbo.SchedulerMatches', 'U') IS NULL
-                BEGIN
-                    CREATE TABLE dbo.SchedulerMatches (
-                        Id uniqueidentifier NOT NULL CONSTRAINT PK_SchedulerMatches PRIMARY KEY,
-                        TournamentId uniqueidentifier NOT NULL,
-                        Stage tinyint NOT NULL,
-                        GroupNumber int NOT NULL,
-                        Sequence int NOT NULL,
-                        Label nvarchar(80) NOT NULL,
-                        TeamAId uniqueidentifier NULL,
-                        TeamBId uniqueidentifier NULL,
-                        TeamASlot nvarchar(80) NULL,
-                        TeamBSlot nvarchar(80) NULL,
-                        Result tinyint NOT NULL,
-                        WinnerFeedsMatchId uniqueidentifier NULL,
-                        WinnerFeedsIsTeamA bit NOT NULL,
-                        LoserFeedsMatchId uniqueidentifier NULL,
-                        LoserFeedsIsTeamA bit NOT NULL,
-                        CONSTRAINT FK_SchedulerMatches_SchedulerTournaments_TournamentId
-                            FOREIGN KEY (TournamentId) REFERENCES dbo.SchedulerTournaments (Id) ON DELETE CASCADE
-                    );
-                    CREATE INDEX IX_SchedulerMatches_TournamentId ON dbo.SchedulerMatches (TournamentId);
-                END
-                """).ConfigureAwait(false);
-            return;
-        }
-
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE TABLE IF NOT EXISTS "SchedulerTournaments" (
-                    "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTournaments" PRIMARY KEY,
-                    "Name" TEXT NOT NULL,
-                    "GroupCount" INTEGER NOT NULL,
-                    "RoundRobinType" INTEGER NOT NULL,
-                    "QualifyPerGroup" INTEGER NOT NULL,
-                    "KnockoutFormat" INTEGER NOT NULL,
-                    "Status" INTEGER NOT NULL,
-                    "WinnerTeamId" TEXT NULL,
-                    "CreatedByUserId" TEXT NOT NULL,
-                    "QualificationPicksJson" TEXT NULL,
-                    "CreatedAtUtc" TEXT NOT NULL,
-                    "UpdatedAtUtc" TEXT NOT NULL,
-                    "IsDeleted" INTEGER NOT NULL,
-                    "Version" INTEGER NOT NULL DEFAULT 1
-                );
-                """).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE TABLE IF NOT EXISTS "SchedulerSyncReceipts" (
-                    "OperationId" TEXT NOT NULL CONSTRAINT "PK_SchedulerSyncReceipts" PRIMARY KEY,
-                    "TournamentId" TEXT NOT NULL,
-                    "AppliedVersion" INTEGER NOT NULL,
-                    "PayloadHash" TEXT NOT NULL,
-                    "CreatedAtUtc" TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS "IX_SchedulerSyncReceipts_TournamentId"
-                    ON "SchedulerSyncReceipts" ("TournamentId");
-                """).ConfigureAwait(false);
-            try
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """ALTER TABLE "SchedulerTournaments" ADD COLUMN "Version" INTEGER NOT NULL DEFAULT 1;""")
-                    .ConfigureAwait(false);
-            }
-            catch { /* version column already exists */ }
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE TABLE IF NOT EXISTS "SchedulerTeams" (
-                    "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTeams" PRIMARY KEY,
-                    "TournamentId" TEXT NOT NULL,
-                    "Name" TEXT NOT NULL,
-                    "GroupNumber" INTEGER NOT NULL,
-                    "SortOrder" INTEGER NOT NULL,
-                    FOREIGN KEY ("TournamentId") REFERENCES "SchedulerTournaments" ("Id") ON DELETE CASCADE
-                );
-                """).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE TABLE IF NOT EXISTS "SchedulerMatches" (
-                    "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerMatches" PRIMARY KEY,
-                    "TournamentId" TEXT NOT NULL,
-                    "Stage" INTEGER NOT NULL,
-                    "GroupNumber" INTEGER NOT NULL,
-                    "Sequence" INTEGER NOT NULL,
-                    "Label" TEXT NOT NULL,
-                    "TeamAId" TEXT NULL,
-                    "TeamBId" TEXT NULL,
-                    "TeamASlot" TEXT NULL,
-                    "TeamBSlot" TEXT NULL,
-                    "Result" INTEGER NOT NULL,
-                    "WinnerFeedsMatchId" TEXT NULL,
-                    "WinnerFeedsIsTeamA" INTEGER NOT NULL,
-                    "LoserFeedsMatchId" TEXT NULL,
-                    "LoserFeedsIsTeamA" INTEGER NOT NULL,
-                    FOREIGN KEY ("TournamentId") REFERENCES "SchedulerTournaments" ("Id") ON DELETE CASCADE
-                );
-                """).ConfigureAwait(false);
-        }
-        catch
-        {
-            /* already exists */
-        }
-    }
-
     private static async Task EnsureDefaultUsersAsync(MasterDbContext db)
     {
         var hasher = new PasswordHasher<AppUser>();
@@ -375,7 +229,9 @@ public class Program
         }
 
         await EnsureUser("user", "user123", AppRole.Guest, null).ConfigureAwait(false);
-        await EnsureUser("groundowner", "ground123", AppRole.GroundOwner, null).ConfigureAwait(false);
+        // Role value 3 was GroundOwner; remove those legacy accounts on upgrade.
+        await db.Users.Where(u => (byte)u.Role == 3)
+            .ExecuteDeleteAsync().ConfigureAwait(false);
         await EnsureSoleSuperAdminAsync(db, hasher).ConfigureAwait(false);
 
         var guest = await db.Users.FirstOrDefaultAsync(u => u.Username == "user").ConfigureAwait(false);
@@ -458,12 +314,6 @@ public class Program
 
         if (jpAdmin.Id != jpAdminId)
             jpAdminId = jpAdmin.Id;
-
-        // Master: scheduler tournaments
-        await master.SchedulerTournaments.IgnoreQueryFilters()
-            .Where(t => superIds.Contains(t.CreatedByUserId))
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.CreatedByUserId, jpAdminId))
-            .ConfigureAwait(false);
 
         var leagues = await master.Leagues.AsNoTracking()
             .Where(l => l.IsActive)

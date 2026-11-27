@@ -78,12 +78,6 @@
 		<EmbeddedResource Remove="JPL.Api\**" />
 		<MauiXaml Remove="JPL.Api\**" />
 		<Content Remove="JPL.Api\**" />
-		<Compile Remove="JPL.Grounds.Api\**" />
-		<None Remove="JPL.Grounds.Api\**" />
-		<None Include="JPL.Grounds.Api\**" Exclude="JPL.Grounds.Api\bin\**;JPL.Grounds.Api\obj\**" />
-		<EmbeddedResource Remove="JPL.Grounds.Api\**" />
-		<MauiXaml Remove="JPL.Grounds.Api\**" />
-		<Content Remove="JPL.Grounds.Api\**" />
 	</ItemGroup>
 
 	<ItemGroup>

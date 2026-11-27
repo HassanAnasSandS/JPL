@@ -234,7 +234,7 @@
                     </VerticalStackLayout>
                 </VerticalStackLayout>
 
-                <!-- Fixtures schedule (day-wise, same pattern as Tournament Scheduler) -->
+                <!-- Day-wise League Tournament fixture schedule -->
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Fixtures" Style="{StaticResource SectionLabel}" />
 

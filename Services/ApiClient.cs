@@ -10,7 +10,8 @@ public sealed record ApiLoginResult(
     string Token,
     Guid? LeagueId = null,
     bool NeedsLeaguePicker = false,
-    string? WhatsAppNumber = null);
+    string? WhatsAppNumber = null,
+    string? LeagueName = null);
 
 public sealed record ApiLeagueDto(
     Guid Id,
@@ -528,91 +529,9 @@ public sealed class ApiSeriesStandingDto
     public int Rank { get; set; }
 }
 
-public sealed class ApiSchedulerListDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupCount { get; set; }
-    public int TeamCount { get; set; }
-    public byte RoundRobinType { get; set; }
-    public int QualifyPerGroup { get; set; }
-    public byte KnockoutFormat { get; set; }
-    public byte Status { get; set; }
-    public string StatusText { get; set; } = string.Empty;
-    public string MetaLine { get; set; } = string.Empty;
-    public string WinnerLine { get; set; } = string.Empty;
-    public bool CanEdit { get; set; }
-    public Guid CreatedByUserId { get; set; }
-    public string CreatedByUsername { get; set; } = string.Empty;
-    public long Version { get; set; }
-    public DateTime UpdatedAtUtc { get; set; }
-}
-
-public sealed class ApiSchedulerDetailDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupCount { get; set; }
-    public byte RoundRobinType { get; set; }
-    public int QualifyPerGroup { get; set; }
-    public byte KnockoutFormat { get; set; }
-    public byte Status { get; set; }
-    public Guid? WinnerTeamId { get; set; }
-    public string? QualificationPicksJson { get; set; }
-    public Guid CreatedByUserId { get; set; }
-    public string CreatedByUsername { get; set; } = string.Empty;
-    public long Version { get; set; }
-    public DateTime CreatedAtUtc { get; set; }
-    public DateTime UpdatedAtUtc { get; set; }
-    public List<ApiSchedulerTeamDto> Teams { get; set; } = new();
-    public List<ApiSchedulerMatchDto> Matches { get; set; } = new();
-}
-
-public sealed class ApiSchedulerTeamDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupNumber { get; set; }
-    public int SortOrder { get; set; }
-}
-
-public sealed class ApiSchedulerMatchDto
-{
-    public Guid Id { get; set; }
-    public byte Stage { get; set; }
-    public int GroupNumber { get; set; }
-    public int Sequence { get; set; }
-    public string Label { get; set; } = string.Empty;
-    public Guid? TeamAId { get; set; }
-    public Guid? TeamBId { get; set; }
-    public string? TeamASlot { get; set; }
-    public string? TeamBSlot { get; set; }
-    public byte Result { get; set; }
-    public Guid? WinnerFeedsMatchId { get; set; }
-    public bool WinnerFeedsIsTeamA { get; set; }
-    public Guid? LoserFeedsMatchId { get; set; }
-    public bool LoserFeedsIsTeamA { get; set; }
-}
-
-public sealed class ApiSchedulerSyncRequest
-{
-    public Guid OperationId { get; set; }
-    public Guid TournamentId { get; set; }
-    public long ExpectedVersion { get; set; }
-    public string Operation { get; set; } = "Upsert";
-    public object Payload { get; set; } = new();
-}
-
-public sealed class ApiSchedulerSyncResponse
-{
-    public Guid TournamentId { get; set; }
-    public long AppliedVersion { get; set; }
-    public bool WasDuplicate { get; set; }
-}
-
 /// <summary>
 /// JPL.Api only (jpl.shoptick.shop → :5025).
-/// Login, GroundOwner/Admin/User accounts, leagues, matches, venues, live hub.
+/// Login, league users, leagues, matches, venues, live hub.
 /// Never send grounds catalog or ground-booking traffic here.
 /// Live scoring (matches + nets) uses local SQLite + outbox sync on complete — never POST create.
 /// </summary>
@@ -872,14 +791,6 @@ public interface IApiClient
     Task<ApiSeriesDetailDto> GenerateSeriesAsync(Guid id, CancellationToken ct = default);
     Task<ApiSeriesDetailDto> LinkSeriesMatchAsync(Guid id, Guid fixtureId, Guid matchId, CancellationToken ct = default);
     Task DeleteSeriesAsync(Guid id, CancellationToken ct = default);
-
-    Task<IReadOnlyList<ApiSchedulerListDto>> GetSchedulerListAsync(CancellationToken ct = default);
-    Task<ApiPagedResult<ApiSchedulerListDto>> GetSchedulerPageAsync(int skip, string? q = null, Guid? createdBy = null, CancellationToken ct = default);
-    Task<ApiSchedulerDetailDto?> GetSchedulerAsync(Guid id, CancellationToken ct = default);
-    Task<ApiSchedulerDetailDto> CreateSchedulerAsync(object body, CancellationToken ct = default);
-    Task<ApiSchedulerDetailDto> UpdateSchedulerAsync(Guid id, object body, CancellationToken ct = default);
-    Task DeleteSchedulerAsync(Guid id, CancellationToken ct = default);
-    Task<ApiSchedulerSyncResponse> SyncSchedulerMutationAsync(ApiSchedulerSyncRequest request, CancellationToken ct = default);
 
     Task<IReadOnlyList<ApiLeagueDto>> GetLeaguesAsync(CancellationToken ct = default);
     Task<ApiPagedResult<ApiLeagueDto>> GetLeaguesPageAsync(int skip, string? q = null, CancellationToken ct = default);
@@ -2046,49 +1957,6 @@ public sealed class ApiClient : IApiClient
             using var response = await http.DeleteAsync($"api/series/{id:D}", ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }, ct);
-
-    public Task<IReadOnlyList<ApiSchedulerListDto>> GetSchedulerListAsync(CancellationToken ct = default)
-        => RunAsync(async http =>
-        {
-            using var response = await http.GetAsync("api/scheduler", ct).ConfigureAwait(false);
-            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
-            var list = await response.Content.ReadFromJsonAsync<List<ApiSchedulerListDto>>(JsonOptions, ct)
-                .ConfigureAwait(false);
-            return (IReadOnlyList<ApiSchedulerListDto>)(list ?? new List<ApiSchedulerListDto>());
-        }, ct);
-
-    public Task<ApiPagedResult<ApiSchedulerListDto>> GetSchedulerPageAsync(int skip, string? q = null, Guid? createdBy = null, CancellationToken ct = default)
-        => GetPagedAsync<ApiSchedulerListDto>(
-            "api/scheduler/page" + ListPaging.Query(skip, ("q", q),
-                ("createdBy", createdBy is Guid id && id != Guid.Empty ? id.ToString("D") : null)),
-            ct);
-
-    public Task<ApiSchedulerDetailDto?> GetSchedulerAsync(Guid id, CancellationToken ct = default)
-        => RunAsync(async http =>
-        {
-            using var response = await http.GetAsync($"api/scheduler/{id:D}", ct).ConfigureAwait(false);
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return null;
-            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
-            return await response.Content.ReadFromJsonAsync<ApiSchedulerDetailDto>(JsonOptions, ct)
-                .ConfigureAwait(false);
-        }, ct);
-
-    public Task<ApiSchedulerDetailDto> CreateSchedulerAsync(object body, CancellationToken ct = default)
-        => SendJsonAsync<ApiSchedulerDetailDto>(HttpMethod.Post, "api/scheduler", body, ct);
-
-    public Task<ApiSchedulerDetailDto> UpdateSchedulerAsync(Guid id, object body, CancellationToken ct = default)
-        => SendJsonAsync<ApiSchedulerDetailDto>(HttpMethod.Put, $"api/scheduler/{id:D}", body, ct);
-
-    public Task DeleteSchedulerAsync(Guid id, CancellationToken ct = default)
-        => RunAsync(async http =>
-        {
-            using var response = await http.DeleteAsync($"api/scheduler/{id:D}", ct).ConfigureAwait(false);
-            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
-        }, ct);
-
-    public Task<ApiSchedulerSyncResponse> SyncSchedulerMutationAsync(ApiSchedulerSyncRequest request, CancellationToken ct = default)
-        => SendJsonAsync<ApiSchedulerSyncResponse>(HttpMethod.Post, "api/scheduler/sync", request, ct);
 
     public Task<IReadOnlyList<ApiLeagueDto>> GetLeaguesAsync(CancellationToken ct = default)
         => RunAsync(async http =>

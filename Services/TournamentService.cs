@@ -346,25 +346,25 @@ public sealed class TournamentService : ITournamentService
         if (entity.RoundRobinType == TournamentRoundRobinType.Custom)
         {
             var pairs = ReadCustomPairs(entity.CustomPairsJson);
-            SchedulerEngine.ValidateCustomPairings(entity.Teams.Select(row => row.TeamId).ToList(),
+            TournamentBracketEngine.ValidateCustomPairings(entity.Teams.Select(row => row.TeamId).ToList(),
                 entity.MatchesPerTeam, pairs);
         }
         var teamIds = entity.Teams.Select(row => row.TeamId).Distinct().ToArray();
         var teamNames = teamIds.Length == 0 ? new Dictionary<Guid, string>()
             : await db.Teams.AsNoTracking().Where(row => teamIds.Contains(row.Id))
                 .ToDictionaryAsync(row => row.Id, row => row.Name, ct).ConfigureAwait(false);
-        var schedulerTeams = entity.Teams.OrderBy(row => row.GroupNumber)
+        var bracketTeams = entity.Teams.OrderBy(row => row.GroupNumber)
             .ThenBy(row => teamNames.GetValueOrDefault(row.TeamId, string.Empty), StringComparer.OrdinalIgnoreCase)
             .ThenBy(row => row.TeamId)
-            .Select((row, index) => new SchedulerTeam { Id = row.TeamId, TournamentId = entity.Id,
+            .Select((row, index) => new BracketTeam { Id = row.TeamId, TournamentId = entity.Id,
                 Name = teamNames.GetValueOrDefault(row.TeamId, string.Empty), GroupNumber = row.GroupNumber,
                 SortOrder = index }).ToList();
-        var schedule = new SchedulerTournament
+        var schedule = new BracketTournament
         {
             Id = entity.Id, GroupCount = entity.GroupCount, QualifyPerGroup = entity.QualifyPerGroup,
-            RoundRobinType = (SchedulerRoundRobinType)entity.RoundRobinType,
-            KnockoutFormat = (SchedulerKnockoutFormat)entity.KnockoutFormat,
-            Teams = schedulerTeams
+            RoundRobinType = (BracketRoundRobinType)entity.RoundRobinType,
+            KnockoutFormat = (BracketKnockoutFormat)entity.KnockoutFormat,
+            Teams = bracketTeams
         };
         foreach (var old in entity.Fixtures.ToList())
         {
@@ -372,7 +372,7 @@ public sealed class TournamentService : ITournamentService
             _outbox.EnqueueEntity(db, old, "Delete");
         }
         entity.Fixtures.Clear();
-        var built = SchedulerEngine.BuildMatches(schedule,
+        var built = TournamentBracketEngine.BuildMatches(schedule,
             entity.RoundRobinType == TournamentRoundRobinType.Custom ? ReadCustomPairs(entity.CustomPairsJson) : null);
         foreach (var row in built)
         {
@@ -380,14 +380,14 @@ public sealed class TournamentService : ITournamentService
             {
                 Id = row.Id, TournamentId = entity.Id, Stage = row.Stage switch
                 {
-                    SchedulerMatchStage.Group => TournamentFixtureStage.Group,
-                    SchedulerMatchStage.QuarterFinal => TournamentFixtureStage.QuarterFinal,
-                    SchedulerMatchStage.Playoff => TournamentFixtureStage.Playoff,
-                    SchedulerMatchStage.SemiFinal => TournamentFixtureStage.SemiFinal,
-                    SchedulerMatchStage.Final => TournamentFixtureStage.Final,
+                    BracketMatchStage.Group => TournamentFixtureStage.Group,
+                    BracketMatchStage.QuarterFinal => TournamentFixtureStage.QuarterFinal,
+                    BracketMatchStage.Playoff => TournamentFixtureStage.Playoff,
+                    BracketMatchStage.SemiFinal => TournamentFixtureStage.SemiFinal,
+                    BracketMatchStage.Final => TournamentFixtureStage.Final,
                     _ => TournamentFixtureStage.Group
                 },
-                GroupNumber = row.Stage == SchedulerMatchStage.Group ? row.GroupNumber : null,
+                GroupNumber = row.Stage == BracketMatchStage.Group ? row.GroupNumber : null,
                 Sequence = row.Sequence, Label = row.Label, TeamAId = row.TeamAId, TeamBId = row.TeamBId,
                 TeamASlot = row.TeamASlot, TeamBSlot = row.TeamBSlot
             };
@@ -515,11 +515,11 @@ public sealed class TournamentService : ITournamentService
         else if (groupCount is not (1 or 2 or 4))
             throw new ArgumentException("Groups must be 1, 2, or 4.");
 
-        var ko = (SchedulerKnockoutFormat)(byte)draft.KnockoutFormat;
-        var qualifyOpts = SchedulerEngine.QualifyOptions(groupCount, ko);
+        var ko = (BracketKnockoutFormat)(byte)draft.KnockoutFormat;
+        var qualifyOpts = TournamentBracketEngine.QualifyOptions(groupCount, ko);
         if (qualifyOpts.Count == 0 || !qualifyOpts.Contains(draft.QualifyPerGroup))
             throw new ArgumentException(
-                $"{SchedulerEngine.KnockoutLabel(ko)} does not fit {groupCount} group{(groupCount == 1 ? "" : "s")}.");
+                $"{TournamentBracketEngine.KnockoutLabel(ko)} does not fit {groupCount} group{(groupCount == 1 ? "" : "s")}.");
 
         if (draft.VenueId == Guid.Empty)
             throw new ArgumentException("Venue is required.");
@@ -542,9 +542,9 @@ public sealed class TournamentService : ITournamentService
 
         if (draft.KnockoutFormat != TournamentKnockoutFormat.None)
         {
-            var need = SchedulerEngine.KnockoutTeamCount(ko);
+            var need = TournamentBracketEngine.KnockoutTeamCount(ko);
             if (draft.Teams.Count < need)
-                throw new ArgumentException($"{SchedulerEngine.KnockoutLabel(ko)} needs {need} teams.");
+                throw new ArgumentException($"{TournamentBracketEngine.KnockoutLabel(ko)} needs {need} teams.");
         }
     }
 
@@ -784,7 +784,7 @@ public sealed class TournamentService : ITournamentService
                 return (A: a, B: b);
             }).ToList();
             var teamIds = tournament.Teams.Select(row => row.TeamId).Distinct().ToList();
-            SchedulerEngine.ValidateCustomPairings(teamIds, tournament.MatchesPerTeam, pairs);
+            TournamentBracketEngine.ValidateCustomPairings(teamIds, tournament.MatchesPerTeam, pairs);
             return true;
         }
         catch
@@ -1125,7 +1125,7 @@ public sealed class TournamentService : ITournamentService
             }
 
             // Mid-group: points envelope only — NRR mid-season is not safe without simulating balls.
-            var temp = rows.Select(r => new SchedulerStandingRow
+            var temp = rows.Select(r => new BracketStandingRow
             {
                 TeamId = r.TeamId,
                 TeamName = r.TeamName,
@@ -1138,7 +1138,7 @@ public sealed class TournamentService : ITournamentService
                 Points = r.Points
             }).ToList();
 
-            SchedulerEngine.ApplyEnvelopeQualificationMarks(
+            TournamentBracketEngine.ApplyEnvelopeQualificationMarks(
                 temp,
                 id => fixturesInGroup.Count(f =>
                     (f.TeamAId == id || f.TeamBId == id) && !IsFinished(f)),

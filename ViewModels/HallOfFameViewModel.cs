@@ -7,7 +7,7 @@ namespace JPL.ViewModels;
 
 public partial class HallOfFameViewModel : ObservableObject
 {
-    private readonly IApiClient _api;
+    private readonly IStatsService _stats;
     private int _loadBusy;
 
     public ObservableCollection<TrophyRow> Items { get; } = new();
@@ -48,9 +48,9 @@ public partial class HallOfFameViewModel : ObservableObject
         _ => "potm"
     };
 
-    public HallOfFameViewModel(IApiClient api, IFormatService formats, IStatsService stats, ILeagueContext league)
+    public HallOfFameViewModel(IFormatService formats, IStatsService stats, ILeagueContext league)
     {
-        _api = api;
+        _stats = stats;
         FormatFilter = new FormatFilterViewModel(formats);
         EventScope = new EventScopeFilterViewModel(stats, league);
         FormatFilter.Committed += (_, _) =>
@@ -137,10 +137,10 @@ public partial class HallOfFameViewModel : ObservableObject
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
             await FormatFilter.EnsureLoadedAsync().ConfigureAwait(true);
             await EventScope.EnsureLoadedAsync().ConfigureAwait(true);
-            var page = await _api.GetHallOfFamePageAsync(
+            var page = await _stats.GetHallOfFamePageAsync(
                     Items.Count,
                     CategoryKey,
-                    q: null,
+                    query: null,
                     FormatFilter.SelectedIds,
                     EventScope.TournamentIds,
                     EventScope.SeriesIds,

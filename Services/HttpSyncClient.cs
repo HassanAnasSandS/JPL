@@ -55,6 +55,24 @@ public sealed class HttpSyncClient : ISqlServerSyncClient
 
     public bool IsEnabled => true;
 
+    public async Task<bool> CheckAvailabilityAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var http = _httpClientFactory.CreateClient(ApiOptions.HttpClientName);
+            using var response = await http.GetAsync("api/health", ct).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task PushAsync(SyncOutboxItem item, CancellationToken ct = default)
     {
         try

@@ -7,14 +7,12 @@ public static class BrandSlogans
     public const string LiveScore = "🔴 Ball-by-Ball Live Score & Streaming 🤖 AI Commentary";
     public const string Analytics = "📊 Advance Analytics & Leaderboards";
     public const string Statistics = "📈 Complete Statistics & Rankings";
-    public const string Grounds = "🏟️ Ground Booking — Complete Solution";
 
     public static readonly string[] All =
     [
         Catalog,
         LiveScore,
         Analytics,
-        Statistics,
-        Grounds
+        Statistics
     ];
 }

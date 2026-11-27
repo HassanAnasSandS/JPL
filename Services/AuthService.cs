@@ -126,11 +126,10 @@ public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Gui
 {
     /// <summary>League sports writes — League Admin only. SuperAdmin is users/platform, not league ops.</summary>
     public bool CanWrite => Role == AppRole.Admin;
-    public bool IsGroundOwner => Role == AppRole.GroundOwner;
     public bool IsGuest => Role == AppRole.Guest;
     public bool IsSuperAdmin => Role == AppRole.SuperAdmin;
     public bool NeedsLeaguePicker =>
-        !IsGroundOwner && !IsGuest && !IsSuperAdmin && LeagueId is null;
+        !IsGuest && !IsSuperAdmin && LeagueId is null;
     public bool NeedsModeChooser => true;
     public bool CanManagePlatform => Role == AppRole.SuperAdmin && PlatformAdmin.Is(Username);
     /// <summary>
@@ -153,14 +152,12 @@ public sealed record AuthSession(Guid UserId, string Username, AppRole Role, Gui
 
     public bool CanViewCatalogFor(Guid? selectedLeagueId)
     {
-        if (IsGuest || IsGroundOwner || IsSuperAdmin)
+        if (IsGuest || IsSuperAdmin)
             return false;
         return Role is AppRole.Admin or AppRole.User && IsHomeLeague(selectedLeagueId);
     }
 
-    public bool CanViewLeagueCatalog => !IsGuest && !IsGroundOwner && !IsSuperAdmin;
-
-    public bool CanBookGrounds => !IsGuest && !IsGroundOwner && !IsSuperAdmin;
+    public bool CanViewLeagueCatalog => !IsGuest && !IsSuperAdmin;
 
     public string SignedInName => Username;
     public string SignedInLabel => $"{Username}  ·  {RoleLabel}";
@@ -415,9 +412,10 @@ public sealed class AuthService : IAuthService
 
                 _current = new AuthSession(remote.UserId, remote.Username, role, remote.LeagueId, remote.WhatsAppNumber);
                 PersistSession(_current, remote.Token);
-                ApplyLeagueAfterLogin(_current);
+                ApplyLeagueAfterLogin(_current, remote.LeagueName);
                 ApplyModuleGates();
                 await InitializeAccountDatabaseAsync(ct).ConfigureAwait(false);
+                await CacheAdminHomeLeagueAsync(_current, remote.LeagueName, ct).ConfigureAwait(false);
                 await CacheLocalLoginAsync(
                         remote.UserId, remote.Username, role, password, remote.LeagueId, remote.WhatsAppNumber, ct)
                     .ConfigureAwait(false);
@@ -715,12 +713,44 @@ public sealed class AuthService : IAuthService
         return true;
     }
 
-    private void ApplyLeagueAfterLogin(AuthSession session)
+    private void ApplyLeagueAfterLogin(AuthSession session, string? leagueName = null)
     {
         if (session.LeagueId is Guid bound && bound != Guid.Empty)
-            _league.Set(bound);
+            _league.Set(bound, leagueName);
         else
             _league.Clear();
+    }
+
+    private async Task CacheAdminHomeLeagueAsync(AuthSession session, string? leagueName, CancellationToken ct)
+    {
+        if (session.Role != AppRole.Admin || session.LeagueId is not Guid homeLeagueId || homeLeagueId == Guid.Empty)
+            return;
+
+        await using var db = await _accountDbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var local = await db.Leagues.FirstOrDefaultAsync(league => league.Id == homeLeagueId, ct)
+            .ConfigureAwait(false);
+        var name = string.IsNullOrWhiteSpace(leagueName) ? local?.Name : leagueName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException(
+                "The server did not provide this League Admin's league name. Update the API, then sign in again.");
+
+        if (local is null)
+        {
+            db.Leagues.Add(new League
+            {
+                Id = homeLeagueId,
+                Name = name,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            local.Name = name;
+            local.IsActive = true;
+        }
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     private void ApplyModuleGates()
@@ -735,6 +765,10 @@ public sealed class AuthService : IAuthService
     private async Task SeedDefaultUsersAsync(CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+
+        // Role value 3 was GroundOwner; remove those legacy local accounts on upgrade.
+        await db.Users.Where(u => (byte)u.Role == 3)
+            .ExecuteDeleteAsync(ct).ConfigureAwait(false);
 
         async Task EnsureUser(string username, string password, AppRole role, Guid? leagueId)
         {
@@ -754,7 +788,6 @@ public sealed class AuthService : IAuthService
         }
 
         await EnsureUser("user", "user123", AppRole.Guest, null).ConfigureAwait(false);
-        await EnsureUser("groundowner", "ground123", AppRole.GroundOwner, null).ConfigureAwait(false);
         await EnsureSoleSuperAdminAsync(db, ct).ConfigureAwait(false);
 
         var guest = await db.Users.FirstOrDefaultAsync(u => u.Username == "user", ct).ConfigureAwait(false);

@@ -57,14 +57,16 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
             return Unauthorized(new { code = "wrong_password", message = "Password is not correct." });
 
         // Deactivated / deleted league blocks its League Admins and League Users (SuperAdmin League management).
+        string? leagueName = null;
         if (user.LeagueId is Guid homeLeague && homeLeague != Guid.Empty
             && user.Role is AppRole.Admin or AppRole.User)
         {
             var league = await _db.Leagues.IgnoreQueryFilters().AsNoTracking()
                 .Where(l => l.Id == homeLeague)
-                .Select(l => new { l.IsActive, l.IsDeleted })
+                .Select(l => new { l.Name, l.IsActive, l.IsDeleted })
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
+            leagueName = league?.Name;
             if (league is not null && (league.IsDeleted || !league.IsActive))
                 return Unauthorized(new
                 {
@@ -78,10 +80,11 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
         // Lightweight opaque token for mobile clients (persist on device until logout).
         // Format: {opaque}.{userId:N} — middleware re-validates user IsActive on every API call.
         var token = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + "." + user.Id.ToString("N");
-        var needsPicker = user.Role is not AppRole.GroundOwner
-                          and not AppRole.Guest
+        var needsPicker = user.Role is not AppRole.SuperAdmin and not AppRole.Guest
                           && user.LeagueId is null;
-        return Ok(new LoginResponse(user.Id, user.Username, user.Role.ToString(), token, user.LeagueId, needsPicker, user.WhatsAppNumber));
+        return Ok(new LoginResponse(
+            user.Id, user.Username, user.Role.ToString(), token, user.LeagueId, needsPicker,
+            user.WhatsAppNumber, leagueName));
     }
 
     /// <summary>Current session user (requires Bearer token; inactive/deleted → 401 from middleware).</summary>
@@ -100,7 +103,7 @@ public sealed class AuthController : ControllerBase, IAsyncDisposable
         Guid? leagueId = Guid.TryParse(leagueText, out var lid) && lid != Guid.Empty ? lid : null;
         var whatsApp = User.FindFirst("whatsapp")?.Value
                        ?? HttpContext.Items["JplWhatsApp"] as string;
-        var needsPicker = !string.Equals(role, nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase)
+        var needsPicker = !string.Equals(role, nameof(AppRole.SuperAdmin), StringComparison.OrdinalIgnoreCase)
                           && !string.Equals(role, nameof(AppRole.Guest), StringComparison.OrdinalIgnoreCase)
                           && leagueId is null;
         return Ok(new LoginResponse(userId, username, role, string.Empty, leagueId, NeedsLeaguePicker: needsPicker, WhatsAppNumber: whatsApp));
@@ -225,7 +228,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
             return BadRequest($"Username \"{username}\" already exists.");
 
         Guid? leagueId = null;
-        if (role != AppRole.GroundOwner)
+        if (role != AppRole.Guest)
         {
             leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
             if (leagueId is null)
@@ -280,7 +283,7 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
         Guid? leagueId = null;
         if (role == AppRole.Guest)
             leagueId = null;
-        else if (role != AppRole.GroundOwner)
+        else
         {
             leagueId = await RequireLeagueAsync(request.LeagueId, ct).ConfigureAwait(false);
             if (leagueId is null)
@@ -373,10 +376,9 @@ public sealed class UsersController : ControllerBase, IAsyncDisposable
 
         var roleText = request.Role?.Trim() ?? string.Empty;
         if (!Enum.TryParse<AppRole>(roleText, ignoreCase: true, out role) ||
-            (role != AppRole.Admin && role != AppRole.User && role != AppRole.GroundOwner
-             && role != AppRole.Guest))
+            (role != AppRole.Admin && role != AppRole.User && role != AppRole.Guest))
         {
-            error = "Role must be League Admin, League User, Ground Owner, or Guest.";
+            error = "Role must be League Admin, League User, or Guest.";
             return false;
         }
 

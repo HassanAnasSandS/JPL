@@ -3,11 +3,7 @@ namespace JPL.Services;
 public enum AppWorkspace
 {
     Leagues = 0,
-    Grounds = 1,
-    GroundOwner = 2,
-    Users = 3,
-    Settings = 4,
-    Scheduler = 5
+    Users = 3
 }
 
 public interface IAppWorkspace

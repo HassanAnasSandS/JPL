@@ -9,7 +9,8 @@ public sealed record LoginResponse(
     string Token,
     Guid? LeagueId = null,
     bool NeedsLeaguePicker = false,
-    string? WhatsAppNumber = null);
+    string? WhatsAppNumber = null,
+    string? LeagueName = null);
 
 public sealed record LeagueDto(
     Guid Id,
@@ -633,7 +634,7 @@ public sealed class TournamentUpsertRequest
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; } = 1;
     public int QualifyPerGroup { get; set; } = 1;
-    /// <summary>0=QF, 1=Playoff, 2=Semis, 3=Final, 4=None (same as scheduler).</summary>
+    /// <summary>0=QF, 1=Playoff, 2=Semis, 3=Final, 4=None.</summary>
     public byte KnockoutFormat { get; set; } = 2;
     /// <summary>0=Single, 1=Double, 2=Custom.</summary>
     public byte RoundRobinType { get; set; }
@@ -972,102 +973,5 @@ public sealed class PlayerMatchBallLineDto
     public string Kind { get; set; } = "run";
     public string Detail { get; set; } = string.Empty;
     public string InningsLabel { get; set; } = string.Empty;
-}
-
-public sealed class SchedulerListDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupCount { get; set; }
-    public int TeamCount { get; set; }
-    public byte RoundRobinType { get; set; }
-    public int QualifyPerGroup { get; set; }
-    public byte KnockoutFormat { get; set; }
-    public byte Status { get; set; }
-    public string StatusText { get; set; } = string.Empty;
-    public string MetaLine { get; set; } = string.Empty;
-    public string WinnerLine { get; set; } = string.Empty;
-    public bool CanEdit { get; set; }
-    public Guid CreatedByUserId { get; set; }
-    public string CreatedByUsername { get; set; } = string.Empty;
-    public DateTime UpdatedAtUtc { get; set; }
-    public long Version { get; set; }
-}
-
-public sealed class SchedulerDetailDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupCount { get; set; }
-    public byte RoundRobinType { get; set; }
-    public int QualifyPerGroup { get; set; }
-    public byte KnockoutFormat { get; set; }
-    public byte Status { get; set; }
-    public Guid? WinnerTeamId { get; set; }
-    public string? QualificationPicksJson { get; set; }
-    public DateTime CreatedAtUtc { get; set; }
-    public DateTime UpdatedAtUtc { get; set; }
-    public Guid CreatedByUserId { get; set; }
-    public string CreatedByUsername { get; set; } = string.Empty;
-    public long Version { get; set; }
-    public List<SchedulerTeamDto> Teams { get; set; } = new();
-    public List<SchedulerMatchDto> Matches { get; set; } = new();
-}
-
-public sealed class SchedulerTeamDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupNumber { get; set; }
-    public int SortOrder { get; set; }
-}
-
-public sealed class SchedulerMatchDto
-{
-    public Guid Id { get; set; }
-    public byte Stage { get; set; }
-    public int GroupNumber { get; set; }
-    public int Sequence { get; set; }
-    public string Label { get; set; } = string.Empty;
-    public Guid? TeamAId { get; set; }
-    public Guid? TeamBId { get; set; }
-    public string? TeamASlot { get; set; }
-    public string? TeamBSlot { get; set; }
-    public byte Result { get; set; }
-    public Guid? WinnerFeedsMatchId { get; set; }
-    public bool WinnerFeedsIsTeamA { get; set; }
-    public Guid? LoserFeedsMatchId { get; set; }
-    public bool LoserFeedsIsTeamA { get; set; }
-}
-
-public sealed class SchedulerUpsertRequest
-{
-    public Guid? Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public int GroupCount { get; set; }
-    public byte RoundRobinType { get; set; }
-    public int QualifyPerGroup { get; set; }
-    public byte KnockoutFormat { get; set; }
-    public byte Status { get; set; }
-    public Guid? WinnerTeamId { get; set; }
-    public string? QualificationPicksJson { get; set; }
-    public List<SchedulerTeamDto> Teams { get; set; } = new();
-    public List<SchedulerMatchDto> Matches { get; set; } = new();
-}
-
-public sealed class SchedulerSyncRequest
-{
-    public Guid OperationId { get; set; }
-    public Guid TournamentId { get; set; }
-    public long ExpectedVersion { get; set; }
-    public string Operation { get; set; } = "Upsert";
-    public System.Text.Json.JsonElement Payload { get; set; }
-}
-
-public sealed class SchedulerSyncResponse
-{
-    public Guid TournamentId { get; set; }
-    public long AppliedVersion { get; set; }
-    public bool WasDuplicate { get; set; }
 }
 

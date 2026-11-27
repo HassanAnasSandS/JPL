@@ -18,7 +18,7 @@ public static class LeagueSyncPolicy
         if (session is null)
             return false;
 
-        // League User / SuperAdmin / Guest / GroundOwner: always live APIs for sports data.
+        // League User / SuperAdmin / Guest: always live APIs for sports data.
         if (session.Role != AppRole.Admin)
             return false;
 

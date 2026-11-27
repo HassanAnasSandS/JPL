@@ -23,19 +23,16 @@ public interface IUserService
 }
 
 /// <summary>
-/// Admin/User accounts: JPL.Api (jpl.shoptick.shop :5025).
-/// GroundOwner accounts: JPL.Grounds.Api (jplground.shoptick.shop :5026) writing the same Master Users table.
+/// SuperAdmin-managed League Admin and League User accounts use JPL.Api.
 /// </summary>
 public sealed class UserService : IUserService
 {
     private readonly IApiClient _api;
-    private readonly IGroundsApiClient _grounds;
     private readonly IAuthService _auth;
 
-    public UserService(IApiClient api, IGroundsApiClient grounds, IAuthService auth)
+    public UserService(IApiClient api, IAuthService auth)
     {
         _api = api;
-        _grounds = grounds;
         _auth = auth;
     }
 
@@ -76,21 +73,8 @@ public sealed class UserService : IUserService
         var password = RequirePassword(draft.Password);
         if (draft.Role == AppRole.Guest)
             throw new ArgumentException("Guest is a built-in account.");
-        if (draft.Role is not AppRole.GroundOwner
-            && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
+        if (draft.Role != AppRole.Guest && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
             throw new ArgumentException("Select a league for this user.");
-
-        if (draft.Role == AppRole.GroundOwner)
-        {
-            var owner = await _grounds.CreateGroundOwnerAsync(new
-            {
-                username,
-                password,
-                isActive = draft.IsActive,
-                whatsAppNumber = RequireWhatsApp(draft.WhatsAppNumber)
-            }, ct).ConfigureAwait(false);
-            return ToEntity(owner);
-        }
 
         var remote = await _api.CreateUserAsync(new
         {
@@ -99,7 +83,7 @@ public sealed class UserService : IUserService
             password,
             role = draft.Role.ToString(),
             isActive = draft.IsActive,
-            leagueId = draft.Role is AppRole.GroundOwner or AppRole.Guest
+            leagueId = draft.Role == AppRole.Guest
                 ? (Guid?)null
                 : draft.LeagueId,
             whatsAppNumber = RequireWhatsApp(draft.WhatsAppNumber)
@@ -112,21 +96,8 @@ public sealed class UserService : IUserService
     {
         _auth.EnsureCanManageUsers();
         var username = RequireUsername(draft.Username);
-        if (draft.Role is not AppRole.GroundOwner and not AppRole.Guest
-            && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
+        if (draft.Role != AppRole.Guest && (draft.LeagueId is null || draft.LeagueId == Guid.Empty))
             throw new ArgumentException("Select a league for this user.");
-
-        if (draft.Role == AppRole.GroundOwner)
-        {
-            var owner = await _grounds.UpdateGroundOwnerAsync(id, new
-            {
-                username,
-                password = string.IsNullOrWhiteSpace(draft.Password) ? null : draft.Password.Trim(),
-                isActive = draft.IsActive,
-                whatsAppNumber = NormalizeWhatsAppOrNull(draft.WhatsAppNumber)
-            }, ct).ConfigureAwait(false);
-            return ToEntity(owner);
-        }
 
         var remote = await _api.UpdateUserAsync(id, new
         {
@@ -135,7 +106,7 @@ public sealed class UserService : IUserService
             password = string.IsNullOrWhiteSpace(draft.Password) ? null : draft.Password.Trim(),
             role = draft.Role.ToString(),
             isActive = draft.IsActive,
-            leagueId = draft.Role is AppRole.GroundOwner or AppRole.Guest
+            leagueId = draft.Role == AppRole.Guest
                 ? (Guid?)null
                 : draft.LeagueId,
             whatsAppNumber = NormalizeWhatsAppOrNull(draft.WhatsAppNumber)
@@ -167,12 +138,6 @@ public sealed class UserService : IUserService
                    ?? throw new InvalidOperationException("User not found.");
         if (user.Role == AppRole.Guest || AppRoleLabels.IsGuestUsername(user.Username))
             throw new InvalidOperationException("Cannot delete the Guest account.");
-        if (user.Role == AppRole.GroundOwner)
-        {
-            await _grounds.DeleteGroundOwnerAsync(id, ct).ConfigureAwait(false);
-            return;
-        }
-
         await _api.DeleteUserAsync(id, ct).ConfigureAwait(false);
     }
 

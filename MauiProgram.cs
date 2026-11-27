@@ -163,10 +163,6 @@ public static class MauiProgram
             // Always use hosted league API (streaks + leaderboard must match production data).
             options.BaseUrl = Cric360Hosts.LeagueApi;
         });
-        builder.Services.Configure<GroundsApiOptions>(options =>
-        {
-            options.BaseUrl = Cric360Hosts.GroundsApi;
-        });
 
         builder.Services.AddTransient<AuthHttpMessageHandler>();
         builder.Services.AddHttpClient(ApiOptions.HttpClientName, (sp, client) =>
@@ -179,23 +175,13 @@ public static class MauiProgram
             client.Timeout = TimeSpan.FromSeconds(90);
         }).AddHttpMessageHandler<AuthHttpMessageHandler>();
 
-        builder.Services.AddHttpClient(GroundsApiOptions.HttpClientName, (sp, client) =>
-        {
-            var baseUrl = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GroundsApiOptions>>().Value.BaseUrl
-                .TrimEnd('/') + "/";
-            client.BaseAddress = new Uri(baseUrl);
-            client.Timeout = TimeSpan.FromSeconds(60);
-        }).AddHttpMessageHandler<AuthHttpMessageHandler>();
-
         builder.Services.AddSingleton<IApiClient, ApiClient>();
-        builder.Services.AddSingleton<IGroundsApiClient, GroundsApiClient>();
         builder.Services.AddSingleton<ISqlServerSyncClient, HttpSyncClient>();
 
         builder.Services.AddSingleton<IOutboxWriter, OutboxWriter>();
         builder.Services.AddSingleton<LivePublisher>();
         builder.Services.AddSingleton<ILivePublisher>(sp => sp.GetRequiredService<LivePublisher>());
         builder.Services.AddSingleton<ILiveHubClient, LiveHubClient>();
-        builder.Services.AddSingleton<ISchedulerOutboxSyncService, SchedulerOutboxSyncService>();
         builder.Services.AddSingleton<IStatsOfflineCacheWarmer, StatsOfflineCacheWarmer>();
         builder.Services.AddSingleton<ISyncLogService, SyncLogService>();
         builder.Services.AddSingleton<SyncService>();
@@ -220,7 +206,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVenueService, VenueService>();
         builder.Services.AddSingleton<ITournamentService, TournamentService>();
         builder.Services.AddSingleton<ISeriesService, SeriesService>();
-        builder.Services.AddSingleton<ITournamentSchedulerService, TournamentSchedulerService>();
         builder.Services.AddSingleton<ILeagueService, LeagueService>();
         builder.Services.AddSingleton<ILeagueAdminService, LeagueAdminService>();
         builder.Services.AddSingleton<IFormatService, FormatService>();
@@ -269,26 +254,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<SeriesListViewModel>();
         builder.Services.AddTransient<SeriesEditViewModel>();
         builder.Services.AddTransient<SeriesDetailViewModel>();
-        builder.Services.AddSingleton<TournamentSchedulerViewModel>();
-        builder.Services.AddTransient<TournamentSchedulerEditViewModel>();
-        builder.Services.AddTransient<TournamentSchedulerDetailViewModel>();
-        builder.Services.AddTransient<GroundDiscoverViewModel>();
-        builder.Services.AddTransient<GroundDetailViewModel>();
-        builder.Services.AddTransient<GroundBookRequestViewModel>();
-        builder.Services.AddTransient<GroundReviewViewModel>();
-        builder.Services.AddTransient<CustomerBookingsViewModel>();
-        builder.Services.AddTransient<OwnerGroundsViewModel>();
-        builder.Services.AddTransient<OwnerGroundEditViewModel>();
-        builder.Services.AddTransient<OwnerBookingsViewModel>();
-        builder.Services.AddTransient<OwnerBookingCreateViewModel>();
-        builder.Services.AddTransient<OwnerBookingEditViewModel>();
-        builder.Services.AddTransient<OwnerAvailabilityViewModel>();
-        builder.Services.AddSingleton<AmenitiesViewModel>();
-        builder.Services.AddTransient<AmenityEditViewModel>();
-        builder.Services.AddSingleton<ServicesViewModel>();
-        builder.Services.AddTransient<ServiceEditViewModel>();
-        builder.Services.AddSingleton<ShopCatalogViewModel>();
-        builder.Services.AddTransient<ShopCatalogEditViewModel>();
 
         builder.Services.AddTransient<LoginPage>();
         builder.Services.AddTransient<ModeChooserPage>();
@@ -334,26 +299,6 @@ public static class MauiProgram
         builder.Services.AddTransient<SeriesPage>();
         builder.Services.AddTransient<SeriesEditPage>();
         builder.Services.AddTransient<SeriesDetailPage>();
-        builder.Services.AddTransient<TournamentSchedulerPage>();
-        builder.Services.AddTransient<TournamentSchedulerEditPage>();
-        builder.Services.AddTransient<TournamentSchedulerDetailPage>();
-        builder.Services.AddTransient<GroundDiscoverPage>();
-        builder.Services.AddTransient<GroundDetailPage>();
-        builder.Services.AddTransient<GroundBookRequestPage>();
-        builder.Services.AddTransient<GroundReviewPage>();
-        builder.Services.AddTransient<CustomerBookingsPage>();
-        builder.Services.AddTransient<OwnerGroundsPage>();
-        builder.Services.AddTransient<OwnerGroundEditPage>();
-        builder.Services.AddTransient<OwnerBookingsPage>();
-        builder.Services.AddTransient<OwnerBookingCreatePage>();
-        builder.Services.AddTransient<OwnerBookingEditPage>();
-        builder.Services.AddTransient<OwnerAvailabilityPage>();
-        builder.Services.AddTransient<AmenitiesPage>();
-        builder.Services.AddTransient<AmenityEditPage>();
-        builder.Services.AddTransient<ServicesPage>();
-        builder.Services.AddTransient<ServiceEditPage>();
-        builder.Services.AddTransient<ShopCatalogPage>();
-        builder.Services.AddTransient<ShopCatalogEditPage>();
         builder.Services.AddTransient<AppShell>();
 
 #if DEBUG
@@ -389,7 +334,6 @@ public static class MauiProgram
                     {
                         await DbBootstrap.EnsureNetSessionTablesAsync(db).ConfigureAwait(false);
                         await DbBootstrap.EnsureLiveOutboxTableAsync(db).ConfigureAwait(false);
-                        await DbBootstrap.EnsureSchedulerTablesAsync(db).ConfigureAwait(false);
                         await DbBootstrap.EnsureSyncSchemaAsync(db).ConfigureAwait(false);
                     }
                     catch
@@ -400,14 +344,6 @@ public static class MauiProgram
 
                 var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
                 await auth.InitializeAsync().ConfigureAwait(false);
-                try
-                {
-                    scope.ServiceProvider.GetRequiredService<ILivePublisher>().RequestFlush();
-                }
-                catch
-                {
-                    /* live queue is best-effort */
-                }
             }
             catch
             {

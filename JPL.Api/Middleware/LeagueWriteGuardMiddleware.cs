@@ -107,6 +107,5 @@ public sealed class LeagueWriteGuardMiddleware
         => path.Equals("/api/health", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("/api/health/", StringComparison.OrdinalIgnoreCase)
            || path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase)
-           || path.StartsWith("/api/public/", StringComparison.OrdinalIgnoreCase)
-           || path.StartsWith("/api/scheduler", StringComparison.OrdinalIgnoreCase);
+           || path.StartsWith("/api/public/", StringComparison.OrdinalIgnoreCase);
 }

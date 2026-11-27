@@ -81,45 +81,16 @@ public partial class AppShell : Shell
         var currentWorkspace = _workspace.Current;
         if (currentWorkspace == AppWorkspace.Users && session?.CanManagePlatform != true)
             currentWorkspace = AppWorkspace.Leagues;
-        if (currentWorkspace == AppWorkspace.Settings && session?.CanManagePlatform != true)
-            currentWorkspace = AppWorkspace.Leagues;
-        if (currentWorkspace == AppWorkspace.GroundOwner && session?.IsGroundOwner != true)
-            currentWorkspace = AppWorkspace.Grounds;
         if (session?.CanManagePlatform == true
             && currentWorkspace is not AppWorkspace.Users)
             currentWorkspace = AppWorkspace.Users;
-        if (currentWorkspace == AppWorkspace.Grounds && session?.IsGroundOwner == true)
-            currentWorkspace = AppWorkspace.GroundOwner;
-        if (currentWorkspace == AppWorkspace.Scheduler && session?.IsGuest == true)
-            currentWorkspace = AppWorkspace.Leagues;
 
-        if (currentWorkspace == AppWorkspace.GroundOwner)
-        {
-            Items.Add(CreateFlyout("My Grounds", "ownergrounds", "ownergroundshome", () => services.GetRequiredService<OwnerGroundsPage>()));
-            Items.Add(CreateFlyout("Bookings", "ownerbookings", "ownerbookingshome", () => services.GetRequiredService<OwnerBookingsPage>()));
-            Items.Add(CreateFlyout("Availability", "owneravailability", "owneravailabilityhome", () => services.GetRequiredService<OwnerAvailabilityPage>()));
-        }
-        else if (currentWorkspace == AppWorkspace.Grounds)
-        {
-            Items.Add(CreateFlyout("Discover", "grounddiscover", "grounddiscoverhome", () => services.GetRequiredService<GroundDiscoverPage>()));
-            Items.Add(CreateFlyout("My Bookings", "customerbookings", "customerbookingshome", () => services.GetRequiredService<CustomerBookingsPage>()));
-        }
-        else if (currentWorkspace == AppWorkspace.Users)
+        if (currentWorkspace == AppWorkspace.Users)
         {
             Items.Add(CreateFlyout("Users", "users", "usershome", () => services.GetRequiredService<UsersPage>()));
             // SuperAdmin League management: league records (create / edit / activate / delete).
             if (session?.CanManageLeagues == true)
                 Items.Add(CreateFlyout("Leagues", "leaguemanagement", "leaguemanagementhome", () => services.GetRequiredService<LeagueManagementPage>()));
-        }
-        else if (currentWorkspace == AppWorkspace.Settings)
-        {
-            Items.Add(CreateFlyout("Amenities", "groundamenities", "groundamenitieshome", () => services.GetRequiredService<AmenitiesPage>()));
-            Items.Add(CreateFlyout("Services", "groundservices", "groundserviceshome", () => services.GetRequiredService<ServicesPage>()));
-            Items.Add(CreateFlyout("Shop", "groundshop", "groundshophome", () => services.GetRequiredService<ShopCatalogPage>()));
-        }
-        else if (currentWorkspace == AppWorkspace.Scheduler)
-        {
-            Items.Add(CreateFlyout("Tournament Scheduler", "tournamentscheduler", "tournamentschedulerhome", () => services.GetRequiredService<TournamentSchedulerPage>()));
         }
         else
         {
@@ -149,15 +120,9 @@ public partial class AppShell : Shell
 
         _pendingLabel = new Label
         {
-            Text = currentWorkspace is AppWorkspace.Grounds or AppWorkspace.GroundOwner
-                ? "Pakistan"
-                : currentWorkspace == AppWorkspace.Users
+            Text = currentWorkspace == AppWorkspace.Users
                     ? "Accounts"
-                    : currentWorkspace == AppWorkspace.Settings
-                        ? "Catalog"
-                        : currentWorkspace == AppWorkspace.Scheduler
-                            ? "Manual"
-                            : "Live",
+                    : "Live",
             FontSize = 12,
             TextColor = Color.FromArgb("#B8C4D4"),
             LineBreakMode = LineBreakMode.TailTruncation,
@@ -166,17 +131,9 @@ public partial class AppShell : Shell
 
         _leagueLabel = new Label
         {
-            Text = currentWorkspace == AppWorkspace.GroundOwner
-                ? "Ground Owner"
-                : currentWorkspace == AppWorkspace.Grounds
-                    ? "Ground Bookings"
-                    : currentWorkspace == AppWorkspace.Users
+            Text = currentWorkspace == AppWorkspace.Users
                         ? "Users & Leagues"
-                        : currentWorkspace == AppWorkspace.Settings
-                            ? "Settings"
-                            : currentWorkspace == AppWorkspace.Scheduler
-                                ? "Tournament Scheduler"
-                                : string.IsNullOrWhiteSpace(_league.CurrentLeagueName)
+                        : string.IsNullOrWhiteSpace(_league.CurrentLeagueName)
                                 ? "Select a league"
                                 : _league.CurrentLeagueName,
             FontSize = 16,
@@ -353,10 +310,6 @@ public partial class AppShell : Shell
         {
             await RefreshLeagueNameAsync().ConfigureAwait(true);
             await RefreshPendingAsync().ConfigureAwait(true);
-            if (currentWorkspace == AppWorkspace.Leagues
-                && session is not null
-                && LeagueSyncPolicy.AllowsLocalOfflineSync(session, _league.CurrentLeagueId))
-                _ = RunDailySyncAsync();
         };
         // Defer pending-count so shell paints before first SQLite hit.
         _ = Task.Run(async () =>
@@ -366,25 +319,6 @@ public partial class AppShell : Shell
         });
 
         ApplyPlatformFlyout();
-    }
-
-    private async Task RunDailySyncAsync()
-    {
-        if (!LeagueSyncPolicy.AllowsLocalOfflineSync(
-                _services.GetRequiredService<IAuthService>().Current,
-                _league.CurrentLeagueId))
-            return;
-
-        try
-        {
-            _services.GetRequiredService<ILivePublisher>().RequestFlush();
-            await _services.GetRequiredService<ISyncService>().SyncDailyIfDueAsync().ConfigureAwait(false);
-            await MainThread.InvokeOnMainThreadAsync(RefreshPendingAsync).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Offline startup remains usable; the next manual or daily attempt retries.
-        }
     }
 
     private static void EnsureRoutesRegistered(IServiceProvider services)
@@ -414,24 +348,13 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(TournamentDetailPage), new DiRouteFactory<TournamentDetailPage>(services));
         Routing.RegisterRoute(nameof(SeriesEditPage), new DiRouteFactory<SeriesEditPage>(services));
         Routing.RegisterRoute(nameof(SeriesDetailPage), new DiRouteFactory<SeriesDetailPage>(services));
-        Routing.RegisterRoute(nameof(TournamentSchedulerEditPage), new DiRouteFactory<TournamentSchedulerEditPage>(services));
-        Routing.RegisterRoute(nameof(TournamentSchedulerDetailPage), new DiRouteFactory<TournamentSchedulerDetailPage>(services));
         Routing.RegisterRoute(nameof(LeagueEditPage), new DiRouteFactory<LeagueEditPage>(services));
         Routing.RegisterRoute(nameof(LeagueManageEditPage), new DiRouteFactory<LeagueManageEditPage>(services));
-        Routing.RegisterRoute(nameof(GroundDetailPage), new DiRouteFactory<GroundDetailPage>(services));
-        Routing.RegisterRoute(nameof(GroundBookRequestPage), new DiRouteFactory<GroundBookRequestPage>(services));
-        Routing.RegisterRoute(nameof(GroundReviewPage), new DiRouteFactory<GroundReviewPage>(services));
-        Routing.RegisterRoute(nameof(OwnerGroundEditPage), new DiRouteFactory<OwnerGroundEditPage>(services));
-        Routing.RegisterRoute(nameof(OwnerBookingCreatePage), new DiRouteFactory<OwnerBookingCreatePage>(services));
-        Routing.RegisterRoute(nameof(OwnerBookingEditPage), new DiRouteFactory<OwnerBookingEditPage>(services));
-        Routing.RegisterRoute(nameof(AmenityEditPage), new DiRouteFactory<AmenityEditPage>(services));
-        Routing.RegisterRoute(nameof(ServiceEditPage), new DiRouteFactory<ServiceEditPage>(services));
-        Routing.RegisterRoute(nameof(ShopCatalogEditPage), new DiRouteFactory<ShopCatalogEditPage>(services));
     }
 
     private async Task RefreshLeagueNameAsync()
     {
-        if (_workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner or AppWorkspace.Users or AppWorkspace.Settings or AppWorkspace.Scheduler)
+        if (_workspace.Current == AppWorkspace.Users)
             return;
         if (_league.CurrentLeagueId is not Guid id)
             return;
@@ -459,24 +382,9 @@ public partial class AppShell : Shell
 
     private async Task RefreshPendingAsync()
     {
-        if (_workspace.Current is AppWorkspace.Grounds or AppWorkspace.GroundOwner)
-        {
-            _pendingLabel.Text = "Pakistan";
-            return;
-        }
         if (_workspace.Current == AppWorkspace.Users)
         {
             _pendingLabel.Text = "Accounts";
-            return;
-        }
-        if (_workspace.Current == AppWorkspace.Settings)
-        {
-            _pendingLabel.Text = "Catalog";
-            return;
-        }
-        if (_workspace.Current == AppWorkspace.Scheduler)
-        {
-            _pendingLabel.Text = "Manual";
             return;
         }
         try
@@ -747,33 +655,22 @@ public partial class AppShell : Shell
         "formats" => "formats",
         "halloffame" => "fame",
         "strengthmeter" => "strength",
-        "ownergrounds" => "grounds",
-        "ownerbookings" => "bookings",
-        "owneravailability" => "availability",
-        "grounddiscover" => "discover",
-        "customerbookings" => "bookings",
         "users" => "users",
         "leaguemanagement" => "fame",
-        "groundamenities" => "formats",
-        "groundservices" => "formats",
-        "groundshop" => "shop",
-        "tournamentscheduler" => "scheduler",
         _ => "dot"
     };
 
     private static View CreateSidebarIcon(string key) => key switch
     {
         "people" or "users" => CreatePeopleIcon(),
-        "calendar" or "bookings" or "scheduler" => CreateCalendarIcon(),
-        "matches" or "grounds" => CreateBallIcon(),
+        "calendar" or "bookings" => CreateCalendarIcon(),
+        "matches" => CreateBallIcon(),
         "stats" => CreateBarsIcon(),
         "nets" => CreateGridIcon(),
         "auction" => CreateDiamondIcon(),
-        "formats" or "availability" => CreateLinesIcon(),
+        "formats" => CreateLinesIcon(),
         "fame" => CreateStarIcon(),
         "strength" => CreateGaugeIcon(),
-        "discover" => CreateSearchIcon(),
-        "shop" => CreateBoxIcon(),
         _ => CreateDotIcon()
     };
 
@@ -920,29 +817,6 @@ public partial class AppShell : Shell
             HeightRequest = 12,
             VerticalOptions = LayoutOptions.Center,
             HorizontalOptions = LayoutOptions.Center
-        };
-
-    private static View CreateSearchIcon()
-        => new Ellipse
-        {
-            Stroke = SidebarAccent,
-            StrokeThickness = 2,
-            Fill = Colors.Transparent,
-            WidthRequest = 14,
-            HeightRequest = 14,
-            VerticalOptions = LayoutOptions.Center
-        };
-
-    private static View CreateBoxIcon()
-        => new Border
-        {
-            WidthRequest = 16,
-            HeightRequest = 16,
-            Stroke = SidebarAccent,
-            StrokeThickness = 1.5,
-            StrokeShape = new RoundRectangle { CornerRadius = 2 },
-            BackgroundColor = Colors.Transparent,
-            VerticalOptions = LayoutOptions.Center
         };
 
     private static View CreateDotIcon()

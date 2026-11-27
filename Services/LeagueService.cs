@@ -36,7 +36,13 @@ public sealed class LeagueService : ILeagueService
     public async Task<IReadOnlyList<League>> GetAllAsync(CancellationToken ct = default)
     {
         if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
-            return CollapseSameNames(await LoadLocalAsync(ct).ConfigureAwait(false));
+        {
+            var homeLeagueId = _auth.Current?.LeagueId;
+            var local = await LoadLocalAsync(ct).ConfigureAwait(false);
+            return CollapseSameNames(homeLeagueId is Guid id
+                ? local.Where(league => league.Id == id).ToList()
+                : Array.Empty<League>());
+        }
 
         if (!string.IsNullOrWhiteSpace(_tokens.Token))
         {
@@ -59,20 +65,23 @@ public sealed class LeagueService : ILeagueService
         if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
         {
             var local = await LoadLocalAsync(ct).ConfigureAwait(false);
-            var query = local.AsQueryable();
+            var homeLeagueId = _auth.Current?.LeagueId;
+            var query = local
+                .Where(league => homeLeagueId is Guid id && league.Id == id)
+                .AsQueryable();
             if (!string.IsNullOrWhiteSpace(q))
             {
                 var term = q.Trim();
                 query = query.Where(league => league.Name.Contains(term, StringComparison.OrdinalIgnoreCase));
             }
-            var items = query.OrderBy(league => league.Name)
+            var localItems = query.OrderBy(league => league.Name)
                 .Skip(Math.Max(0, skip)).Take(50).ToList();
-            return new ApiPagedResult<League>(items, query.Count(), Math.Max(0, skip), ListPaging.PageSize);
+            return new ApiPagedResult<League>(localItems, query.Count(), Math.Max(0, skip), ListPaging.PageSize);
         }
 
         var page = await _api.GetLeaguesPageAsync(skip, q, ct).ConfigureAwait(false);
-        var items = (page.Items ?? []).Select(ToEntity).ToList();
-        return page.WithItems(items);
+        var remoteItems = (page.Items ?? []).Select(ToEntity).ToList();
+        return page.WithItems(remoteItems);
     }
 
     /// <summary>API historically allowed two active rows with the same name (different Guids).</summary>
@@ -114,6 +123,9 @@ public sealed class LeagueService : ILeagueService
     {
         if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
         {
+            if (_auth.Current?.LeagueId != id)
+                return null;
+
             await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
             return await db.Leagues.AsNoTracking().FirstOrDefaultAsync(l => l.Id == id, ct).ConfigureAwait(false);
         }

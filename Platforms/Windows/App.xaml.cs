@@ -16,6 +16,13 @@ public partial class App : MauiWinUIApplication
 	/// </summary>
 	public App()
 	{
+		// MAUI's generated XAML hook breaks into the debugger for unhandled startup
+		// exceptions. Log the actual exception first so the cause is visible in Output.
+		UnhandledException += (_, args) =>
+		{
+			System.Diagnostics.Debug.WriteLine("[JPL startup] Unhandled WinUI exception:");
+			System.Diagnostics.Debug.WriteLine(args.Exception.ToString());
+		};
 		this.InitializeComponent();
 	}
 

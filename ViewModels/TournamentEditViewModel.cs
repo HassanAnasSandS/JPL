@@ -239,14 +239,14 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     {
         var ko = ParseKnockout(SelectedKnockout);
         var groups = IsCustom ? 1 : GroupCount;
-        var options = SchedulerEngine.QualifyOptions(groups, ko);
+        var options = TournamentBracketEngine.QualifyOptions(groups, ko);
         QualifyOptions.Clear();
         foreach (var q in options)
             QualifyOptions.Add(q);
         if (!QualifyOptions.Contains(QualifyPerGroup))
             QualifyPerGroup = QualifyOptions.Count > 0
                 ? QualifyOptions[0]
-                : (ko == SchedulerKnockoutFormat.None ? 0 : 1);
+                : (ko == BracketKnockoutFormat.None ? 0 : 1);
     }
 
     private void UpdateHint()
@@ -257,18 +257,18 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
         if (QualifyOptions.Count == 0)
         {
             FormatHint =
-                $"{SchedulerEngine.KnockoutLabel(ko)} does not fit {groups} group{(groups == 1 ? "" : "s")}. Pick another knockout or group count.";
+                $"{TournamentBracketEngine.KnockoutLabel(ko)} does not fit {groups} group{(groups == 1 ? "" : "s")}. Pick another knockout or group count.";
             UpdateOversHint();
             return;
         }
 
-        FormatHint = SchedulerEngine.SetupHint(
+        FormatHint = TournamentBracketEngine.SetupHint(
             groups,
             QualifyPerGroup,
             ko,
-            rr == TournamentRoundRobinType.Custom ? SchedulerRoundRobinType.Custom
-                : rr == TournamentRoundRobinType.Double ? SchedulerRoundRobinType.Double
-                : SchedulerRoundRobinType.Single,
+            rr == TournamentRoundRobinType.Custom ? BracketRoundRobinType.Custom
+                : rr == TournamentRoundRobinType.Double ? BracketRoundRobinType.Double
+                : BracketRoundRobinType.Single,
             TeamPicks.Count(t => t.IsSelected),
             rr == TournamentRoundRobinType.Custom ? MatchesPerTeam : null);
         UpdateOversHint();
@@ -525,7 +525,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
         try
         {
             var avoid = CustomPairs.Select(p => (p.TeamAId, p.TeamBId)).ToList();
-            var generated = SchedulerEngine.GenerateCustomPairings(
+            var generated = TournamentBracketEngine.GenerateCustomPairings(
                 selected.Select(t => t.TeamId).ToList(),
                 MatchesPerTeam,
                 avoid.Count > 0 ? avoid : null);
@@ -576,9 +576,9 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
                 var ids = selected.Select(t => t.TeamId).ToList();
                 var pairs = CustomPairs.Select(p => (p.TeamAId, p.TeamBId)).ToList();
                 // Draft may save with no fixtures yet; partial graphs must be finished or cleared.
-                if (!SchedulerEngine.IsCustomPairingComplete(ids, MatchesPerTeam, pairs))
+                if (!TournamentBracketEngine.IsCustomPairingComplete(ids, MatchesPerTeam, pairs))
                     throw new ArgumentException(
-                        SchedulerEngine.CustomPairingHint(ids, MatchesPerTeam, pairs)
+                        TournamentBracketEngine.CustomPairingHint(ids, MatchesPerTeam, pairs)
                         + " Clear fixtures to save draft, or finish them.");
             }
 
@@ -651,7 +651,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
         }
 
         CustomPairingHint = IsCustom
-            ? SchedulerEngine.CustomPairingHint(ids, MatchesPerTeam, pairs)
+            ? TournamentBracketEngine.CustomPairingHint(ids, MatchesPerTeam, pairs)
             : string.Empty;
     }
 
@@ -662,7 +662,7 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
     /// </summary>
     private void SyncMatchesPerTeamOptions(int selectedTeamCount)
     {
-        var options = SchedulerEngine.CustomMatchesPerTeamOptions(selectedTeamCount);
+        var options = TournamentBracketEngine.CustomMatchesPerTeamOptions(selectedTeamCount);
         var same = MatchesPerTeamOptions.Count == options.Count
                    && MatchesPerTeamOptions.Zip(options, (a, b) => a == b).All(eq => eq);
         if (!same)
@@ -702,17 +702,17 @@ public partial class TournamentEditViewModel : ObservableObject, IQueryAttributa
         _ => TournamentRoundRobinType.Single
     };
 
-    private static SchedulerKnockoutFormat ParseKnockout(string? text) => text switch
+    private static BracketKnockoutFormat ParseKnockout(string? text) => text switch
     {
-        "No" => SchedulerKnockoutFormat.None,
-        "Quarter Finals → Semi Finals → Final" => SchedulerKnockoutFormat.QuarterFinals,
-        "Playoff → Semi Final → Final" => SchedulerKnockoutFormat.Playoff,
-        "Final" => SchedulerKnockoutFormat.FinalOnly,
-        _ => SchedulerKnockoutFormat.SemiFinals
+        "No" => BracketKnockoutFormat.None,
+        "Quarter Finals → Semi Finals → Final" => BracketKnockoutFormat.QuarterFinals,
+        "Playoff → Semi Final → Final" => BracketKnockoutFormat.Playoff,
+        "Final" => BracketKnockoutFormat.FinalOnly,
+        _ => BracketKnockoutFormat.SemiFinals
     };
 
     private static string KnockoutLabel(TournamentKnockoutFormat format) =>
-        SchedulerEngine.KnockoutLabel((SchedulerKnockoutFormat)(byte)format);
+        TournamentBracketEngine.KnockoutLabel((BracketKnockoutFormat)(byte)format);
 
     private static string TypeLabel(TournamentRoundRobinType type) => type switch
     {

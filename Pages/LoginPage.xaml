@@ -110,5 +110,29 @@
             </VerticalStackLayout>
         </Grid>
     </ScrollView>
+
+    <Grid IsVisible="{Binding ShowBusyOverlay}"
+          ZIndex="10"
+          BackgroundColor="#B30D1B2A"
+          Padding="28"
+          InputTransparent="False">
+        <Border MaximumWidthRequest="420"
+                Padding="24"
+                BackgroundColor="#152033"
+                Stroke="#B6FF3B"
+                StrokeThickness="1.5"
+                StrokeShape="RoundRectangle 18"
+                HorizontalOptions="Center"
+                VerticalOptions="Center">
+            <VerticalStackLayout Spacing="16" HorizontalOptions="Center">
+                <ActivityIndicator IsRunning="True" Color="#B6FF3B" WidthRequest="44" HeightRequest="44" />
+                <Label Text="{Binding BusyOverlayMessage}"
+                       TextColor="White"
+                       FontSize="15"
+                       HorizontalTextAlignment="Center"
+                       LineBreakMode="WordWrap" />
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
     </Grid>
 </ContentPage>

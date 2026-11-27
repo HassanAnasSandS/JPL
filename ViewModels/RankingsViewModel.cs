@@ -202,7 +202,7 @@ public partial class RankingsViewModel : ObservableObject
             }
             ErrorMessage = NetworkUi.IsNetworkFailure(ex)
                 ? "Offline — rankings need internet."
-                : $"Rankings require API (server DB). {ex.Message}";
+                : $"Rankings are not available in the local Sync snapshot yet. {ex.Message}";
             if (NetworkUi.IsNetworkFailure(ex))
                 await NetworkUi.ShowOfflinePopupAsync(ex).ConfigureAwait(true);
         }

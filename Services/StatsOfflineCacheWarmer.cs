@@ -69,6 +69,16 @@ public sealed class StatsOfflineCacheWarmer : IStatsOfflineCacheWarmer
             matchIds = (IReadOnlyList<Guid>?)null
         }, () => _api.GetTeamLeaderboardAsync(ct: ct), ct).ConfigureAwait(false);
 
+        await WarmOneAsync(db, nameof(StatsService.GetRankingsAsync), new
+        {
+            fromUtc = (DateTime?)null,
+            toExclusiveUtc = (DateTime?)null,
+            formatIds = (IReadOnlyList<Guid>?)null,
+            tournamentIds = (IReadOnlyList<Guid>?)null,
+            seriesIds = (IReadOnlyList<Guid>?)null,
+            matchIds = (IReadOnlyList<Guid>?)null
+        }, () => _api.GetRankingsAsync(ct), ct).ConfigureAwait(false);
+
         await WarmOneAsync(db, nameof(StatsService.GetPartnershipLeaderboardAsync), new
         {
             query = (string?)null,

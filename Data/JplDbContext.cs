@@ -61,12 +61,6 @@ public sealed class JplDbContext : DbContext
     public DbSet<SeriesFixture> SeriesFixtures => Set<SeriesFixture>();
     public DbSet<NetSession> NetSessions => Set<NetSession>();
     public DbSet<NetDelivery> NetDeliveries => Set<NetDelivery>();
-    public DbSet<SchedulerTournament> SchedulerTournaments => Set<SchedulerTournament>();
-    public DbSet<SchedulerTeam> SchedulerTeams => Set<SchedulerTeam>();
-    public DbSet<SchedulerMatch> SchedulerMatches => Set<SchedulerMatch>();
-    public DbSet<SchedulerSyncOutboxItem> SchedulerSyncOutbox => Set<SchedulerSyncOutboxItem>();
-    public DbSet<LocalGroundCacheItem> LocalGroundCache => Set<LocalGroundCacheItem>();
-    public DbSet<GroundBookingRequestOutboxItem> GroundBookingRequestOutbox => Set<GroundBookingRequestOutboxItem>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -94,7 +88,6 @@ public sealed class JplDbContext : DbContext
                 scoped.LeagueId = leagueId;
             if (entry.Entity is AppUser user && user.LeagueId is null
                 && user.Role != AppRole.SuperAdmin
-                && user.Role != AppRole.GroundOwner
                 && user.Role != AppRole.Guest)
                 user.LeagueId = leagueId;
         }
@@ -395,57 +388,6 @@ public sealed class JplDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.SessionId, x.Sequence }).IsUnique();
             e.HasIndex(x => new { x.BatterId, x.BowlerId });
-        });
-
-        modelBuilder.Entity<SchedulerTournament>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
-            e.HasQueryFilter(x => !x.IsDeleted);
-        });
-
-        modelBuilder.Entity<SchedulerTeam>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Name).HasMaxLength(120).IsRequired();
-            e.HasOne(x => x.Tournament).WithMany(t => t.Teams)
-                .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.TournamentId);
-        });
-
-        modelBuilder.Entity<SchedulerMatch>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Label).HasMaxLength(80).IsRequired();
-            e.Property(x => x.TeamASlot).HasMaxLength(80);
-            e.Property(x => x.TeamBSlot).HasMaxLength(80);
-            e.HasOne(x => x.Tournament).WithMany(t => t.Matches)
-                .HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => x.TournamentId);
-        });
-
-        modelBuilder.Entity<SchedulerSyncOutboxItem>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.HasIndex(x => new { x.LeagueId, x.TournamentId, x.CreatedAtUtc });
-            e.HasIndex(x => x.OperationId).IsUnique();
-        });
-
-        modelBuilder.Entity<LocalGroundCacheItem>(e =>
-        {
-            e.HasKey(x => x.CacheKey);
-            e.Property(x => x.CacheKey).HasMaxLength(128);
-            e.Property(x => x.PayloadJson).IsRequired();
-            e.HasIndex(x => x.UpdatedAtUtc);
-        });
-
-        modelBuilder.Entity<GroundBookingRequestOutboxItem>(e =>
-        {
-            e.HasKey(x => x.RequestId);
-            e.Property(x => x.GroundName).HasMaxLength(160).IsRequired();
-            e.Property(x => x.PayloadJson).IsRequired();
-            e.HasIndex(x => new { x.UserId, x.CreatedAtUtc });
-            e.HasIndex(x => x.Status);
         });
 
         ApplyLeagueQueryFilters(modelBuilder);

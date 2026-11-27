@@ -15,7 +15,7 @@ namespace JPL.Services;
 /// </summary>
 public interface ISyncTrigger
 {
-    /// <summary>Flush standalone completed-match outbox in background (safe to call often; single-flight).</summary>
+    /// <summary>Legacy automatic trigger; intentionally does nothing. Use manual Sync or login bootstrap.</summary>
     void RequestSyncNow();
 }
 
@@ -61,9 +61,6 @@ public interface ISyncService
     /// (does not queue). Use for manual Sync now so a second tap cannot stack.
     /// </summary>
     Task<bool> TrySyncAllNowAsync(CancellationToken ct = default);
-
-    /// <summary>Runs a full sync at most once per 24 hours for the selected league.</summary>
-    Task SyncDailyIfDueAsync(CancellationToken ct = default);
 
     /// <summary>Terminal SYNC_CONFLICT outbox rows waiting for accept-server / keep-local.</summary>
     Task<IReadOnlyList<SyncConflictInfo>> GetConflictsAsync(CancellationToken ct = default);
@@ -120,7 +117,6 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
     private readonly ILeagueContext _league;
     private readonly IAuthService _auth;
     private readonly ILivePublisher _live;
-    private readonly ISchedulerOutboxSyncService _schedulerSync;
     private readonly IStatsOfflineCacheWarmer _statsCacheWarmer;
     private readonly ISyncLogService _syncLog;
     private readonly ISessionLifetime _lifetime;
@@ -128,10 +124,8 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         => LeagueSyncPolicy.AllowsLocalOfflineSync(_auth.Current, _league.CurrentLeagueId);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly SemaphoreSlim _pullGate = new(1, 1);
-    private readonly SemaphoreSlim _dailyGate = new(1, 1);
     private readonly SemaphoreSlim _syncAllGate = new(1, 1);
     private int _flushRequested;
-    private int _syncRunRequested;
     private int _disposed;
     private int _isSyncing;
 
@@ -139,7 +133,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
     public event EventHandler? SyncStateChanged;
 
     public SyncService(IDbContextFactory<JplDbContext> dbFactory, ISqlServerSyncClient remote,
-        ILeagueContext league, IAuthService auth, ILivePublisher live, ISchedulerOutboxSyncService schedulerSync,
+        ILeagueContext league, IAuthService auth, ILivePublisher live,
         IStatsOfflineCacheWarmer statsCacheWarmer, ISyncLogService syncLog, ISessionLifetime lifetime)
     {
         _dbFactory = dbFactory;
@@ -147,12 +141,10 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         _league = league;
         _auth = auth;
         _live = live;
-        _schedulerSync = schedulerSync;
         _statsCacheWarmer = statsCacheWarmer;
         _syncLog = syncLog;
         _lifetime = lifetime;
         _lifetime.RegisterDrain(DrainForSessionEndAsync);
-        Connectivity.Current.ConnectivityChanged += OnConnectivityChanged;
     }
 
     /// <summary>Who/which league a sync run was started for (detects logout / account switch).</summary>
@@ -181,7 +173,6 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
     private async Task DrainForSessionEndAsync(TimeSpan timeout)
     {
         Interlocked.Exchange(ref _flushRequested, 0);
-        Interlocked.Exchange(ref _syncRunRequested, 0);
         foreach (var gate in new[] { _syncAllGate, _pullGate, _gate })
         {
             try
@@ -270,37 +261,6 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         // Never hard-gate on Connectivity.NetworkAccess — attempt HTTP and treat
         // OfflineException as "try again later". Local data stays durable either way.
 
-        // Scheduler and sports outboxes are both restricted to a League Admin's home league.
-        // Grounds stay on direct live APIs — never flush ground booking outbox here.
-        Exception? schedulerSyncFailure = null;
-        try
-        {
-            using var syncScope = AdminSyncRequestScope.Enter();
-            await _schedulerSync.SyncPendingAsync(ct).ConfigureAwait(false);
-        }
-        catch (SyncConflictException ex)
-        {
-            schedulerSyncFailure = ex;
-            await _syncLog.WarnAsync("Scheduler", "Scheduler conflicts pending.", ex.Message, ct)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex) when (NetworkUi.IsNetworkFailure(ex) || ex is OfflineException)
-        {
-            // Soft: do not abort home-league sports sync just because scheduler flush is offline.
-            schedulerSyncFailure = ex;
-            await _syncLog.WarnAsync("Scheduler", "Scheduler flush offline — continuing sports sync.",
-                ex.Message, ct).ConfigureAwait(false);
-        }
-        try
-        {
-            using var syncScope = AdminSyncRequestScope.Enter();
-            await _schedulerSync.RefreshCacheAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (NetworkUi.IsNetworkFailure(ex) || ex is OfflineException)
-        {
-            schedulerSyncFailure ??= ex;
-        }
-
         ThrowIfSessionChanged(stamp, ct);
         await EnsureLocalSyncSchemaAsync(ct).ConfigureAwait(false);
         // Uppercase Guid TEXT breaks EF Find → duplicate PK inserts on pull (Auctions.Id, …).
@@ -308,16 +268,23 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
             await DbBootstrap.NormalizeGuidTextColumnsForSyncAsync(normalizeDb, ct).ConfigureAwait(false);
         await RecoverStuckInFlightAsync(ct).ConfigureAwait(false);
 
-        // Live scoring is time-sensitive: drain its ordered ball-by-ball queue before
-        // catalog or bulk statistics work can consume this sync run.
-        if (_remote.IsEnabled && _league.CurrentLeagueId is Guid liveLeagueId && liveLeagueId != Guid.Empty)
-            await _live.FlushPendingAsync(ct).ConfigureAwait(false);
-
-        if (!_remote.IsEnabled || _league.CurrentLeagueId is not Guid leagueId || leagueId == Guid.Empty)
+        if (!_remote.IsEnabled)
         {
-            if (schedulerSyncFailure is SyncConflictException)
-                throw schedulerSyncFailure;
-            await _syncLog.WarnAsync("Done", "Remote sync skipped (API disabled or no league).", ct: ct)
+            throw new InvalidOperationException("League Sync is not configured for this app.");
+        }
+
+        if (_league.CurrentLeagueId is not Guid leagueId || leagueId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Select a league before running Sync.");
+        }
+
+        // Fail fast before touching any outbox row. Without this single probe, an
+        // offline run would try to POST every queued change and mark each row as failed.
+        if (!await _remote.CheckAvailabilityAsync(ct).ConfigureAwait(false))
+        {
+            await ResetTransientOfflineFailuresAsync(leagueId, ct).ConfigureAwait(false);
+            await _syncLog.WarnAsync("Offline", "Sync paused: server is unreachable.",
+                "No queued rows were sent. Local data is safe; try Sync again when the server is available.", ct)
                 .ConfigureAwait(false);
             return;
         }
@@ -327,6 +294,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         {
             // Ball-by-ball work was drained before lower-priority API queues above.
             ThrowIfSessionChanged(stamp, ct);
+            await _live.FlushPendingAsync(ct).ConfigureAwait(false);
             var localBeforePush = await GetPendingOutboxCountAsync(leagueId, ct).ConfigureAwait(false);
             await _syncLog.InfoAsync("Push", "Flushing local outbox…",
                 $"{localBeforePush} item(s) queued on this device before push.", ct).ConfigureAwait(false);
@@ -363,19 +331,22 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
                     .ConfigureAwait(false);
             }
             ThrowIfSessionChanged(stamp, ct);
-            Preferences.Default.Set(
-                LastSyncUtcKey(leagueId),
-                DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture));
             await ThrowIfConflictsPendingAsync(ct).ConfigureAwait(false);
             await _syncLog.SuccessAsync("Done", "Sync completed.", ct: ct).ConfigureAwait(false);
-            // Sports sync succeeded — do not fail the whole run on scheduler soft-offline.
-            if (schedulerSyncFailure is SyncConflictException)
-                throw schedulerSyncFailure;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested || IsSessionChanged(stamp))
         {
             // Logout / admin switch: stop quietly — the next admin's sync starts fresh.
             throw;
+        }
+        catch (Exception ex) when (IsOfflineSyncFailure(ex))
+        {
+            // A connection can disappear after the preflight. Stop this run here; do
+            // not walk the remaining outbox rows or continue into the pull/cache phases.
+            await ResetTransientOfflineFailuresAsync(leagueId, ct).ConfigureAwait(false);
+            await _syncLog.WarnAsync("Offline", "Sync paused: server became unreachable.",
+                "Queued local changes remain safe and will retry on the next manual Sync.", ct)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not SyncConflictException)
         {
@@ -389,6 +360,33 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         }
     }
 
+    private async Task ResetTransientOfflineFailuresAsync(Guid leagueId, CancellationToken ct)
+    {
+        // Older sync attempts could exhaust retries while offline and leave ordinary
+        // network failures looking like user-actionable conflicts. Repair them in bulk.
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await db.SyncOutbox
+            .Where(row => row.LeagueId == leagueId
+                && row.Status == SyncOutboxStatus.Failed
+                && row.LastError != null
+                && row.LastError.Contains("Internet is offline or the server is unreachable"))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.Status, SyncOutboxStatus.Pending)
+                .SetProperty(row => row.AttemptCount, 0)
+                .SetProperty(row => row.LastError, (string?)null), ct)
+            .ConfigureAwait(false);
+        await db.LiveOutbox
+            .Where(row => row.LeagueId == leagueId
+                && row.Status == SyncOutboxStatus.Failed
+                && row.LastError != null
+                && row.LastError.Contains("Internet is offline or the server is unreachable"))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.Status, SyncOutboxStatus.Pending)
+                .SetProperty(row => row.AttemptCount, 0)
+                .SetProperty(row => row.LastError, (string?)null), ct)
+            .ConfigureAwait(false);
+    }
+
     private async Task<int> GetPendingOutboxCountAsync(Guid leagueId, CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -399,42 +397,8 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         count += await db.LiveOutbox.AsNoTracking()
             .CountAsync(row => row.LeagueId == leagueId && row.Status != SyncOutboxStatus.Completed, ct)
             .ConfigureAwait(false);
-        count += await db.SchedulerSyncOutbox.AsNoTracking()
-            .CountAsync(row => row.LeagueId == leagueId && row.Status != SyncOutboxStatus.Completed, ct)
-            .ConfigureAwait(false);
         return count;
     }
-
-    public async Task SyncDailyIfDueAsync(CancellationToken ct = default)
-    {
-        if (!CanSyncCurrentLeague)
-            return;
-
-        using var sessionLink = LinkSession(ct);
-        ct = sessionLink.Token;
-
-        if (_league.CurrentLeagueId is not Guid leagueId || leagueId == Guid.Empty)
-            return;
-
-        await _dailyGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            var key = LastSyncUtcKey(leagueId);
-            var lastRaw = Preferences.Default.Get(key, string.Empty);
-            if (DateTime.TryParse(lastRaw, null,
-                    System.Globalization.DateTimeStyles.RoundtripKind, out var lastUtc)
-                && DateTime.UtcNow - lastUtc.ToUniversalTime() < TimeSpan.FromHours(24))
-                return;
-
-            await SyncAllAsync(ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            _dailyGate.Release();
-        }
-    }
-
-    private static string LastSyncUtcKey(Guid leagueId) => $"jpl.sync.lastUtc.{leagueId:D}";
 
     /// <summary>Repair SyncOutbox columns before any EF SELECT that maps BasePayloadJson.</summary>
     private async Task EnsureLocalSyncSchemaAsync(CancellationToken ct)
@@ -527,15 +491,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
                 row.PayloadJson, row.LastError, row.AttemptCount, row.CreatedAtUtc))
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        var schedulerItems = await db.SchedulerSyncOutbox.AsNoTracking()
-            .Where(row => row.LeagueId == leagueId && row.Status != SyncOutboxStatus.Completed)
-            .Select(row => new SyncOutboxInfo(
-                row.Id, "Scheduler tournament", row.TournamentId, row.Operation, row.Status,
-                row.PayloadJson, row.LastError, row.AttemptCount, row.CreatedAtUtc))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
         items.AddRange(liveItems);
-        items.AddRange(schedulerItems);
         return items
             .OrderBy(row => row.Status == SyncOutboxStatus.Failed ? 0 : 1)
             .ThenBy(row => row.CreatedAtUtc)
@@ -2009,32 +1965,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
 
     public void RequestSyncNow()
     {
-        if (!CanSyncCurrentLeague)
-            return;
-        if (Interlocked.Exchange(ref _syncRunRequested, 1) == 1)
-            return;
-
-        // Bound to the admin who requested it: logout cancels, and a new admin never inherits it.
-        var sessionToken = _lifetime.Token;
-        _ = Task.Run(async () =>
-        {
-            do
-            {
-                Interlocked.Exchange(ref _syncRunRequested, 0);
-                if (sessionToken.IsCancellationRequested)
-                    break;
-                try { await SyncAllAsync(sessionToken).ConfigureAwait(false); }
-                catch { /* never crash UI */ }
-            }
-            while (!sessionToken.IsCancellationRequested
-                   && Interlocked.CompareExchange(ref _syncRunRequested, 0, 0) == 1);
-        });
-    }
-
-    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
-    {
-        if (e.NetworkAccess == NetworkAccess.Internet)
-            RequestSyncNow();
+        // Local edits stay queued. Only explicit login bootstrap or manual Sync may send them.
     }
 
     public Task FlushAsync(CancellationToken ct = default)
@@ -2116,6 +2047,20 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
                     }
                     catch (Exception ex)
                     {
+                        if (IsOfflineSyncFailure(ex))
+                        {
+                            row.Status = SyncOutboxStatus.Pending;
+                            row.AttemptCount = Math.Max(0, row.AttemptCount - 1);
+                            row.LastError = null;
+                            foreach (var unattempted in pending.Where(x => x.Status == SyncOutboxStatus.InFlight))
+                            {
+                                unattempted.Status = SyncOutboxStatus.Pending;
+                                unattempted.AttemptCount = Math.Max(0, unattempted.AttemptCount - 1);
+                            }
+                            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                            throw new OfflineException(NetworkUi.OfflineMessage, ex);
+                        }
+
                         var conflict = ex is SyncConflictException;
                         row.Status = conflict || row.AttemptCount >= 8
                             ? SyncOutboxStatus.Failed
@@ -2173,6 +2118,9 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
             _gate.Release();
         }
     }
+
+    private static bool IsOfflineSyncFailure(Exception ex)
+        => ex is OfflineException || NetworkUi.IsNetworkFailure(ex);
 
     private static int MasterEntitySyncOrder(string entityType, string operation)
     {
@@ -2282,8 +2230,6 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
         if (!CanSyncCurrentLeague)
             return 0;
 
-        var scheduler = await _schedulerSync.GetPendingCountAsync(ct).ConfigureAwait(false);
-        // Grounds are live-API only — never count booking outbox toward Sync pending.
         var standalone = await GetPendingStandaloneMatchIdsAsync(ct).ConfigureAwait(false);
         var tours = await GetPendingTournamentIdsAsync(ct).ConfigureAwait(false);
         var series = await GetPendingSeriesIdsAsync(ct).ConfigureAwait(false);
@@ -2294,7 +2240,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
                 && row.EntityType != nameof(Match) && row.EntityType != nameof(Innings)
                 && row.EntityType != nameof(Delivery) && row.EntityType != nameof(NetSession)
                 && row.EntityType != nameof(NetDelivery), ct).ConfigureAwait(false);
-        return standalone.Count + tours.Count + series.Count + nets.Count + master + scheduler;
+        return standalone.Count + tours.Count + series.Count + nets.Count + master;
     }
 
     public async Task<HashSet<Guid>> GetPendingStandaloneMatchIdsAsync(CancellationToken ct = default)
@@ -2529,6 +2475,18 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
             }
             catch (Exception ex)
             {
+                if (IsOfflineSyncFailure(ex))
+                {
+                    foreach (var unsent in batch.Where(x => x.Status == SyncOutboxStatus.InFlight))
+                    {
+                        unsent.Status = SyncOutboxStatus.Pending;
+                        unsent.AttemptCount = Math.Max(0, unsent.AttemptCount - 1);
+                        unsent.LastError = null;
+                    }
+                    await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                    throw new OfflineException(NetworkUi.OfflineMessage, ex);
+                }
+
                 var conflict = ex is SyncConflictException;
                 item.Status = conflict || item.AttemptCount >= 8 ? SyncOutboxStatus.Failed : SyncOutboxStatus.Pending;
                 if (conflict)
@@ -2916,10 +2874,8 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
             return;
-        Connectivity.Current.ConnectivityChanged -= OnConnectivityChanged;
         _gate.Dispose();
         _pullGate.Dispose();
-        _dailyGate.Dispose();
         _syncAllGate.Dispose();
         await Task.CompletedTask.ConfigureAwait(false);
     }
@@ -2928,6 +2884,7 @@ public sealed class SyncService : ISyncService, ISyncTrigger, IAsyncDisposable
 public interface ISqlServerSyncClient
 {
     bool IsEnabled { get; }
+    Task<bool> CheckAvailabilityAsync(CancellationToken ct = default);
     Task PushAsync(SyncOutboxItem item, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetEntityTypesAsync(CancellationToken ct = default);
     Task<ApiSyncChangesPage> GetChangesAsync(long afterSequence, long? throughSequence, int take, CancellationToken ct = default);
@@ -2937,6 +2894,7 @@ public interface ISqlServerSyncClient
 public sealed class NoOpSqlServerSyncClient : ISqlServerSyncClient
 {
     public bool IsEnabled => false;
+    public Task<bool> CheckAvailabilityAsync(CancellationToken ct = default) => Task.FromResult(true);
     public Task PushAsync(SyncOutboxItem item, CancellationToken ct = default) => Task.CompletedTask;
     public Task<IReadOnlyList<string>> GetEntityTypesAsync(CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());

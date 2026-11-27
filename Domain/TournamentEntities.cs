@@ -13,12 +13,12 @@ public enum TournamentFixtureStage : byte
     Group = 0,
     SemiFinal = 1,
     Final = 2,
-    /// <summary>Added to mirror scheduler brackets; kept after Final so old rows stay valid.</summary>
+    /// <summary>Added for quarter-final brackets; kept after Final so old rows stay valid.</summary>
     QuarterFinal = 3,
     Playoff = 4
 }
 
-/// <summary>League tournament group-stage format (mirrors scheduler types).</summary>
+/// <summary>League tournament group-stage format.</summary>
 public enum TournamentRoundRobinType : byte
 {
     Single = 0,
@@ -27,7 +27,7 @@ public enum TournamentRoundRobinType : byte
     Custom = 2
 }
 
-/// <summary>Same values as <see cref="SchedulerKnockoutFormat"/> — shared setup with Tournament Scheduler.</summary>
+/// <summary>League tournament knockout bracket format.</summary>
 public enum TournamentKnockoutFormat : byte
 {
     QuarterFinals = 0,
@@ -46,7 +46,7 @@ public sealed class Tournament : ILeagueScoped
     public int GroupCount { get; set; } = 1;
     /// <summary>Top teams that qualify from each group (derived from knockout size).</summary>
     public int QualifyPerGroup { get; set; } = 1;
-    /// <summary>Same bracket options as Tournament Scheduler.</summary>
+    /// <summary>Knockout bracket options.</summary>
     public TournamentKnockoutFormat KnockoutFormat { get; set; } = TournamentKnockoutFormat.SemiFinals;
     public TournamentRoundRobinType RoundRobinType { get; set; } = TournamentRoundRobinType.Single;
     /// <summary>Custom only — how many matches each team plays.</summary>

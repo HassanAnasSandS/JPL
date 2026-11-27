@@ -485,18 +485,21 @@ public sealed class MatchSquadCache : IMatchSquadCache
 
     private readonly IDbContextFactory<JplDbContext> _dbFactory;
     private readonly IApiClient _api;
-    private readonly IAuthService _auth;
+    private readonly IAccountDatabaseScope _databaseScope;
     private readonly Dictionary<Guid, MatchSquadSnapshot> _cache = new();
     private readonly object _gate = new();
     private Dictionary<Guid, string> _playerNames = new();
     private Dictionary<Guid, string> _teamNames = new();
     private DateTime _namesAtUtc = DateTime.MinValue;
 
-    public MatchSquadCache(IDbContextFactory<JplDbContext> dbFactory, IApiClient api, IAuthService auth)
+    public MatchSquadCache(
+        IDbContextFactory<JplDbContext> dbFactory,
+        IApiClient api,
+        IAccountDatabaseScope databaseScope)
     {
         _dbFactory = dbFactory;
         _api = api;
-        _auth = auth;
+        _databaseScope = databaseScope;
     }
 
     public MatchSquadSnapshot? TryGet(Guid matchId)
@@ -623,7 +626,9 @@ public sealed class MatchSquadCache : IMatchSquadCache
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        if (teamIds.Count == 0)
+        // League Admin tournament squads are part of the synced local snapshot.
+        // Never try to fill a missing local relation from the API in feature code.
+        if (teamIds.Count == 0 && _databaseScope.Role != AppRole.Admin)
         {
             try
             {
@@ -800,7 +805,7 @@ public sealed class MatchSquadCache : IMatchSquadCache
         if (snap.SubstitutesResolved)
             return;
 
-        if (LeagueSyncPolicy.UsesLocalStorage(_auth.Current))
+        if (_databaseScope.Role == AppRole.Admin)
         {
             // The persisted match roster is the complete local snapshot for Admin scoring.
             snap.SubstitutesResolved = true;

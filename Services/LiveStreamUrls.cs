@@ -96,7 +96,7 @@ public static class LiveStreamUrls
         if (string.IsNullOrWhiteSpace(origin)
             || origin.Contains("youtube.com", StringComparison.OrdinalIgnoreCase)
             || origin.Contains("youtu.be", StringComparison.OrdinalIgnoreCase))
-            origin = Cric360Hosts.GroundsApi.TrimEnd('/') + "/";
+            origin = Cric360Hosts.LeagueApi.TrimEnd('/') + "/";
 
         var safe = System.Net.WebUtility.HtmlEncode(embed);
         // Load from a real https origin — YouTube Error 153 if Referer is about:blank / youtube.com.

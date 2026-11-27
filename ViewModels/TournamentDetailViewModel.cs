@@ -19,6 +19,22 @@ public sealed class TournamentFixtureGroup
     public ObservableCollection<TournamentFixtureItem> Fixtures { get; } = new();
 }
 
+public sealed class TeamScheduleMatchItem
+{
+    public string StageLabel { get; init; } = string.Empty;
+    public string OpponentName { get; init; } = string.Empty;
+    public string OpponentLine => string.IsNullOrWhiteSpace(OpponentName) ? "vs TBD" : $"vs {OpponentName}";
+    public string StatusText { get; init; } = string.Empty;
+    public string ResultText { get; init; } = string.Empty;
+    public bool HasResult { get; init; }
+    public bool ShowStatus => !string.IsNullOrWhiteSpace(StatusText);
+    public TournamentFixtureItem? Fixture { get; init; }
+    public bool CanStart => Fixture?.CanStart == true;
+    public bool CanResume => Fixture?.CanResume == true;
+    public bool CanOpenScorecard => Fixture?.CanOpenScorecard == true;
+    public string ScorecardLabel => Fixture?.ScorecardLabel ?? "Scorecard";
+}
+
 public partial class TournamentDetailViewModel : ObservableObject, IQueryAttributable
 {
     private readonly ITournamentService _tournaments;
@@ -133,7 +149,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
             _ => "Single Round Robin"
         };
         MetaLine =
-            $"{rrLabel} · {SchedulerEngine.GroupsTeamsLabel(detail.GroupCount, detail.Teams.Count)}"
+            $"{rrLabel} · {TournamentBracketEngine.GroupsTeamsLabel(detail.GroupCount, detail.Teams.Count)}"
             + $" · top {detail.QualifyPerGroup}/group. {KnockoutPathLabel(detail.GroupCount, detail.QualifyPerGroup)}";
         if (detail.Status == 0
             && detail.RoundRobinType == TournamentRoundRobinType.Custom
@@ -219,11 +235,11 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
                     }));
         }
 
-        // Day-wise like Tournament Scheduler (circle method: each team ≤1 group match/day).
-        var schedulerTeams = detail.Teams
+        // Use a circle method so each team has at most one group match per day.
+        var bracketTeams = detail.Teams
             .OrderBy(t => t.GroupNumber)
             .ThenBy(t => t.TeamName, StringComparer.OrdinalIgnoreCase)
-            .Select((t, i) => new SchedulerTeam
+            .Select((t, i) => new BracketTeam
             {
                 Id = t.TeamId,
                 Name = t.TeamName,
@@ -231,8 +247,8 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
                 SortOrder = i
             })
             .ToList();
-        var playDays = SchedulerEngine.AssignGroupPlayDays(
-            schedulerTeams,
+        var playDays = TournamentBracketEngine.AssignGroupPlayDays(
+            bracketTeams,
             groupFixtures.Select(f => (f.Id, f.GroupNumber ?? 0, f.Sequence, f.TeamAId, f.TeamBId)).ToList());
 
         foreach (var day in groupFixtures
@@ -291,7 +307,7 @@ public partial class TournamentDetailViewModel : ObservableObject, IQueryAttribu
         => string.Equals(f.StageText, "Group", StringComparison.OrdinalIgnoreCase)
            || f.GroupNumber is > 0;
 
-    /// <summary>Section titles match Tournament Scheduler: Quarter-finals / Playoffs / Semi-finals / Final.</summary>
+    /// <summary>Friendly section titles for each knockout stage.</summary>
     private static string KnockoutStageTitle(TournamentFixtureItem f)
     {
         var stage = string.IsNullOrWhiteSpace(f.StageText) ? f.Label : f.StageText;

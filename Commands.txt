@@ -11,10 +11,6 @@ dotnet publish "E:\JPL\JPL.Api\JPL.Api.csproj" -c Release -o "E:\JPL\bin\APIs"
 
 Ground APIs
 
-Get-Process -Name "JPL.Grounds.Api" -ErrorAction SilentlyContinue | Stop-Process -Force
-dotnet clean "E:\JPL\JPL.Grounds.Api\JPL.Grounds.Api.csproj" -c Release
-Remove-Item "E:\JPL\JPL.Grounds.Api\bin","E:\JPL\JPL.Grounds.Api\obj","E:\JPL\bin\GroundsApi" -Recurse -Force -ErrorAction SilentlyContinue
-dotnet publish "E:\JPL\JPL.Grounds.Api\JPL.Grounds.Api.csproj" -c Release -o "E:\JPL\bin\GroundsApi"
 
 -----
 

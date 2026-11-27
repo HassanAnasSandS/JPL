@@ -5,7 +5,7 @@ public enum AppRole : byte
     User = 0,
     Admin = 1,
     SuperAdmin = 2,
-    GroundOwner = 3,
+    // 3 is a retired role; leave its value unused for existing database rows.
     // 4 = legacy PublicUser (removed)
     Guest = 5
 }
@@ -336,7 +336,7 @@ public sealed class Tournament
     public string Name { get; set; } = string.Empty;
     public int GroupCount { get; set; } = 1;
     public int QualifyPerGroup { get; set; } = 1;
-    /// <summary>Same as scheduler: 0=QF, 1=Playoff, 2=Semis, 3=Final, 4=None.</summary>
+    /// <summary>Bracket format: 0=QF, 1=Playoff, 2=Semis, 3=Final, 4=None.</summary>
     public byte KnockoutFormat { get; set; } = 2;
     /// <summary>0=Single, 1=Double, 2=Custom.</summary>
     public byte RoundRobinType { get; set; }

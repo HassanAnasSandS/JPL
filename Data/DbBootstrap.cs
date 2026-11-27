@@ -7,7 +7,7 @@ namespace JPL.Data;
 public static class DbBootstrap
 {
     /// <summary>Bump when EnsureLegacyTables gains new columns/migrations.</summary>
-    private const int SchemaVersion = 41;
+    private const int SchemaVersion = 42;
     private const string SchemaVersionKey = "jpl.sqlite.schemaVersion";
     private static readonly string[] LeagueScopedTables =
     [
@@ -15,9 +15,9 @@ public static class DbBootstrap
         "Auctions", "AuctionCaptains", "AuctionLots", "Venues", "Formats",
         "VenueBookings", "VenueBookingParticipants", "Expenses", "ExpenseContributions",
         "Tournaments", "TournamentTeams", "TournamentFixtures", "Series", "SeriesFixtures",
-        "NetSessions", "NetDeliveries", "SchedulerTournaments", "SchedulerTeams", "SchedulerMatches",
+        "NetSessions", "NetDeliveries",
         "SyncOutbox", "LiveOutbox", "SyncCursors", "SyncDeferredPulls", "SyncLogs",
-        "LocalStatsCache", "SchedulerSyncOutbox"
+        "LocalStatsCache"
     ];
 
     public static string GetDatabasePath(Guid? userId = null)
@@ -40,40 +40,10 @@ public static class DbBootstrap
         var dbVersion = await ReadUserVersionAsync(db, ct).ConfigureAwait(false);
         if (dbVersion < SchemaVersion)
         {
+            await DropLegacyTournamentSchedulerTablesAsync(db, ct).ConfigureAwait(false);
             await EnsureNetSessionTablesAsync(db, ct).ConfigureAwait(false);
             await EnsureLiveOutboxTableAsync(db, ct).ConfigureAwait(false);
             await EnsureLocalStatsCacheTableAsync(db, ct).ConfigureAwait(false);
-            await EnsureSchedulerTablesAsync(db, ct).ConfigureAwait(false);
-            await EnsureSchedulerSyncOutboxAsync(db, ct).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE TABLE IF NOT EXISTS "LocalGroundCache" (
-                    "CacheKey" TEXT NOT NULL CONSTRAINT "PK_LocalGroundCache" PRIMARY KEY,
-                    "PayloadJson" TEXT NOT NULL,
-                    "UpdatedAtUtc" TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS "IX_LocalGroundCache_UpdatedAtUtc"
-                    ON "LocalGroundCache" ("UpdatedAtUtc");
-                """, ct).ConfigureAwait(false);
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE TABLE IF NOT EXISTS "GroundBookingRequestOutbox" (
-                    "RequestId" TEXT NOT NULL CONSTRAINT "PK_GroundBookingRequestOutbox" PRIMARY KEY,
-                    "UserId" TEXT NOT NULL,
-                    "GroundId" TEXT NOT NULL,
-                    "GroundName" TEXT NOT NULL,
-                    "StartAt" TEXT NOT NULL,
-                    "EndAt" TEXT NOT NULL,
-                    "PayloadJson" TEXT NOT NULL,
-                    "Status" INTEGER NOT NULL,
-                    "AttemptCount" INTEGER NOT NULL,
-                    "LastError" TEXT NULL,
-                    "CreatedAtUtc" TEXT NOT NULL,
-                    "LastAttemptAtUtc" TEXT NULL
-                );
-                CREATE INDEX IF NOT EXISTS "IX_GroundBookingRequestOutbox_UserId_CreatedAtUtc"
-                    ON "GroundBookingRequestOutbox" ("UserId", "CreatedAtUtc");
-                CREATE INDEX IF NOT EXISTS "IX_GroundBookingRequestOutbox_Status"
-                    ON "GroundBookingRequestOutbox" ("Status");
-                """, ct).ConfigureAwait(false);
             await EnsureLegacyTablesAsync(db, ct).ConfigureAwait(false);
             await EnsureLeagueScopedColumnsAsync(db, ct).ConfigureAwait(false);
 
@@ -124,11 +94,28 @@ public static class DbBootstrap
         await EnsureSyncSchemaAsync(db, ct).ConfigureAwait(false);
         await EnsureSyncLogTableAsync(db, ct).ConfigureAwait(false);
         await DropLegacyVenueBookingVenueNameAsync(db, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE IF EXISTS \"GroundBookingRequestOutbox\";", ct)
+            .ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE IF EXISTS \"LocalGroundCache\";", ct)
+            .ConfigureAwait(false);
 
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout=8000;", ct).ConfigureAwait(false);
         await db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;", ct).ConfigureAwait(false);
+    }
+
+    private static async Task DropLegacyTournamentSchedulerTablesAsync(JplDbContext db, CancellationToken ct)
+    {
+        // These tables belonged only to the removed standalone Tournament Scheduler module.
+        foreach (var table in new[]
+        {
+            "SchedulerSyncOutbox", "SchedulerMatches", "SchedulerTeams", "SchedulerTournaments"
+        })
+        {
+            await db.Database.ExecuteSqlRawAsync($"DROP TABLE IF EXISTS \"{table}\";", ct)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -1338,7 +1325,7 @@ public static class DbBootstrap
             """ALTER TABLE "Series" ADD COLUMN "BestFielderPlayerId" TEXT NULL;""", ct).ConfigureAwait(false);
         try
         {
-            // Backfill: map legacy Group×Qualify combos onto scheduler-style knockout formats.
+            // Backfill legacy group and qualification settings onto supported knockout formats.
             await db.Database.ExecuteSqlRawAsync(
                 """
                 UPDATE "Tournaments" SET "KnockoutFormat" = 4 WHERE "GroupCount" = 1 AND "QualifyPerGroup" = 1 AND "KnockoutFormat" = 2;
@@ -1541,78 +1528,6 @@ public static class DbBootstrap
             .ConfigureAwait(false);
     }
 
-    public static async Task EnsureSchedulerTablesAsync(JplDbContext db, CancellationToken ct = default)
-    {
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS "SchedulerTournaments" (
-                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTournaments" PRIMARY KEY,
-                "Name" TEXT NOT NULL,
-                "GroupCount" INTEGER NOT NULL,
-                "RoundRobinType" INTEGER NOT NULL,
-                "QualifyPerGroup" INTEGER NOT NULL,
-                "KnockoutFormat" INTEGER NOT NULL,
-                "Status" INTEGER NOT NULL,
-                "WinnerTeamId" TEXT NULL,
-                "CreatedByUserId" TEXT NOT NULL,
-                "QualificationPicksJson" TEXT NULL,
-                "CreatedAtUtc" TEXT NOT NULL,
-                "UpdatedAtUtc" TEXT NOT NULL,
-                "IsDeleted" INTEGER NOT NULL
-            );
-            """, ct).ConfigureAwait(false);
-
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS "SchedulerTeams" (
-                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerTeams" PRIMARY KEY,
-                "TournamentId" TEXT NOT NULL,
-                "Name" TEXT NOT NULL,
-                "GroupNumber" INTEGER NOT NULL,
-                "SortOrder" INTEGER NOT NULL,
-                CONSTRAINT "FK_SchedulerTeams_SchedulerTournaments_TournamentId"
-                    FOREIGN KEY ("TournamentId") REFERENCES "SchedulerTournaments" ("Id") ON DELETE CASCADE
-            );
-            """, ct).ConfigureAwait(false);
-
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS "SchedulerMatches" (
-                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerMatches" PRIMARY KEY,
-                "TournamentId" TEXT NOT NULL,
-                "Stage" INTEGER NOT NULL,
-                "GroupNumber" INTEGER NOT NULL,
-                "Sequence" INTEGER NOT NULL,
-                "Label" TEXT NOT NULL,
-                "TeamAId" TEXT NULL,
-                "TeamBId" TEXT NULL,
-                "TeamASlot" TEXT NULL,
-                "TeamBSlot" TEXT NULL,
-                "Result" INTEGER NOT NULL,
-                "WinnerFeedsMatchId" TEXT NULL,
-                "WinnerFeedsIsTeamA" INTEGER NOT NULL,
-                "LoserFeedsMatchId" TEXT NULL,
-                "LoserFeedsIsTeamA" INTEGER NOT NULL,
-                CONSTRAINT "FK_SchedulerMatches_SchedulerTournaments_TournamentId"
-                    FOREIGN KEY ("TournamentId") REFERENCES "SchedulerTournaments" ("Id") ON DELETE CASCADE
-            );
-            """, ct).ConfigureAwait(false);
-
-        await db.Database.ExecuteSqlRawAsync(
-            """CREATE INDEX IF NOT EXISTS "IX_SchedulerTeams_TournamentId" ON "SchedulerTeams" ("TournamentId");""",
-            ct).ConfigureAwait(false);
-        await db.Database.ExecuteSqlRawAsync(
-            """CREATE INDEX IF NOT EXISTS "IX_SchedulerMatches_TournamentId" ON "SchedulerMatches" ("TournamentId");""",
-            ct).ConfigureAwait(false);
-
-        await EnsureColumnAsync(db, "SchedulerTournaments", "Version",
-            """ALTER TABLE "SchedulerTournaments" ADD COLUMN "Version" INTEGER NOT NULL DEFAULT 0;""", ct)
-            .ConfigureAwait(false);
-        await EnsureColumnAsync(db, "SchedulerTournaments", "CreatedByUsername",
-            """ALTER TABLE "SchedulerTournaments" ADD COLUMN "CreatedByUsername" TEXT NOT NULL DEFAULT '';""", ct)
-            .ConfigureAwait(false);
-        await EnsureColumnAsync(db, "SchedulerTournaments", "HasDetailsCached",
-            """ALTER TABLE "SchedulerTournaments" ADD COLUMN "HasDetailsCached" INTEGER NOT NULL DEFAULT 0;""", ct)
-            .ConfigureAwait(false);
-    }
-
     private static async Task EnsureSyncDeferredPullsAsync(JplDbContext db, CancellationToken ct)
     {
         await db.Database.ExecuteSqlRawAsync("""
@@ -1634,34 +1549,6 @@ public static class DbBootstrap
         await db.Database.ExecuteSqlRawAsync("""
             CREATE INDEX IF NOT EXISTS "IX_SyncDeferredPulls_LeagueId_EntityType_EntityKeyJson"
             ON "SyncDeferredPulls" ("LeagueId", "EntityType", "EntityKeyJson");
-            """, ct).ConfigureAwait(false);
-    }
-
-    private static async Task EnsureSchedulerSyncOutboxAsync(JplDbContext db, CancellationToken ct)
-    {
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS "SchedulerSyncOutbox" (
-                "Id" TEXT NOT NULL CONSTRAINT "PK_SchedulerSyncOutbox" PRIMARY KEY,
-                "LeagueId" TEXT NOT NULL,
-                "TournamentId" TEXT NOT NULL,
-                "OperationId" TEXT NOT NULL,
-                "ExpectedVersion" INTEGER NOT NULL,
-                "Operation" TEXT NOT NULL,
-                "PayloadJson" TEXT NOT NULL,
-                "Status" INTEGER NOT NULL,
-                "AttemptCount" INTEGER NOT NULL,
-                "LastError" TEXT NULL,
-                "CreatedAtUtc" TEXT NOT NULL,
-                "LastAttemptAtUtc" TEXT NULL
-            );
-            """, ct).ConfigureAwait(false);
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_SchedulerSyncOutbox_OperationId"
-            ON "SchedulerSyncOutbox" ("OperationId");
-            """, ct).ConfigureAwait(false);
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE INDEX IF NOT EXISTS "IX_SchedulerSyncOutbox_LeagueId_TournamentId_CreatedAtUtc"
-            ON "SchedulerSyncOutbox" ("LeagueId", "TournamentId", "CreatedAtUtc");
             """, ct).ConfigureAwait(false);
     }
 

@@ -9,6 +9,9 @@ public partial class LoginViewModel : ObservableObject
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
     private readonly IAppStartupStatus _startup;
+    private readonly ISyncService _sync;
+    private readonly ILeagueContext _league;
+    private string busyMessage = "Signing in…";
 
     [ObservableProperty]
     private string username = string.Empty;
@@ -33,16 +36,33 @@ public partial class LoginViewModel : ObservableObject
     public bool IsFormEnabled => !ShowBusyOverlay;
     public string BusyOverlayMessage =>
         IsBusy
-            ? "Signing in…"
+            ? BusyMessage
             : string.IsNullOrWhiteSpace(_startup.Message) ? "Please wait…" : _startup.Message;
+
+    public string BusyMessage
+    {
+        get => busyMessage;
+        private set
+        {
+            if (SetProperty(ref busyMessage, value))
+                OnPropertyChanged(nameof(BusyOverlayMessage));
+        }
+    }
 
     private bool CanSubmit => IsFormEnabled;
 
-    public LoginViewModel(IAuthService auth, IAppNavigator navigator, IAppStartupStatus startup)
+    public LoginViewModel(
+        IAuthService auth,
+        IAppNavigator navigator,
+        IAppStartupStatus startup,
+        ISyncService sync,
+        ILeagueContext league)
     {
         _auth = auth;
         _navigator = navigator;
         _startup = startup;
+        _sync = sync;
+        _league = league;
         _startup.Changed += OnStartupChanged;
         Username = Preferences.Default.Get(AuthService.SessionLastUsernameKey, string.Empty);
         NotifyOverlay();
@@ -85,6 +105,7 @@ public partial class LoginViewModel : ObservableObject
         try
         {
             IsBusy = true;
+            BusyMessage = "Signing in…";
             ErrorMessage = null;
 
             await MauiProgram.WhenReadyAsync().ConfigureAwait(true);
@@ -96,12 +117,27 @@ public partial class LoginViewModel : ObservableObject
                 return;
             }
 
+            if (_auth.Current?.Role == JPL.Domain.AppRole.Admin)
+            {
+                var session = _auth.Current;
+                if (session.LeagueId is not Guid homeLeagueId
+                    || homeLeagueId == Guid.Empty
+                    || _league.CurrentLeagueId != homeLeagueId)
+                    throw new InvalidOperationException(
+                        "This League Admin account has no valid home league. Ask the Super Admin to assign one.");
+
+                BusyMessage = "Syncing league data… The first initial sync may take a few minutes. Please keep the app open.";
+                await _sync.SyncAllAsync().ConfigureAwait(true);
+            }
+
             Password = string.Empty;
             await _navigator.ContinueAfterAuthAsync(freshLogin: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            ErrorMessage = AuthMessages.ForLogin(ex);
+            ErrorMessage = _auth.Current?.Role == JPL.Domain.AppRole.Admin
+                ? $"League sync did not finish, so the account was not opened. {NetworkUi.UserMessage(ex)}"
+                : AuthMessages.ForLogin(ex);
         }
         finally
         {

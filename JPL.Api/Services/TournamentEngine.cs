@@ -504,7 +504,7 @@ public static class TournamentEngine
     }
 
     /// <summary>
-    /// Circle method — mirrors SchedulerEngine so Day 1/2 grouping lines up on the client.
+    /// Circle method — mirrors TournamentBracketEngine so Day 1/2 grouping lines up on the client.
     /// </summary>
     public static List<List<(Guid A, Guid B)>> BuildCircleRounds(IReadOnlyList<Guid> teams)
     {

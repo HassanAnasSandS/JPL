@@ -10,8 +10,6 @@ public partial class App : Application
     private readonly IAuthService _auth;
     private readonly IAppNavigator _navigator;
     private readonly IAppStartupStatus _startup;
-    private int _lifecycleSyncBusy;
-    private DateTime _lastLifecycleSyncUtc = DateTime.MinValue;
 
     public App(
         IServiceProvider services,
@@ -89,7 +87,6 @@ public partial class App : Application
             }
         };
 
-        main.Resumed += (_, _) => RequestBackgroundSync();
         main.Stopped += (_, _) =>
         {
             // Recents swipe kills the process after Stopped. Flush login to disk
@@ -157,36 +154,4 @@ public partial class App : Application
         });
     }
 
-    private void RequestBackgroundSync()
-    {
-        if (!_auth.IsAuthenticated)
-            return;
-        if (DateTime.Now - _lastLifecycleSyncUtc < TimeSpan.FromSeconds(30))
-            return;
-        if (Interlocked.CompareExchange(ref _lifecycleSyncBusy, 1, 0) != 0)
-            return;
-
-        _lastLifecycleSyncUtc = DateTime.Now;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await MauiProgram.WhenReadyAsync().ConfigureAwait(false);
-                _services.GetRequiredService<ILivePublisher>().RequestFlush();
-                await _services.GetRequiredService<ISyncService>().FlushAsync().ConfigureAwait(false);
-            }
-            catch (SessionExpiredException)
-            {
-                /* ForceLogout already triggered by auth handler */
-            }
-            catch
-            {
-                /* ignore */
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _lifecycleSyncBusy, 0);
-            }
-        });
-    }
 }

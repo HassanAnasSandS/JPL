@@ -107,6 +107,12 @@ public sealed class AuthHttpMessageHandler : DelegatingHandler
 
     private static bool IsSyncRequest(string path, HttpMethod method, bool canSync, bool isSyncing, bool isSyncScope)
     {
+        // Sync performs one health probe before touching any queued rows. Treat that
+        // probe as part of the active sync workflow so Admin policy does not reject it
+        // and misreport the resulting local OfflineException as a dead server.
+        if (path.Contains("/api/health", StringComparison.OrdinalIgnoreCase))
+            return canSync && isSyncing && method == HttpMethod.Get;
+
         if (path.EndsWith("/api/sync", StringComparison.OrdinalIgnoreCase))
             return canSync && method == HttpMethod.Post;
 
@@ -115,18 +121,9 @@ public sealed class AuthHttpMessageHandler : DelegatingHandler
             || path.Contains("/api/sync/snapshot", StringComparison.OrdinalIgnoreCase))
             return canSync && isSyncing && method == HttpMethod.Get;
 
-        if (path.EndsWith("/api/scheduler/sync", StringComparison.OrdinalIgnoreCase))
-            return canSync && method == HttpMethod.Post;
-
-        // Scheduler and statistics APIs are used only by the explicitly scoped Sync workflow.
+        // Statistics APIs are used only by the explicitly scoped Sync workflow.
         if (canSync && isSyncScope && method == HttpMethod.Get
             && path.Contains("/api/stats/", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (canSync && isSyncScope && method == HttpMethod.Get
-            && (path.EndsWith("/api/scheduler", StringComparison.OrdinalIgnoreCase)
-                || System.Text.RegularExpressions.Regex.IsMatch(
-                    path, @"/api/scheduler/[0-9a-fA-F-]{36}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
             return true;
 
         return false;

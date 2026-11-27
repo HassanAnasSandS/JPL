@@ -5,7 +5,7 @@ public enum AppRole : byte
     User = 0,
     Admin = 1,
     SuperAdmin = 2,
-    GroundOwner = 3,
+    // 3 = retired role; keep the value unused for persisted database compatibility.
     // 4 = legacy PublicUser (removed)
     Guest = 5
 }
@@ -17,7 +17,6 @@ public static class AppRoleLabels
         AppRole.SuperAdmin => "Super Admin",
         AppRole.Admin => "League Admin",
         AppRole.User => "League User",
-        AppRole.GroundOwner => "Ground Owner",
         AppRole.Guest => "Guest",
         _ => role.ToString()
     };
@@ -34,12 +33,6 @@ public static class AppRoleLabels
             role = AppRole.Admin;
             return true;
         }
-        if (t.Contains("Ground Owner", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t, nameof(AppRole.GroundOwner), StringComparison.OrdinalIgnoreCase))
-        {
-            role = AppRole.GroundOwner;
-            return true;
-        }
         if (t.Contains("Guest", StringComparison.OrdinalIgnoreCase)
             || string.Equals(t, nameof(AppRole.Guest), StringComparison.OrdinalIgnoreCase))
         {
@@ -54,14 +47,14 @@ public static class AppRoleLabels
             return true;
         }
         return Enum.TryParse(t, ignoreCase: true, out role)
-               && role is AppRole.Admin or AppRole.User or AppRole.GroundOwner or AppRole.Guest;
+               && role is AppRole.Admin or AppRole.User or AppRole.Guest;
     }
 
     public static bool IsGuestUsername(string? username)
         => string.Equals(username?.Trim(), "user", StringComparison.OrdinalIgnoreCase);
 
     public static bool SkipsLeague(AppRole role)
-        => role is AppRole.GroundOwner or AppRole.Guest or AppRole.SuperAdmin;
+        => role is AppRole.Guest or AppRole.SuperAdmin;
 }
 
 public sealed class AppUser

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # API process control
 
-- Do **not** start, restart, or background-run `JPL.Api`, `JPL.Grounds.Api`, or `dotnet run --project …Api…` unless the user explicitly asks in that message.
+- Do **not** start, restart, or background-run `JPL.Api` or `dotnet run --project …Api…` unless the user explicitly asks in that message.
 - The user starts APIs themselves.
 - Stopping APIs is OK when the user asks to stop them.
 - Builds (`dotnet build`) are fine; running the API host is not.
